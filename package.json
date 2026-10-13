@@ -1,0 +1,11 @@
+{
+  "name": "mad-monkey-trip-builder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Guest-facing build-your-own-trip funnel for Mad Monkey",
+  "scripts": {
+    "test": "node test/logic.test.js",
+    "start": "python3 -m http.server 8000",
+    "build-map": "node scripts/build-map.mjs"
+  }
+}
