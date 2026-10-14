@@ -531,3 +531,25 @@ main{flex:1;display:flex;flex-direction:column}
 .rate{display:flex;align-items:baseline;gap:12px;margin:var(--s-6) 0 var(--s-3)} .rate b{font-size:clamp(42px,6vw,72px);font-weight:900;letter-spacing:-.04em;line-height:1} .rate span{font-weight:800;text-transform:uppercase;letter-spacing:.08em;font-size:12px}
 .quotes{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-4)} .quotes .quote{background:var(--paper)}
 @media (max-width:900px){.how--4,.quotes{grid-template-columns:1fr}}
+
+/* ghost buttons were black-on-black on dark sections */
+.on-black .btn--ghost,.hero .btn--ghost{color:var(--paper);border-color:var(--paper)}
+.on-black .btn--ghost:hover,.hero .btn--ghost:hover{background:var(--lime);color:var(--black);border-color:var(--lime)}
+.hero__cta .btn{--shadow-on:var(--lime)} .hero__cta .btn--pink{--shadow-on:var(--lime);gap:12px}
+.hero__cta .btn--pink .pill{font-size:10.5px}
+.door{position:relative;overflow:visible}
+.door__burst{position:absolute;right:-14px;top:-26px;width:96px;font-size:14px;z-index:2;animation:wob 3.2s ease-in-out infinite}
+.door__sticker{position:absolute;right:-8px;top:-18px;font-size:14px;z-index:2;box-shadow:4px 4px 0 var(--lime)}
+@keyframes wob{0%,100%{transform:rotate(-8deg) scale(1)}50%{transform:rotate(-2deg) scale(1.06)}}
+@media (prefers-reduced-motion:reduce){.door__burst{animation:none}}
+.door:nth-child(2) h3,.door:nth-child(2) .go,.door:nth-child(2) p,.door:nth-child(2) .door__n{color:var(--black)}
+/* recommended-for-your-countries block */
+.reco{background:var(--paper);border:var(--bw) solid var(--black);box-shadow:6px 6px 0 var(--lime);padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3)}
+.reco__hd{display:flex;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap;align-items:flex-start}
+.reco__hd h3{font-size:clamp(24px,3vw,32px);margin-top:4px}
+.reco__days{display:flex;gap:6px;flex-wrap:wrap}
+.reco__c{display:flex;justify-content:space-between;gap:var(--s-3);align-items:center;border:var(--bw) solid var(--black);padding:10px 12px;background:var(--bone)}
+.reco__c.on{background:var(--lime);box-shadow:4px 4px 0 var(--black)}
+.reco__c b{display:block;font-weight:900;font-size:15px;line-height:1.2;text-transform:uppercase;letter-spacing:-.01em}
+.reco__c span{display:block;font-size:12.5px;font-weight:700;margin-top:3px} .reco__c em{display:block;font-style:normal;font-size:12px;font-weight:500;color:var(--ink-dim);margin-top:2px}
+.reco__c.on em{color:var(--black)} .reco__c .btn{flex:none}

@@ -620,7 +620,10 @@
     var maxLeg = budget === 'splash' ? 20 : budget === 'cheap' ? 11 : 13, nightsCap = D - 1, switchPen = D < 12 ? 3.5 : D < 20 ? 1.6 : 0.8;
     var want = {}; (prof.vibes || []).forEach(function (v) { (VIBE_TAGS[v] || []).forEach(function (t) { want[t] = 1; }); });
     var musts = prof.must || [], month = prof.month;
-    var ids = Object.keys(P()).filter(function (id) { return !P()[id].partner || id === prof.start; });
+    var allow = prof.countries && prof.countries.length ? prof.countries : null;
+    if (allow && allow.length > 1) switchPen = 0.4;
+    var ids = Object.keys(P()).filter(function (id) { return (!P()[id].partner || id === prof.start) && (!allow || allow.indexOf(P()[id].c) > -1); });
+    if (!ids.length) return [];
 
     var ps = {};
     ids.forEach(function (id) {
@@ -637,7 +640,8 @@
       var p = P()[id], base = Math.round(p.sug * (0.8 + Math.max(0, ps[id]) / 16));
       return Math.max(1, Math.min(remaining, Math.max(p.min, Math.min(p.sug + 2, base))));
     }
-    var starts = prof.start ? [prof.start] : GATES.filter(function (g) { return P()[g]; }).sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 6);
+    var gates = GATES.filter(function (g) { return ids.indexOf(g) > -1; }); if (!gates.length) gates = ids.slice().sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 3);
+    var starts = prof.start && ids.indexOf(prof.start) > -1 ? [prof.start] : gates.sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 6);
     var beam = [], done = [];
     starts.forEach(function (s) {
       var n = nightsFor(s, nightsCap - 0), bed = P()[s].bed * n + n * fund + n * 10;
@@ -655,9 +659,10 @@
           var rem = left - leg.nights; if (rem < 1) return;
           var n = nightsFor(q, rem), cost = st.cost + leg.u + P()[q].bed * n + (n + leg.nights) * fund + n * 10;
           if (cost > cap * 1.12) return;
+          var newC = allow && !st.seq.some(function (x) { return P()[x.p].c === P()[q].c; });
           var same = P()[q].c === P()[last].c, back = !same && st.seq.some(function (x) { return P()[x.p].c === P()[q].c; });
           next.push({ seq: st.seq.concat([{ p: q, n: n }]), used: st.used + leg.nights + n, cost: cost,
-            score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * leg.h - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
+            score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * leg.h - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0) + (newC ? 5 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
           grew = true;
         });
         done.push(st);                                  // stopping here is always an option
@@ -670,9 +675,11 @@
     var ranked = done.map(function (st) {
       var cover = Math.min(1, st.used / nightsCap), mh = 0; musts.forEach(function (k) { if (st.seq.some(function (x) { return mustHit(x.p, k); })) mh++; });
       var rush = Math.max(0, st.seq.length - Math.ceil(D / 3.2));
-      return { st: st, total: st.score * (0.55 + 0.45 * cover) - rush * 2.5 + mh * 2 - (musts.length - mh) * 4 };
+      var cov = 0; if (allow) allow.forEach(function (c) { if (st.seq.some(function (x) { return P()[x.p].c === c; })) cov++; });
+      return { st: st, cov: cov, total: st.score * (0.55 + 0.45 * cover) - rush * 2.5 + mh * 2 - (musts.length - mh) * 4 + (allow ? cov * 6 - (allow.length - cov) * 40 : 0) };
     }).sort(function (a, b) { return b.total - a.total; });
 
+    if (allow) { var full = ranked.filter(function (r) { return r.cov === allow.length; }); if (full.length) ranked = full; }
     var well = ranked.filter(function (r) { return r.st.used >= nightsCap * 0.85; }); if (well.length >= 3) ranked = well;
     var seen = {}, picks = [];
     ranked.forEach(function (r) {
@@ -695,7 +702,8 @@
       if (D - fit.days >= 2) { var g = 0; while (D - plan(toState(stops, prof)).totals.days >= 2 && g++ < 6) { var b = 0; stops.forEach(function (s, j) { if (P()[s.p].sug + 2 - s.n > P()[stops[b].p].sug + 2 - stops[b].n) b = j; }); if (stops[b].n >= P()[stops[b].p].sug + 2) break; stops[b].n++; } }
       var stt = toState(stops, prof); stt.fund = fund; var pl = plan(stt);
       var cs = {}; stops.forEach(function (s) { cs[P()[s.p].c] = 1; });
-      var why = ['built from scratch for you', 'about ' + MM.money(Math.round(pl.totals.total / pl.totals.days), 'USD') + ' a day, inside your budget'];
+      var coveredN = allow ? allow.filter(function (c) { return stops.some(function (s) { return P()[s.p].c === c; }); }).length : 0;
+      var why = [allow ? (coveredN === allow.length ? 'covers ' + allow.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + ') : 'only reaches ' + coveredN + ' of your ' + allow.length + ' countries') : 'built from scratch for you', 'about ' + MM.money(Math.round(pl.totals.total / pl.totals.days), 'USD') + ' a day, inside your budget'];
       if (prof.start && stops[0].p === prof.start) why.push('starts where you land');
       var mh = musts.filter(function (k) { return stops.some(function (s) { return mustHit(s.p, k); }); }).length; if (mh) why.push(mh + ' of your must-dos');
       if (month != null) { var av = stops.reduce(function (a, s) { return a + seasonOf(s.p, month); }, 0) / stops.length; if (av >= 2.5) why.push('prime season in ' + MONTHN[month]); }

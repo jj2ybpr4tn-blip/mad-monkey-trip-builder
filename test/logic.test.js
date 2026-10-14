@@ -159,6 +159,11 @@ profiles.forEach(function (pp) {
     ok('generate[' + i + '] honours the start', !c.start || g.every(function (r) { return r.state.items[0].p === c.start; }));
     ok('generate[' + i + '] never repeats a hostel', g.every(function (r) { var p = r.state.items.map(function (x) { return x.p; }); return p.length === new Set(p).size; }));
   });
+  [['TH', 'ID'], ['VN', 'KH'], ['TH', 'LA', 'VN'], ['PH', 'ID'], ['KH']].forEach(function (cs) {
+    var g = MM.generate({ countries: cs, days: 21, budget: 'mid' });
+    ok('country focus ' + cs.join('+') + ': routes stay inside those countries and cover them all', g.length >= 1 && g.every(function (r) { var got = {}; r.state.items.forEach(function (i) { if (cs.indexOf(MM.PLACES[i.p].c) < 0) got.bad = 1; got[MM.PLACES[i.p].c] = 1; }); return !got.bad && cs.every(function (c) { return got[c]; }); }), JSON.stringify(g.map(function (r) { return r.state.items.map(function (i) { return i.p; }).join('>'); })));
+  });
+  ok('country focus: Laos only never leaves Laos even for 3 weeks', MM.generate({ countries: ['LA'], days: 21 }).every(function (r) { return r.state.items.every(function (i) { return MM.PLACES[i.p].c === 'LA'; }); }));
   var loop = MM.generate(cases[0])[0]; ok('Loop must-do puts the Loop in the plan', loop.state.items.some(function (i) { return i.acts.some(function (a) { return /ha-giang-loop/.test(a); }); }));
   var surf = MM.generate(cases[1])[0]; ok('surf must-do lands on a surf hostel', surf.state.items.some(function (i) { return ['uluwatu', 'kuta-lombok', 'siargao'].indexOf(i.p) > -1; }));
   var cheap = MM.generate({ start: 'bangkok', days: 14, vibes: ['party'], budget: 'cheap' }), rich = MM.generate({ start: 'bangkok', days: 14, vibes: ['party'], budget: 'splash' });

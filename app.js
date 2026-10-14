@@ -11,7 +11,7 @@
 
   var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, focus: [], open: {}, meta: { ref: '', from: '' } };
   var plan = null;
-  app.views = {}; app.passport = 'gb';
+  app.views = {}; app.passport = 'gb'; app.recoDays = 14; app.auto = false;
 
   /* ---------- utils ---------- */
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -40,7 +40,7 @@
     return list.slice(0, n >= 3 ? 2 : 1).map(function (a) { return a.id; });
   }
   function stopFor(p, n) { n = n || P[p].sug; return { kind: 'stop', p: p, n: n, acts: defaultActs(p, n) }; }
-  function mutate(fn, opts) { fn(app.state); persist(); refreshBuilder(opts); }
+  function mutate(fn, opts) { app.auto = false; fn(app.state); persist(); refreshBuilder(opts); }
 
   /* ============================================================
      ROUTER
@@ -89,7 +89,7 @@
         '<div class="over lime" style="margin-bottom:var(--s-4)">Mad Monkey · Trip Builder</div>' +
         '<h1 class="disp">Build the trip you <span class="hl">actually</span> want.</h1>' +
         '<p class="hero__lede"><b>23 hostels. 6 countries.</b> Every bus, boat and flight in between. Pick your stops, see what it really costs, then send it to the crew. Or jump on an ALL IN and let us sort the lot.</p>' +
-        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" type="button">Start building</button><button class="btn btn--lg btn--ghost" data-go="quiz" type="button">Build it for me</button></div>' +
+        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" type="button">Start building</button><button class="btn btn--lg btn--pink" data-go="quiz" type="button">Build it for me <span class="pill pill--sm pill--paper">60 sec</span></button></div>' +
       '</div><div class="hero__map" aria-hidden="true">' +
         '<div class="hm hm--d">' + MM.staticMap({ region: 'all', aspect: 0.85, pad: 0, dots: true, countryLabels: true, routes: HERO_ROUTES, animate: true, px: 560, slice: true, other: false }) + '</div>' +
         '<div class="hm hm--m">' + MM.staticMap({ region: 'mainland', aspect: 1.25, pad: 0.0, dots: true, countryLabels: true, routes: [HERO_ROUTES[0]], animate: true, px: 700, slice: true, other: false }) + '</div>' +
@@ -100,8 +100,8 @@
       '<section class="sec"><div class="wrap"><div class="sec__head"><h2 class="disp">Three ways in.</h2><p class="dim" style="max-width:30em">Know exactly where you\'re going, want us to work it out, or just want it done? Pick a door.</p></div>' +
         '<div class="doors on-black">' +
           '<button class="door" data-go="build" type="button"><span class="door__n">01</span><h3>Build it yourself</h3><p>Tap hostels on the map. Get the real bus, boat and flight times, the cost, and a day-by-day plan.</p><span class="go">Open the map →</span></button>' +
-          '<button class="door" data-go="quiz" type="button"><span class="door__n">02</span><h3>Build it for me</h3><p>Seven quick questions. Three routes that fit your days, your vibe and your budget.</p><span class="go">Take the quiz →</span></button>' +
-          '<button class="door" data-act="scroll" data-to="trips" type="button"><span class="door__n">03</span><h3>Jump on an ALL IN</h3><p>Pre-built crew trips. Beds, boats and activities sorted. $' + MM.DEPOSIT + ' holds your spot.</p><span class="go">See the trips →</span></button>' +
+          '<button class="door" data-go="quiz" type="button"><span class="burst burst--pink door__burst"><span>60<br>sec</span></span><span class="door__n">02</span><h3>Build it for me</h3><p>Seven quick questions. Three routes that fit your days, your vibe and your budget.</p><span class="go">Take the quiz →</span></button>' +
+          '<button class="door" data-act="scroll" data-to="trips" type="button"><span class="sticker door__sticker">$99 holds it</span><span class="door__n">03</span><h3>Jump on an ALL IN</h3><p>Pre-built crew trips. Beds, boats and activities sorted. $' + MM.DEPOSIT + ' holds your spot.</p><span class="go">See the trips →</span></button>' +
         '</div></div></section>' +
 
       '<section class="sec sec--bone" id="trips"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">ALL IN trips</div><h2 class="disp">Stop planning.<br>Start going.</h2></div><p class="dim" style="max-width:30em">Up to 20 backpackers, real Mad Monkey beds every night, every transfer and activity in the price, free drinks, 24/7 crew. Flights and insurance not included. Hit <b>Build on this</b> to bolt more days on either end.</p></div>' +
@@ -266,6 +266,8 @@
       (items.length && s.budget ? budgetBar(t) : '') + (items.length ? seasonStrip(pl) : '') +
       '<div class="humans"><b>Checked by a real person.</b> Hit "Hold my beds" and the crew reviews your whole trip before you pay a penny.</div></div>';
 
+    if (app.focus.length) h += recoHTML();
+
     if (!items.length) {
       h += '<div class="empty"><h3>Tap the map.<br>Start anywhere.</h3><p>Every Mad Monkey is a pin. Add a few and we\'ll work out the buses, boats and flights between them, the cost, and the days.</p><div class="row">' +
         (app.meta.from && P[app.meta.from] ? '<button class="btn btn--sm btn--pink" data-act="addplace" data-p="' + app.meta.from + '" type="button">I\'m at ' + esc(P[app.meta.from].n) + '</button>' : '') +
@@ -310,6 +312,40 @@
       '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Print / PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
       '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares, activities are listed prices (est. where marked). The crew confirms live rates, dates and availability before you pay anything.</p></div>';
     return h;
+  }
+
+  /* ---------- recommended itineraries for the chosen countries ---------- */
+  var recoCache = { key: '', list: [] };
+  function recos() {
+    if (!app.focus.length) return [];
+    var sd = U.parseDate(app.state.start), month = sd ? sd.getUTCMonth() : (app.state.month != null ? app.state.month : null);
+    var budget = app.state.pref === 'cheap' ? 'cheap' : app.state.pref === 'fast' ? 'splash' : 'mid';
+    var key = [app.focus.slice().sort().join(','), app.recoDays, budget, month].join('|');
+    if (recoCache.key !== key) recoCache = { key: key, list: MM.generate({ countries: app.focus.slice(), days: app.recoDays, budget: budget, month: month, vibes: [], must: [] }) };
+    return recoCache.list;
+  }
+  function applyReco(r) {
+    var st = Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(r.state)));
+    st.start = app.state.start; st.budget = app.state.budget; st.crew = app.state.crew; st.fund = app.state.fund; st.pref = app.state.pref; st.legPick = {};
+    app.state = st; app.auto = true; persist(); track('reco_apply', { countries: app.focus.join(',') });
+  }
+  // Picking countries re-plans for you, as long as you haven't started editing by hand.
+  function autoReco() {
+    if (!app.focus.length) return;
+    if (app.state.items.length && !app.auto) return;
+    var list = recos(); if (list.length) applyReco(list[0]);
+  }
+  function recoHTML() {
+    var names = app.focus.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + '), list = recos(), cur = plan ? MM.routeLine(plan) : '';
+    var h = '<div class="reco"><div class="reco__hd"><div><div class="over">Recommended for</div><h3 class="disp">' + esc(names) + '</h3></div><div class="reco__days" role="group" aria-label="How many days">' +
+      [7, 10, 14, 21, 30].map(function (d) { return '<button type="button" class="chip" data-act="recodays" data-v="' + d + '" aria-pressed="' + (app.recoDays === d) + '">' + d + ' days</button>'; }).join('') + '</div></div>';
+    if (!list.length) return h + '<p class="fine">Nothing sensible links ' + esc(names) + ' in ' + app.recoDays + ' days. Try more days, or fewer countries.</p></div>';
+    h += list.map(function (r, i) {
+      var p = MM.plan(r.state), line = MM.routeLine(p), on = line === cur;
+      return '<div class="reco__c' + (on ? ' on' : '') + '"><div><b>' + esc(line) + '</b><span>' + p.totals.days + ' days · ~' + money(p.totals.total) + ' · ' + plural(p.countries.length, 'country', 'countries') + '</span><em>' + esc(r.why.slice(0, 2).join(' · ')) + '</em></div>' +
+        (on ? '<span class="pill pill--sm">In your trip</span>' : '<button class="btn btn--sm" data-act="usereco" data-i="' + i + '" type="button">Use this</button>') + '</div>';
+    }).join('');
+    return h + '<p class="fine">Built from scratch to cover ' + esc(names) + ' using real buses, boats and flights. Pick another length, or tap Use this. Edit anything and it stops re-planning on its own.</p></div>';
   }
 
   function nextBar(fromId, title) {
@@ -557,7 +593,7 @@
     if (e.target.closest('a[data-stop]')) { e.stopPropagation(); return; }
     var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
     var cur = e.target.closest('[data-cur]'); if (cur) { app.cur = cur.getAttribute('data-cur'); $$('[data-cur]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === cur)); }); store('mm-cur', app.cur); if (app.view === 'build') refreshBuilder(); else route(); return; }
-    var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } refreshBuilder(); return; }
+    var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } autoReco(); if (app.auto) persist(); refreshBuilder(); return; }
     var el = e.target.closest('[data-act]'); if (!el) return;
     var act = el.getAttribute('data-act'), i = +el.getAttribute('data-i'), S = app.state;
     switch (act) {
@@ -568,6 +604,8 @@
       case 'gal': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
       case 'galnav': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
       case 'group': if (app.group) app.group.start(); break;
+      case 'recodays': app.recoDays = +el.getAttribute('data-v'); if (app.auto) autoReco(); refreshBuilder(); break;
+      case 'usereco': { var rl = recos(); if (rl[i]) { applyReco(rl[i]); refreshBuilder(); MM.BuilderMap.reset(); } break; }
       case 'mapzoom': MM.BuilderMap.zoom(+el.getAttribute('data-f')); break;
       case 'mapfit': MM.BuilderMap.reset(); break;
       case 'scroll': { var t = document.getElementById(el.getAttribute('data-to')); if (t) t.scrollIntoView({ behavior: 'smooth' }); break; }

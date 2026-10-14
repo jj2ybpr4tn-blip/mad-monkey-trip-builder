@@ -23,6 +23,7 @@ npm test         # 137 logic checks (routing, costs, dates, share links, quiz ma
 | **Season + event flags** | Wet / rough-sea months per hostel, Rinjani closure, Kampot's 1 Nov opening, Halloween parties, the Thailand–Cambodia border. |
 | **Share** | Link that reopens the exact trip (short, stable, editable), WhatsApp share, 1080×1920 story card PNG, print / PDF. |
 | **Lead capture** | Sends the whole plan to your endpoint. Runs in clearly-labelled **demo mode** until you set one. |
+| **Country-aware recommendations** | Tick 1–3 countries and the itinerary re-plans itself to cover all of them (real transport, your budget style, 7–30 days). Edit anything by hand and it stops overriding you and just recommends. |
 | **Declutter map** | Nearby hostels merge into numbered bubbles that split as you zoom; country chips are a multi-select focus (Indonesia + Thailand dims everything else); mode/time pills show only on hover or when you tap a leg; drag, scroll or pinch to move, +/− and FIT buttons. |
 | **Drag-and-drop + timeline** | Reorder stops by dragging the grip (mouse or touch), with a colour-coded timeline strip across the top. |
 | **"Why this leg?"** | Plain-English trade-offs ("flight saves 11h25, costs ~$43 more; the bus doubles as your bed") plus arrival times, with a warning when something lands at 3am. |
