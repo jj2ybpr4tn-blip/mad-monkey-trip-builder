@@ -62,7 +62,7 @@
     var btn = $('button[type=submit]', f); btn.disabled = true; btn.textContent = 'Sending…';
     function done(mode, data) {
       var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
-        hold: wantHold ? { until: new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: mode === 'demo', name: v.name, email: v.email };
+        hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: mode === 'demo', name: v.name, email: v.email };
       var list = subs().filter(function (s) { return s.ref !== r; }); list.unshift(rec); u.store('mm-subs', list.slice(0, 20)); A._lastLead = payload; success(rec, payload);
     }
     if (!C.LEAD_ENDPOINT) return setTimeout(function () { done('demo'); }, 400);
@@ -90,18 +90,18 @@
     var root = document.getElementById('app'), rec = subs().filter(function (s) { return s.ref === r; })[0];
     function paint(x, note) {
       if (!x) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip status</span><h2 class="disp">Can\'t find that trip.</h2><p class="qhelp">We can only look up trips sent from this device, or from a live crew link. If you sent one, check your confirmation email for the reference.</p><div class="qnav"><button class="btn" data-go="build" type="button">Open the builder</button></div></div></div></section>' + u.footer(); return; }
-      var titles = { submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: 'Ready for your OK.', approved: 'You\'re all set.' };
+      var titles = { submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: 'Ready for your OK.', approved: 'You\'re all set.', declined: 'We need to tweak it.' };
       var demo = !C.LEAD_ENDPOINT || x.demo;
       root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip ' + esc(x.ref) + '</span><h2 class="disp">' + titles[x.status] + '</h2><p class="qhelp">' + esc(x.route) + ' · ' + x.days + ' days. Every trip is checked by a real person before you pay.</p>' +
-        stepsHTML(x.status) + (note ? '<div class="humans" style="margin-top:0"><b>From the crew:</b> ' + esc(note) + '</div>' : '') +
-        (x.hold ? '<div class="humans" style="background:var(--yellow)"><b>Beds held</b> until ' + fmtDT(x.hold.until) + ' while we check it.</div>' : '') +
+        (x.status === 'declined' ? '' : stepsHTML(x.status)) + (x.status === 'declined' ? '<div class="humans" style="margin-top:0"><b>Don\'t worry.</b> A crew member couldn\'t make this exact trip work and wants to find you a better one. ' + (note ? '' : 'They\'ll be in touch.') + '</div>' : '') + (note ? '<div class="humans" style="margin-top:0"><b>From the crew:</b> ' + esc(note) + '</div>' : '') +
+        (x.hold && x.status !== 'declined' ? '<div class="humans" style="background:var(--yellow)"><b>Beds held</b> until ' + fmtDT(x.hold.until) + ' while we check it.</div>' : '') +
         '<div class="qnav"><a class="btn" href="' + esc(x.link) + '">Open my trip</a>' + (x.status === 'ready' ? '<button class="btn btn--pink" data-act="approve" type="button">Approve + pay deposit</button>' : '') + '</div>' +
         (demo ? '<div class="demo" style="margin-top:var(--s-5)">DEMO: move it along to see each state. <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' + STEPS.map(function (s) { return '<button class="chip" data-act="demostatus" data-s="' + s.k + '" type="button">' + s.t + '</button>'; }).join('') + '</div></div>' : '') +
         '</div></div></section>' + u.footer();
     }
     paint(rec);
     if (C.STATUS_ENDPOINT && rec) fetch(C.STATUS_ENDPOINT + (C.STATUS_ENDPOINT.indexOf('?') > -1 ? '&' : '?') + 'ref=' + encodeURIComponent(r)).then(function (res) { return res.json(); }).then(function (d) {
-      if (d && d.status) { rec.status = d.status; var l = subs().map(function (s) { return s.ref === r ? Object.assign(s, { status: d.status }) : s; }); u.store('mm-subs', l); paint(rec, d.note); if (d.payLink) rec.payLink = d.payLink; }
+      if (d && d.status) { rec.status = d.status; rec.payLink = d.payLink || ''; rec.hold = d.hold ? { until: d.hold.until } : null; rec.demo = false; var l = subs().map(function (s) { return s.ref === r ? Object.assign(s, rec) : s; }); u.store('mm-subs', l); paint(rec, d.note); }
     }).catch(function () { /* keep the local view */ });
     root.addEventListener('click', function h(e) {
       var b = e.target.closest('[data-act]'); if (!b || !rec) return; var act = b.getAttribute('data-act');

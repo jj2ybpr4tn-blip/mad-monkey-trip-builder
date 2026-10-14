@@ -32,8 +32,10 @@
     'siargao': 'wp-content/uploads/2021/12/siargao.png',
     'luang-prabang': 'wp-content/uploads/2021/12/mmlpb.jpg,wp-content/uploads/2026/01/luang_prabang_banner4.jpg,wp-content/uploads/2026/01/luang_prabang_banner3.jpeg,wp-content/uploads/2021/12/lp4.jpg,wp-content/uploads/2022/04/1-Mad-Monkey-Luang-Prabang.jpg,wp-content/uploads/2021/12/luang_prabang.png'
   };
+  MM.galleryRaw = function (id) { return G[id] ? G[id].split(',') : []; };
   MM.gallery = function (id) {
-    return (G[id] ? G[id].split(',') : []).map(function (p) { return 'https://madmonkeyhostels.com/_next/image?url=' + encodeURIComponent(SRC + p) + '&w=750&q=70'; });
+    var own = (r.MM_CONFIG && r.MM_CONFIG.PHOTO_BASE || '').replace(/\/$/, '');
+    return MM.galleryRaw(id).map(function (p, k) { return own ? own + '/gallery/' + id + '-' + k + '.jpg' : 'https://madmonkeyhostels.com/_next/image?url=' + encodeURIComponent(SRC + p) + '&w=750&q=70'; });
   };
   if (typeof module !== 'undefined') module.exports = { G: G };
 })(typeof window !== 'undefined' ? window : globalThis);

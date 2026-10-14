@@ -6,7 +6,7 @@ day-by-day plan, then send it to the crew. Or the builder spots that an **ALL IN
 Plain static site. No build step, no framework, no server.
 
 ```bash
-npm start        # python3 -m http.server 8000  → http://localhost:8000
+npm start        # static preview only (demo mode: nothing is sent anywhere)
 npm test         # 137 logic checks (routing, costs, dates, share links, quiz matcher)
 ```
 
@@ -34,13 +34,20 @@ npm test         # 137 logic checks (routing, costs, dates, share links, quiz ma
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
 | **USD / GBP** | Fixed indicative rate (1.27). Real conversion belongs to the booking engine. |
 
-## Go live (3 steps)
+## Go live
 
-1. **Lead endpoint.** Set `LEAD_ENDPOINT` in [config.js](config.js) to a URL that accepts a JSON `POST`. Payload in [docs/LEADS.md](docs/LEADS.md). Until then guests see a yellow "DEMO MODE: nothing was sent" banner; nothing leaves the browser.
-2. **Optional contact buttons.** `WHATSAPP` (digits, with country code) adds "Message the crew on WhatsApp"; `CREW_EMAIL` adds an email fallback; `SITE_URL` fixes share links to your public address; `PRIVACY_URL` adds a privacy link under the form.
-3. **Host it.** Any static host. Drop the folder on the Mad Monkey site / a subdomain / Netlify / Cloudflare Pages / S3.
+**The fast way: the bundled crew server.** `npm run server` runs the site, the API and a crew console together
+(see **[docs/SERVER.md](docs/SERVER.md)**). It turns on, with no config:
 
-Attribution params work out of the box: `?ref=exeter` (ambassador / campaign) and `?from=hanoi` (QR in the Hanoi common room → opens at "Where next from Mad Monkey Hanoi?"). Both land in the lead payload.
+- **Human review + bed holds.** Requests land in `/admin` with a ready-made **bed-hold sheet** (hostel, check-in, check-out). The crew marks them *Checking / Ready / Approved / Can't do it*, writes the guest a note and pastes a payment link, and the guest's status page updates.
+- **Live prices + spots left** edited by the crew; real fares replace the built-in estimates.
+- **Real guest reviews** per hostel, **real "guests go next"** (paste a CSV of stays), **group mode** across devices, and a **funnel** view.
+
+**The other way: your own backend.** Leave `API_BASE` blank and set `LEAD_ENDPOINT` etc. in [config.js](config.js) to endpoints you build. Contracts: [docs/LEADS.md](docs/LEADS.md), [docs/GROUP.md](docs/GROUP.md).
+
+Optional switches in `config.js`: `WHATSAPP`, `CREW_EMAIL`, `SITE_URL`, `PRIVACY_URL`, `HOLD_HOURS`, and **`PHOTO_BASE`** (serve photos from your own copies: run `npm run mirror-photos` first).
+
+Attribution params work out of the box: `?ref=exeter` (ambassador / campaign) and `?from=hanoi` (QR in the Hanoi common room → opens at "Where next from Mad Monkey Hanoi?"). Both land in the lead.
 
 ## Before launch: things that are estimates (please check)
 
@@ -56,9 +63,9 @@ The brief was to build it from what Mad Monkey already publishes, so **every num
 | Surf-camp beds | Siargao packages are "all-inclusive" so beds are treated as included. **Lombok surf camp isn't assumed to include beds**: confirm. |
 | Season ratings, hostel hooks | **Editorial judgement**, not booking data. |
 | "Guests go next" | Ranked from Mad Monkey's own trips and packages (see above), **not** from booking data. Real check-out → check-in flows would be better. |
-| **Entry rules** (`data/entry.js`) | **From general knowledge, not checked against 2026 rules.** They change often. Verify them before launch, or strip the per-passport sentences and keep the official links. The UI already says to confirm on the official site. |
-| **Bed hold** | The app only *asks*; the hold has to be made by whoever receives the lead. `HOLD_HOURS` (48) is a placeholder: don't leave it at a number ops can't honour. |
-| Gallery photos | Loaded through madmonkeyhostels.com's own image optimiser (≈750px). Mirror them to your CDN for launch. |
+| **Entry rules** (`data/entry.js`) | **Checked against current web sources in Oct 2026** ([docs/ENTRY-SOURCES.md](docs/ENTRY-SOURCES.md)), including Thailand's cut to 30 days on 15 Sep 2026. Laos fees conflict between sources, so the app says to check. These change often: re-check every few months. |
+| **Bed hold** | The server records and counts down the hold and gives the crew the sheet; **the crew has to actually block the beds** in your booking system. `HOLD_HOURS` (48) is a placeholder: set a number ops can honour. |
+| Photos | All 260 (hostels, tours, galleries) are **mirrored into `assets/photos`** at 1100px (`npm run mirror-photos`; re-run to refresh). The crew server uses them automatically; for a static host set `PHOTO_BASE: '/assets/photos'`. They're Mad Monkey's own published photography. |
 | Photos | Hot-linked from madmonkeyhostels.com share images. They fall back to a flat block if one 404s. Copy into `/assets` or your CDN before launch so the page doesn't depend on the main site. |
 
 **Thailand ↔ Cambodia border:** reports from Feb–Jul 2026 say the land crossings are closed, so Bangkok ↔ Siem Reap / Phnom Penh is flights-only in the graph and every such leg shows a warning. When it reopens, flip `open` in `MM.BORDERS` and add bus edges.
@@ -94,12 +101,17 @@ test/               logic tests (node, no dependencies)
 
 Follows the Mad Monkey core design system: Montserrat 900 uppercase display, the eight poster colours (never more than three at once) on Mad Black / Bone / Paper, 3px outlines, hard-offset shadows with no blur, sharp-or-pill corners, one brand device per layout (ALL IN sticker, lime starburst), official logo files only. Copy is British English and in voice. No decorative emoji.
 
+## Still to do
+- **Live fares** from a real provider. Today the crew enters real fares in `/admin`; the built-in table is the fallback. (12Go / Rome2Rio style feeds need paid API keys.)
+- **Real reviews.** The slot, the admin screen and the display are built; Mad Monkey publishes no per-hostel reviews, so add real ones in `/admin`.
+- **Booking-system link:** a button that creates the hold and the deposit in your booking engine, rather than the crew doing it by hand.
+
 ## Ideas worth building next
 
-1. **Live availability + deposit.** Pull real "spots left" and the $99 deposit straight into the ALL IN cards (the booking engine already has both).
-2. **Rank "guests go next" with real booking data** (where people checked out → checked in next). It's editorial today; this makes it the best cross-hostel funnel you have.
-3. **Common-room QR / reception iPad.** `?from=<hostel>` is already supported: one QR per property, leads arrive tagged with where the guest is standing.
-4. **Ambassador + university links.** `?ref=` is captured; wire it to the uni-ambassador giveaway so every shared trip credits the referrer.
-5. **Group mode.** Share link → friends vote on stops → Squad Leader sees the crew and the 50% / free perk tick up.
-6. **MadPass / Mad Loyalty hook** on long trips (30+ days).
-7. **Live transport feed** (12Go / Rome2Rio) replacing the typical-fare table, keeping the table as fallback.
+1. **One-tap booking.** Connect the builder to your booking engine so the crew's "Ready" step creates the hold and the deposit link for them.
+2. **Live fares feed** (12Go / Rome2Rio / airline APIs) behind the same override mechanism the crew console already uses.
+3. **Real stays data** imported nightly (the `/admin` CSV import is the manual version of this).
+4. **Pre-trip emails** from the status page: "your trip is confirmed", visa reminders for the countries on the route, a day-before checklist.
+5. **Group mode → group booking:** when 6 mates are in, hand the whole crew to the booking engine with the Squad Leader perk applied.
+6. **Multi-language** (the audience is UK and US today; Spanish, German and French travellers are the next obvious markets).
+7. **Post-trip loop:** invite guests to leave a real review for each hostel they stayed in; those feed the reviews slot.

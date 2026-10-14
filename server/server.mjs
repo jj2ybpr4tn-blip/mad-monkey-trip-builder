@@ -1,0 +1,291 @@
+#!/usr/bin/env node
+/* ============================================================
+   MAD MONKEY TRIP BUILDER — crew server (zero dependencies, Node 18+)
+
+     npm run server        → http://localhost:8000  (site + API + /admin)
+
+   What it does
+     • serves the static site, with the API switched on (config.js gets API_BASE=/api)
+     • POST /api/leads       review requests from guests -> stored, bed-hold sheet computed, crew notified
+     • GET  /api/status      what the guest's trip-status page shows
+     • /api/groups…          group mode (votes, "I'm in")
+     • GET  /api/live        spots left + price overrides the crew maintains
+     • GET  /api/reviews     approved guest quotes per hostel
+     • GET  /api/flow        "where guests go next" from real data
+     • POST /api/event       anonymous funnel events
+     • /admin                the crew console (token login)
+
+   Environment
+     PORT            default 8000
+     ADMIN_TOKEN     crew password. If unset, one is generated and saved to server/data/admin-token.txt
+     HOLD_HOURS      default 48
+     NOTIFY_WEBHOOK  optional Slack / Discord-style webhook that gets a message per new request
+     ALLOWED_ORIGIN  optional, only if the site is hosted somewhere other than this server (adds CORS)
+     DATA_DIR        default server/data
+
+   Data lives in plain JSON files in DATA_DIR. Back that folder up. To scale past a few thousand
+   requests a month, swap the tiny store() below for a real database; the routes stay the same.
+   ============================================================ */
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
+const require = createRequire(import.meta.url);
+for (const f of ['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery']) require(path.join(ROOT, 'data', f + '.js'));
+const MM = require(path.join(ROOT, 'logic.js'));
+
+const PORT = +process.env.PORT || 8000;
+const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
+const HOLD_HOURS = +process.env.HOLD_HOURS || 48;
+const NOTIFY = process.env.NOTIFY_WEBHOOK || '';
+const ORIGIN = process.env.ALLOWED_ORIGIN || '';
+fs.mkdirSync(DATA, { recursive: true });
+
+/* ---------- tiny JSON store ---------- */
+const stores = [];
+function store(name, init) {
+  const file = path.join(DATA, name + '.json'); let data, t;
+  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { data = init; }
+  const s = {
+    get: () => data, set: (v) => { data = v; },
+    flush() { clearTimeout(t); const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(data)); fs.renameSync(tmp, file); },
+    save() { clearTimeout(t); t = setTimeout(() => s.flush(), 200); }
+  };
+  stores.push(s); return s;
+}
+const leads = store('leads', []), groups = store('groups', {}), events = store('events', []), live = store('live', { updated: null, notice: '', spots: {}, legs: {}, acts: {} }),
+  reviews = store('reviews', []), flowRows = store('flow', { rows: [] });
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stores.forEach((s) => s.flush()); process.exit(0); });
+
+/* ---------- admin token ---------- */
+let TOKEN = process.env.ADMIN_TOKEN || '';
+if (!TOKEN) {
+  const tf = path.join(DATA, 'admin-token.txt');
+  try { TOKEN = fs.readFileSync(tf, 'utf8').trim(); } catch { TOKEN = crypto.randomBytes(12).toString('base64url'); fs.writeFileSync(tf, TOKEN + '\n', { mode: 0o600 }); }
+}
+const authed = (req) => {
+  const h = req.headers.authorization || ''; const got = h.startsWith('Bearer ') ? h.slice(7) : '';
+  const a = Buffer.from(got), b = Buffer.from(TOKEN); return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
+/* ---------- helpers ---------- */
+const now = () => new Date().toISOString();
+const rid = (n, alpha) => { const a = alpha || 'abcdefghjkmnpqrstuvwxyz23456789'; let o = ''; const b = crypto.randomBytes(n); for (let i = 0; i < n; i++) o += a[b[i] % a.length]; return o; };
+const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
+function json(res, code, obj, extra) { const body = JSON.stringify(obj); res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...(extra || {}) }); res.end(body); }
+function readBody(req, limit = 262144) {
+  return new Promise((resolve, reject) => {
+    let n = 0; const chunks = [];
+    req.on('data', (c) => { n += c.length; if (n > limit) { reject(Object.assign(new Error('too large'), { code: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); } catch { reject(Object.assign(new Error('bad json'), { code: 400 })); } });
+    req.on('error', reject);
+  });
+}
+const hits = new Map();
+function limited(key, max, windowMs) {
+  const t = Date.now(); const arr = (hits.get(key) || []).filter((x) => t - x < windowMs); arr.push(t); hits.set(key, arr); return arr.length > max;
+}
+setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some((x) => t - x < 3600000)) hits.delete(k); }, 600000).unref();
+const ipOf = (req) => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+async function notify(text) { if (!NOTIFY) return; try { await fetch(NOTIFY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text }) }); } catch { /* notifications are best-effort */ } }
+
+/* ---------- bed-hold sheet: what the crew needs to hold, by hostel and date ---------- */
+function holdSheet(tripState) {
+  try {
+    const st = MM.decodeState(tripState); if (!st.start || !st.items.length) return null;
+    const pl = MM.plan(st), rows = []; let cur = null;
+    pl.days.forEach((d) => {
+      if (d.kind !== 'stay' && d.kind !== 'block') { cur = null; return; }
+      const seg = pl.segs[d.si], allin = seg.kind === 'allin';
+      if (cur && cur.si === d.si) { cur.nights++; cur.last = d.date; }
+      else { cur = { si: d.si, place: allin ? 'ALL IN ' + seg.trip.n : MM.PLACES[seg.p].n, placeId: allin ? null : seg.p, allin, nights: 1, first: d.date, last: d.date }; rows.push(cur); }
+    });
+    return rows.map((r) => ({ place: r.place, placeId: r.placeId, allin: r.allin, nights: r.nights, checkIn: MM.util.isoDate(r.first), checkOut: MM.util.isoDate(MM.util.addDays(r.last, 1)) }));
+  } catch { return null; }
+}
+const publicStatus = (l) => ({ ref: l.ref, status: l.status === 'declined' ? 'declined' : l.status, note: l.publicNote || '', payLink: (l.status === 'ready' || l.status === 'approved') ? (l.payLink || '') : '',
+  hold: l.hold && l.hold.status === 'active' ? { until: l.hold.until } : null });
+const mmFlows = () => {
+  const m = {}; const add = (a, b, n, src) => { if (a === b || !MM.PLACES[a] || !MM.PLACES[b]) return; const k = a + '>' + b + '|' + src; m[k] = m[k] || { a, b, n: 0, src }; m[k].n += n; };
+  leads.get().forEach((l) => { if (l.status === 'declined') return; const ps = ((l.trip && l.trip.stops) || []).filter((p, i, arr) => i === 0 || p !== arr[i - 1]); for (let i = 1; i < ps.length; i++) add(ps[i - 1], ps[i], 1, 'planning'); });
+  (flowRows.get().rows || []).forEach((r) => add(r.a, r.b, r.n, 'stays'));
+  return Object.values(m);
+};
+
+/* expire holds that nobody has acted on */
+setInterval(() => {
+  let changed = false; const t = Date.now();
+  leads.get().forEach((l) => { if (l.hold && l.hold.status === 'active' && l.status !== 'approved' && Date.parse(l.hold.until) < t) { l.hold.status = 'expired'; l.history.push({ at: now(), event: 'hold expired' }); changed = true; } });
+  if (changed) leads.save();
+}, 600000).unref();
+
+/* ============================================================ API ============================================================ */
+async function api(req, res, url) {
+  const p = url.pathname.replace(/^\/api/, ''), m = req.method, ip = ipOf(req);
+  const cors = ORIGIN ? { 'Access-Control-Allow-Origin': ORIGIN, 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS' } : {};
+  if (m === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+  const J = (code, obj) => json(res, code, obj, cors);
+
+  /* ---- public ---- */
+  if (p === '/leads' && m === 'POST') {
+    if (limited('lead:' + ip, 12, 3600000)) return J(429, { error: 'slow down' });
+    const b = await readBody(req);
+    const c = b.contact || {}, t = b.trip || {};
+    if (!/^\S+@\S+\.\S+$/.test(c.email || '') || !clip(c.name, 80).trim() || !c.consent) return J(400, { error: 'name, email and consent are required' });
+    if (typeof t.state !== 'string' || t.state.length > 6000) return J(400, { error: 'trip is missing' });
+    const ref = (() => { let r; do { r = 'MM-' + rid(6, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'); } while (leads.get().some((l) => l.ref === r)); return r; })();
+    const wantHold = !!(b.hold && b.hold.requested) && !!t.start;
+    const rec = {
+      ref, createdAt: now(), status: 'submitted', type: b.type || 'lead',
+      contact: { name: clip(c.name, 80), email: clip(c.email, 120), whatsapp: clip(c.whatsapp, 40), from: clip(c.from, 80), partySize: Math.max(1, Math.min(30, +c.partySize || 1)), dates: clip(c.dates, 10), notes: clip(c.notes, 1500) },
+      trip: { link: clip(t.link, 1500), state: t.state, route: clip(t.route, 400), days: +t.days || 0, nights: +t.nights || 0, countries: (t.countries || []).slice(0, 8), stops: (t.stops || []).slice(0, 40).map((x) => clip(x, 40)), start: clip(t.start, 10),
+        estTotalUsd: +t.estTotalUsd || 0, breakdownUsd: t.breakdownUsd || {}, allInBlocks: (t.allInBlocks || []).slice(0, 5), allInMatch: clip(t.allInMatch, 40), crewMates: +t.crewMates || 0, urgency: clip(t.urgency, 12) },
+      attribution: { ref: clip(b.ref, 40), fromHostel: clip(b.fromHostel, 40), source: clip(b.source, 40) },
+      itinerary: clip(b.itinerary, 20000),
+      hold: wantHold ? { requested: true, hours: HOLD_HOURS, until: new Date(Date.now() + HOLD_HOURS * 3600000).toISOString(), status: 'active' } : { requested: false },
+      sheet: holdSheet(t.state), publicNote: '', payLink: '', notes: [], history: [{ at: now(), event: 'submitted' }]
+    };
+    leads.get().unshift(rec); leads.save();
+    notify(`New trip for review ${ref}: ${rec.contact.name} · ${rec.trip.route} · ${rec.trip.days} days · ~$${rec.trip.estTotalUsd}${wantHold ? ' · BED HOLD requested' : ''}${rec.trip.start ? ' · starts ' + rec.trip.start : ''}`);
+    return J(200, { ref, status: 'submitted', hold: rec.hold.requested ? { until: rec.hold.until } : null });
+  }
+  if (p === '/status' && m === 'GET') {
+    const l = leads.get().find((x) => x.ref === (url.searchParams.get('ref') || ''));
+    return l ? J(200, publicStatus(l)) : J(404, { error: 'not found' });
+  }
+  if (p === '/event' && m === 'POST') {
+    if (limited('ev:' + ip, 600, 3600000)) return J(429, {});
+    const b = await readBody(req, 4096);
+    if (!b.n || typeof b.n !== 'string') return J(400, {});
+    events.get().push({ t: now(), n: clip(b.n, 40), p: b.p && typeof b.p === 'object' ? JSON.parse(clip(JSON.stringify(b.p), 400) || '{}') : {}, s: clip(b.s, 24) });
+    if (events.get().length > 100000) events.set(events.get().slice(-80000));
+    events.save(); return J(204, {});
+  }
+  if (p === '/live' && m === 'GET') return J(200, live.get());
+  if (p === '/reviews' && m === 'GET') { const out = {}; reviews.get().forEach((r) => { if (r.approved) (out[r.hostel] = out[r.hostel] || []).push({ q: r.q, by: r.by, from: r.from }); }); return J(200, out); }
+  if (p === '/flow' && m === 'GET') return J(200, { rows: mmFlows() });
+
+  /* ---- groups ---- */
+  if (p === '/groups' && m === 'POST') {
+    if (limited('grp:' + ip, 20, 3600000)) return J(429, {});
+    const b = await readBody(req, 8192);
+    if (typeof b.trip !== 'string' || b.trip.length > 6000) return J(400, { error: 'trip is missing' });
+    const id = rid(6); const g = { id, trip: b.trip, organiser: { id: rid(8), name: clip(b.organiser && b.organiser.name, 40) || 'Squad Leader' }, created: now(), members: [] };
+    groups.get()[id] = g; groups.save(); return J(200, g);
+  }
+  let gm = p.match(/^\/groups\/([a-z0-9]+)(?:\/members(?:\/([a-z0-9]+))?)?$/);
+  if (gm) {
+    const g = groups.get()[gm[1]]; if (!g) return J(404, { error: 'not found' });
+    if (m === 'GET' && !/members/.test(p)) return J(200, g);
+    if (m === 'POST' && /\/members$/.test(p)) {
+      if (g.members.length >= 30) return J(400, { error: 'group is full' });
+      const b = await readBody(req, 2048), mem = { id: rid(8), name: clip(b.name, 40).trim() || 'Mate', in: false, votes: {} };
+      g.members.push(mem); groups.save(); return J(200, { member: mem });
+    }
+    if (m === 'PATCH' && gm[2]) {
+      const mem = g.members.find((x) => x.id === gm[2]); if (!mem) return J(404, {});
+      const b = await readBody(req, 4096);
+      if (b.in != null) mem.in = !!b.in;
+      if (b.votes && typeof b.votes === 'object') for (const [k, v] of Object.entries(b.votes)) if (/^[a-z0-9:_-]{1,60}$/i.test(k) && ['y', 'm', 'n'].includes(v)) mem.votes[k] = v;
+      groups.save(); return J(200, { ok: true });
+    }
+    return J(405, {});
+  }
+
+  /* ---- admin ---- */
+  if (p.startsWith('/admin/')) {
+    if (!authed(req)) return J(401, { error: 'unauthorised' });
+    const ap = p.slice(6);
+    if (ap === '/leads' && m === 'GET') return J(200, leads.get().map((l) => ({ ...l, holdLeftMs: l.hold && l.hold.status === 'active' ? Date.parse(l.hold.until) - Date.now() : null })));
+    let lm = ap.match(/^\/leads\/(MM-[A-Z0-9]{6})$/);
+    if (lm && m === 'PATCH') {
+      const l = leads.get().find((x) => x.ref === lm[1]); if (!l) return J(404, {});
+      const b = await readBody(req, 8192);
+      if (b.status && ['submitted', 'checking', 'ready', 'approved', 'declined'].includes(b.status) && b.status !== l.status) {
+        l.status = b.status; l.history.push({ at: now(), event: 'status → ' + b.status });
+        if (b.status === 'declined' && l.hold && l.hold.status === 'active') { l.hold.status = 'released'; l.history.push({ at: now(), event: 'hold released' }); }
+        if (b.status === 'approved' && l.hold && l.hold.status === 'active') { l.hold.status = 'converted'; l.history.push({ at: now(), event: 'hold converted to booking' }); }
+      }
+      if (typeof b.publicNote === 'string') l.publicNote = clip(b.publicNote, 1500);
+      if (typeof b.payLink === 'string') l.payLink = /^https:\/\//.test(b.payLink) ? clip(b.payLink, 600) : '';
+      if (typeof b.note === 'string' && b.note.trim()) l.notes.push({ at: now(), text: clip(b.note, 1500) });
+      if (b.releaseHold && l.hold && l.hold.status === 'active') { l.hold.status = 'released'; l.history.push({ at: now(), event: 'hold released' }); }
+      if (b.extendHoldHours && l.hold && l.hold.requested) { const h = Math.max(1, Math.min(168, +b.extendHoldHours)); l.hold.until = new Date(Math.max(Date.now(), Date.parse(l.hold.until)) + h * 3600000).toISOString(); l.hold.status = 'active'; l.history.push({ at: now(), event: `hold extended ${h}h` }); }
+      leads.save(); return J(200, l);
+    }
+    if (ap === '/live' && m === 'GET') return J(200, live.get());
+    if (ap === '/live' && m === 'PUT') {
+      const b = await readBody(req, 65536), L = { updated: now(), notice: clip(b.notice, 300), spots: {}, legs: {}, acts: {} };
+      for (const [k, v] of Object.entries(b.spots || {})) if (MM.ALL_IN.some((t) => t.id === k)) L.spots[k] = { left: v.left === '' || v.left == null ? null : Math.max(0, +v.left | 0), next: clip(v.next, 10) };
+      for (const [k, v] of Object.entries(b.legs || {})) if (/^[a-zA-Z-]+\|[a-zA-Z-]+\|[a-z]+$/.test(k) && v) { const o = {}; if (v.u != null && +v.u >= 0) o.u = +v.u; if (v.h != null && +v.h >= 0) o.h = +v.h; if (Object.keys(o).length) L.legs[k] = o; }
+      for (const [k, v] of Object.entries(b.acts || {})) if (MM.ACTS[k] && +v >= 0) L.acts[k] = +v;
+      live.set(L); live.save(); return J(200, L);
+    }
+    if (ap === '/reviews' && m === 'GET') return J(200, reviews.get());
+    if (ap === '/reviews' && m === 'POST') {
+      const b = await readBody(req, 4096); if (!MM.PLACES[b.hostel] || !clip(b.q, 400).trim()) return J(400, { error: 'hostel and quote required' });
+      const r = { id: rid(6), hostel: b.hostel, q: clip(b.q, 400), by: clip(b.by, 60), from: clip(b.from, 40), approved: b.approved !== false, at: now() }; reviews.get().push(r); reviews.save(); return J(200, r);
+    }
+    let rm = ap.match(/^\/reviews\/([a-z0-9]+)$/);
+    if (rm && m === 'DELETE') { reviews.set(reviews.get().filter((r) => r.id !== rm[1])); reviews.save(); return J(200, { ok: true }); }
+    if (ap === '/flow' && m === 'GET') return J(200, { imported: flowRows.get().rows, derived: mmFlows() });
+    if (ap === '/flow' && m === 'POST') {
+      const b = await readBody(req, 131072), rows = [], bad = [];
+      String(b.csv || '').split(/\r?\n/).forEach((line, i) => {
+        line = line.trim(); if (!line || /^from[,;\t]/i.test(line)) return; const [a, c, n] = line.split(/[,;\t]/).map((x) => x.trim());
+        if (MM.PLACES[a] && MM.PLACES[c] && a !== c && +n > 0) rows.push({ a, b: c, n: Math.min(100000, +n) }); else bad.push(i + 1);
+      });
+      flowRows.set({ rows }); flowRows.save(); return J(200, { imported: rows.length, badLines: bad.slice(0, 20) });
+    }
+    if (ap === '/funnel' && m === 'GET') {
+      const since = Date.now() - 30 * 86400000, ev = events.get().filter((e) => Date.parse(e.t) >= since), byName = {}, sess = {}, doors = {}, perDay = {};
+      ev.forEach((e) => { byName[e.n] = (byName[e.n] || 0) + 1; (sess[e.n] = sess[e.n] || new Set()).add(e.s); if (e.n === 'door' && e.p) doors[e.p.door] = (doors[e.p.door] || 0) + 1; const d = e.t.slice(0, 10); perDay[d] = (perDay[d] || 0) + 1; });
+      return J(200, { days: 30, events: ev.length, byName, sessions: Object.fromEntries(Object.entries(sess).map(([k, v]) => [k, v.size])), doors, perDay, leads: leads.get().length });
+    }
+    return J(404, { error: 'unknown admin route' });
+  }
+  return J(404, { error: 'unknown route' });
+}
+
+/* ============================================================ static ============================================================ */
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js']);
+function serveStatic(req, res, url) {
+  let rel = decodeURIComponent(url.pathname); if (rel === '/') rel = '/index.html';
+  if (rel === '/admin' || rel === '/admin/') { res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); return fs.createReadStream(path.join(__dirname, 'admin.html')).pipe(res); }
+  rel = rel.replace(/^\/+/, ''); const top = rel.split('/')[0];
+  const ok = (rel.indexOf('/') === -1 && PUBLIC_ROOT_FILES.has(rel)) || top === 'data' || top === 'assets';
+  const file = path.resolve(ROOT, rel);
+  if (!ok || !file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+  const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+  const headers = { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': rel === 'index.html' ? 'no-cache' : 'public, max-age=300' };
+  if (rel === 'config.js') {                                                  // switch the API on when served from here
+    let src = fs.readFileSync(file, 'utf8').replace(/API_BASE:\s*'[^']*'/, "API_BASE: '/api'");
+    // photos mirrored to assets/photos (npm run mirror-photos) are used automatically
+    if (fs.existsSync(path.join(ROOT, 'assets', 'photos', 'hostel'))) src = src.replace(/PHOTO_BASE:\s*'[^']*'/, "PHOTO_BASE: '/assets/photos'");
+    res.writeHead(200, { ...headers, 'Cache-Control': 'no-cache' }); return res.end(src);
+  }
+  res.writeHead(200, headers); fs.createReadStream(file).pipe(res);
+}
+
+http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://x');
+  try {
+    if (url.pathname.startsWith('/api/')) return await api(req, res, url);
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+    return serveStatic(req, res, url);
+  } catch (e) {
+    if (!res.headersSent) json(res, e.code === 413 ? 413 : e.code === 400 ? 400 : 500, { error: e.code ? e.message : 'server error' });
+    if (!e.code) console.error(e);
+  }
+}).listen(PORT, () => {
+  console.log(`\n  Mad Monkey Trip Builder: http://localhost:${PORT}`);
+  console.log(`  Crew console:             http://localhost:${PORT}/admin`);
+  console.log(`  Admin token:              ${process.env.ADMIN_TOKEN ? '(from ADMIN_TOKEN)' : TOKEN + '   (saved in ' + path.relative(process.cwd(), path.join(DATA, 'admin-token.txt')) + ')'}`);
+  console.log(`  Bed holds:                ${HOLD_HOURS}h · notifications: ${NOTIFY ? 'on' : 'off (set NOTIFY_WEBHOOK)'}\n`);
+});

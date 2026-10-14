@@ -69,6 +69,7 @@
   function weight(e, pref) { return e.u + TV[pref] * (e.h + HOP) - (e.ovn ? BED_CREDIT : 0); }
 
   var routeCache = {};
+  MM.resetRoutes = function () { routeCache = {}; graph = null; };
   function route(a, b, pref) {
     if (!graph) graph = buildGraph();
     if (a === b) return { steps: [], h: 0, u: 0, ovn: false, nights: 0, nodes: [a] };
@@ -733,6 +734,14 @@
     Object.keys(P()).forEach(function (id) { P()[id].next.forEach(function (n, i) { add(id, n, Math.max(0.4, 1.5 - i * 0.2), null); }); });
     return (flowCache = W);
   }
+  // Real data from the server: guests' planned trips ('planning') and imported past stays ('stays'). Stays count most.
+  MM.setFlow = function (rows) {
+    var W = flow(); (rows || []).forEach(function (r) {
+      if (!P()[r.a] || !P()[r.b]) return; var w = Math.min(10, (r.src === 'stays' ? 2.5 : 0.8) * Math.sqrt(Math.max(1, r.n))), k = r.a + '>' + r.b;
+      var o = W[k] = W[k] || { w: 0, l: {} }; o.w += w; o.l[r.src === 'stays' ? 'Real Mad Monkey stays' : 'Popular with guests planning now'] = 1;
+      var k2 = r.b + '>' + r.a, o2 = W[k2] = W[k2] || { w: 0, l: {} }; o2.w += w * 0.5; o2.l[r.src === 'stays' ? 'Real Mad Monkey stays' : 'Popular with guests planning now'] = 1;
+    });
+  };
   MM.nextRanked = function (id) {
     var W = flow();
     return Object.keys(P()).filter(function (q) { return W[id + '>' + q] && !P()[q].partner || (W[id + '>' + q] && q === 'saigon'); }).map(function (q) {

@@ -7,6 +7,7 @@
   var MM = r.MM = r.MM || {};
   var W = 1080, H = 1920, LIME = '#ccff01', PINK = '#ff01aa', BONE = '#f5efe2', BLACK = '#0a0a0a', PAPER = '#ffffff';
 
+  function loadImgCors(src) { return new Promise(function (res) { if (!src) return res(null); var i = new Image(); i.crossOrigin = 'anonymous'; i.onload = function () { res(i); }; i.onerror = function () { res(null); }; i.src = src; }); }
   function loadImg(src) { return new Promise(function (res) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = function () { res(null); }; i.src = src; }); }
   function fonts() {
     if (!document.fonts || !document.fonts.load) return Promise.resolve();
@@ -22,8 +23,9 @@
 
   MM.drawStory = function (canvas, plan, state, cur) {
     canvas.width = W; canvas.height = H; var ctx = canvas.getContext('2d');
-    return Promise.all([fonts(), loadImg('assets/logo/mad-monkey-white.png')]).then(function (res) {
-      var logo = res[1], F = 'Montserrat, system-ui, sans-serif';
+    var firstP = plan.places[0];
+    return Promise.all([fonts(), loadImg('assets/logo/mad-monkey-white.png'), loadImgCors(firstP ? (MM.hostelImg(firstP)) : null)]).then(function (res) {
+      var logo = res[1], photo = res[2], F = 'Montserrat, system-ui, sans-serif';
       ctx.fillStyle = BLACK; ctx.fillRect(0, 0, W, H);
       var places = plan.places.slice(), PAD = 64;
 
@@ -43,7 +45,19 @@
       if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 
       // map box
-      var footerH = 430, bx = PAD, bw = W - PAD * 2, by = Math.round(titleBottom + 36), bh = Math.min(900, H - footerH - by);
+      var footerH = 430, bx = PAD, bw = W - PAD * 2, by = Math.round(titleBottom + 36);
+      // a real Mad Monkey photo of the first stop, if there's room and the image host allows it
+      if (photo && H - footerH - by >= 300 + 36 + 540) {
+        ctx.save(); ctx.beginPath(); ctx.rect(bx, by, bw, 300); ctx.clip();
+        var sc0 = Math.max(bw / photo.width, 300 / photo.height), pw = photo.width * sc0, ph = photo.height * sc0;
+        try { ctx.filter = 'saturate(1.3) contrast(1.06)'; } catch (e) { /* older browsers */ }
+        ctx.drawImage(photo, bx + (bw - pw) / 2, by + (300 - ph) / 2, pw, ph); ctx.restore();
+        ctx.lineWidth = 8; ctx.strokeStyle = LIME; ctx.strokeRect(bx, by, bw, 300);
+        ctx.fillStyle = BLACK; ctx.fillRect(bx, by + 300 - 52, 330, 52); ctx.fillStyle = LIME; ctx.font = '900 26px ' + F; if ('letterSpacing' in ctx) ctx.letterSpacing = '2px';
+        ctx.fillText(('MAD MONKEY ' + MM.PLACES[firstP].n).toUpperCase().slice(0, 22), bx + 14, by + 300 - 17); if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+        by += 336;
+      }
+      var bh = Math.min(900, H - footerH - by);
       ctx.save(); ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
       ctx.fillStyle = BLACK; ctx.fillRect(bx, by, bw, bh);
       var px = MM.routePx(places.length ? places : ['hanoi'], 170), vb = MM.viewBoxFor(px, bw / bh, 0.28), sc = bw / vb.w;
