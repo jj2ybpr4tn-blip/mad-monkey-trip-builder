@@ -439,3 +439,9 @@ main{flex:1;display:flex;flex-direction:column}
 }
 
 @keyframes hdraw{0%{stroke-dashoffset:1}50%,80%{stroke-dashoffset:0}100%{stroke-dashoffset:-1}}
+
+/* map focus: dim everything outside the chosen countries */
+.m-land.dim{fill:#242424;stroke:#303030}
+.m-pin.off{opacity:.38}
+.m-faded{opacity:.14;pointer-events:none}
+.m-land,.m-pin,.m-seg{transition:opacity .2s,fill .2s}
