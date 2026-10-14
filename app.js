@@ -11,6 +11,7 @@
 
   var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, focus: [], open: {}, meta: { ref: '', from: '' } };
   var plan = null;
+  app.views = {}; app.passport = 'gb';
 
   /* ---------- utils ---------- */
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -46,10 +47,11 @@
      ============================================================ */
   function parseHash() {
     var h = location.hash.replace(/^#\/?/, ''), seg = h.split('/'), view = seg[0] || 'home';
-    return { view: ['home', 'quiz', 'results', 'build'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
+    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
   }
   function go(view, rest) { location.hash = '#/' + (view === 'home' ? '' : view) + (rest ? '/' + rest : ''); }
   function route() {
+    if (app._unwatch) { app._unwatch(); app._unwatch = null; }
     var r = parseHash(); closeModal();
     if (r.view === 'results' && !app.results) r.view = 'quiz';
     if (r.view === 'build') {
@@ -60,7 +62,7 @@
     if (r.view === 'build' && app.state.items.length) history.replaceState(null, '', '#/build/' + MM.encodeState(app.state));
     $$('.navbtn[data-go]').forEach(function (b) { b.setAttribute('aria-current', b.getAttribute('data-go') === r.view ? 'true' : 'false'); });
     window.scrollTo(0, 0);
-    ({ home: renderHome, quiz: renderQuiz, results: renderResults, build: renderBuilder })[r.view]();
+    if (app.views[r.view]) app.views[r.view](r.rest); else ({ home: renderHome, quiz: renderQuiz, results: renderResults, build: renderBuilder })[r.view]();
     track('view', { view: r.view });
   }
 
@@ -107,6 +109,11 @@
         '<div class="gap" style="margin-top:var(--s-7)">' + photo(MM.tourImg('the-ha-giang-loop-tour-4d-3n-easy-rider') || MM.hostelImg('hanoi')) +
           '<div class="gap__b"><span class="pill pill--pink pill--sm">Special · ' + g.dates + '</span><h3>The Gap Collective</h3><p style="font-weight:500">' + esc(g.pitch) + '</p><div class="stats"><div class="stat"><b>31</b><span>days</span></div><div class="stat"><b>9</b><span>stops</span></div><div class="stat"><b>1,500</b><span>at the festival</span></div><div class="stat"><b>from £1,995</b><span>per person</span></div></div><div class="tcard__foot" style="padding-top:0"><a class="btn btn--sm btn--pink" href="' + g.url + '" target="_blank" rel="noopener">Book + details ↗</a></div></div></div>' +
       '</div></section>' +
+
+      '<section class="sec sec--pink" id="humans"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">The human bit</div><h2 class="disp">Humans check<br>everything.</h2></div><p style="max-width:32em;font-weight:600">No robot books your trip. Every plan you send is read by a real Mad Monkey crew member who checks the routes, the beds, the dates and the prices. We can hold your beds while they do it, and you approve before you pay a penny.</p></div>' +
+        '<div class="how how--4">' + [['1', 'You build it', 'Pick stops on the map, or let us build it from your budget.'], ['2', 'We hold your beds', 'Send it for checking and we hold the nights while we look.'], ['3', 'A human checks it', 'Routes, beds, dates, prices: read by someone who has done the trip.'], ['4', 'You say yes', 'You get a confirmed plan. Happy? Pay the deposit. Not? No harm done.']].map(function (s) { return '<div class="hs"><b>' + s[0] + '</b><h4>' + s[1] + '</h4><p>' + s[2] + '</p></div>'; }).join('') + '</div>' +
+        '<div class="rate"><b>' + MM.TRUST.rating + '</b><span>from ' + MM.TRUST.raters + ' Mad Monkey travellers</span></div>' +
+        '<div class="quotes">' + MM.TRUST.quotes.map(function (q) { return '<blockquote class="quote">“' + esc(q.q) + '”<cite>' + esc(q.by) + ' · ' + esc(q.from) + '</cite></blockquote>'; }).join('') + '</div></div></section>' +
 
       '<section class="sec"><div class="wrap"><div class="sec__head"><h2 class="disp">How it works.</h2></div><div class="how">' +
         '<div><b class="lime">1</b><h4>Pick your stops</h4><p class="dim">Tap hostels, or take the quiz. Every bus, boat and flight between them is already in.</p></div>' +
@@ -205,14 +212,19 @@
   function renderBuilder() {
     root.innerHTML = '<div class="bld"><section class="bmap" id="bmap" aria-label="Map"></section><section class="bpanel" id="bpanel" aria-label="Your trip"></section></div><div class="mbar" id="mbar"></div>';
     var box = $('#bmap'), mapHost = document.createElement('div'); mapHost.style.cssText = 'position:absolute;inset:0'; box.appendChild(mapHost);
-    box.insertAdjacentHTML('beforeend', '<div class="bmap__regions" id="regions"></div><div class="bmap__stats" id="mstats"></div><div class="bmap__hint"><span class="pill pill--sm">Tap a hostel to add it</span></div>');
-    MM.BuilderMap.mount(mapHost, { pin: onPin });
+    box.insertAdjacentHTML('beforeend', '<div class="bmap__regions" id="regions"></div><div class="bmap__stats" id="mstats"></div><div class="bmap__hint"><span class="pill pill--sm">Tap a hostel to add it</span></div><div class="bmap__ctl"><button type="button" data-act="mapzoom" data-f="1.5" aria-label="Zoom in">+</button><button type="button" data-act="mapzoom" data-f="0.67" aria-label="Zoom out">−</button><button type="button" class="fit" data-act="mapfit" aria-label="Fit the map to my trip">FIT</button></div>');
+    MM.BuilderMap.mount(mapHost, { pin: onPin, leg: onLegTap });
     refreshBuilder({ instant: true });
   }
   function onPin(id) {
     var items = app.state.items, last = items[items.length - 1];
     if (last && last.kind === 'stop' && last.p === id) { toast('You\'re already at ' + P[id].n); return; }
     addStop(id);
+  }
+  function onLegTap(key, idx) {
+    if (idx == null) return; app.open['why' + idx] = true; refreshBuilder();
+    var c = document.getElementById('leg' + idx); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('flash'); setTimeout(function () { c.classList.remove('flash'); }, 1400); }
+    MM.BuilderMap.selectLeg(key);
   }
   function addStop(id, n) {
     mutate(function (s) { s.items.push(stopFor(id, n)); });
@@ -228,7 +240,7 @@
     $('#regions').innerHTML = '<button type="button" data-focus="" aria-pressed="' + !app.focus.length + '">Everywhere</button>' + Object.keys(MM.COUNTRIES).map(function (c) { return '<button type="button" data-focus="' + c + '" aria-pressed="' + (app.focus.indexOf(c) > -1) + '">' + MM.COUNTRIES[c].n + '</button>'; }).join('');
     var t = plan.totals;
     $('#mstats').innerHTML = t.days ? '<span class="chip"><b>' + t.days + '</b> days</span><span class="chip"><b>' + t.stops + '</b> stops</span><span class="chip"><b>' + plan.countries.length + '</b> ' + (plan.countries.length === 1 ? 'country' : 'countries') + '</span><span class="chip"><b>' + plan.km.toLocaleString('en-GB') + '</b> km</span>' : '';
-    $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">Send to the crew</button>' : '<div><b>Tap the map</b><span>to add your first stop</span></div>';
+    $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">Hold my beds</button>' : '<div><b>Tap the map</b><span>to add your first stop</span></div>';
     MM.BuilderMap.update(plan, app.state, app.focus);
     if (!(opts && opts.instant)) window.scrollTo(0, y);
   }
@@ -249,7 +261,10 @@
       (items.length ? '<div class="stats"><div class="stat"><b>' + t.nights + '</b><span>nights</span></div><div class="stat"><b>' + t.stops + '</b><span>stops</span></div><div class="stat"><b>' + pl.km.toLocaleString('en-GB') + '</b><span>km</span></div><div class="stat"><b>' + pl.legs.length + '</b><span>transfers</span></div></div>' : '') +
       '<div class="bsum__ctl"><div class="field"><label for="startd">Start date</label><input class="input" id="startd" type="date" value="' + esc(s.start) + '" min="' + U.isoDate(new Date()) + '"></div>' +
       '<div class="field"><label>Travel style</label><div class="seg" role="group" aria-label="Travel style"><button type="button" data-act="pref" data-v="cheap" aria-pressed="' + (s.pref === 'cheap') + '">Cheapest</button><button type="button" data-act="pref" data-v="balanced" aria-pressed="' + (s.pref === 'balanced') + '">Smart</button><button type="button" data-act="pref" data-v="fast" aria-pressed="' + (s.pref === 'fast') + '">Fastest</button></div></div>' +
-      '<div class="field full"><label for="fund">Food + fun fund: ' + money(s.fund) + ' a day</label><input class="range" id="fund" type="range" min="5" max="60" step="1" value="' + s.fund + '" aria-label="Daily spending money"></div></div></div>';
+      '<div class="field full"><label for="fund">Food + fun fund: ' + money(s.fund) + ' a day</label><input class="range" id="fund" type="range" min="5" max="60" step="1" value="' + s.fund + '" aria-label="Daily spending money"></div>' +
+      '<div class="field full"><label for="budget">Budget target: ' + (s.budget ? money(s.budget) : 'not set') + '</label><input class="range" id="budget" type="range" min="0" max="6000" step="50" value="' + (s.budget || 0) + '" aria-label="Total budget target"></div></div>' +
+      (items.length && s.budget ? budgetBar(t) : '') + (items.length ? seasonStrip(pl) : '') +
+      '<div class="humans"><b>Checked by a real person.</b> Hit "Hold my beds" and the crew reviews your whole trip before you pay a penny.</div></div>';
 
     if (!items.length) {
       h += '<div class="empty"><h3>Tap the map.<br>Start anywhere.</h3><p>Every Mad Monkey is a pin. Add a few and we\'ll work out the buses, boats and flights between them, the cost, and the days.</p><div class="row">' +
@@ -262,11 +277,12 @@
       return h;
     }
 
+    h += timelineHTML(pl);
     /* add bar */
     var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
     h += '<div class="addbar"><div class="addbar__row"><div class="sel-wrap"><select class="select" id="addsel" aria-label="Add a stop"><option value="">+ Add a stop…</option>' +
       Object.keys(groups).map(function (c) { return '<optgroup label="' + MM.COUNTRIES[c].n + '">' + groups[c].map(function (id) { return '<option value="' + id + '">' + esc(P[id].n) + (P[id].partner ? ' (partner)' : '') + (P[id].opens ? ' (opens ' + P[id].opens.slice(8) + '/' + P[id].opens.slice(5, 7) + ')' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></div></div>' +
-      nextBar(pl.segs[pl.segs.length - 1].last, 'Where guests go next') + '</div>';
+      nextBar(pl.segs[pl.segs.length - 1].last, 'Mad Monkey guests go next') + tweakRow() + '</div>';
 
     /* itinerary */
     h += '<div class="itin">';
@@ -288,21 +304,71 @@
     h += '<div class="blk"><button class="blk__hd" data-act="toggle" data-k="days" aria-expanded="' + !!app.open.days + '" type="button"><h3>Day by day</h3><span class="pill pill--sm pill--paper">' + (app.open.days ? 'Hide' : 'Show') + ' ' + t.days + ' days</span></button>' + (app.open.days ? '<div class="blk__bd">' + daysHTML(pl) + '</div>' : '') + '</div>';
     /* costs */
     h += costsHTML(pl);
+    h += entryHTML(pl);
     /* CTA */
-    h += '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Send it to the crew</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Print / PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
+    h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.</div>' +
+      '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Print / PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
       '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares, activities are listed prices (est. where marked). The crew confirms live rates, dates and availability before you pay anything.</p></div>';
     return h;
   }
 
   function nextBar(fromId, title) {
     var p = P[fromId]; if (!p) return '';
-    var used = {}; app.state.items.forEach(function (it) { if (it.kind === 'stop') used[it.p] = 1; });
-    var ids = p.next.filter(function (id) { return id !== fromId; }).slice(0, 5);
-    if (!ids.length) return '';
-    return '<div class="nextbar"><span class="over">' + esc(title) + '</span>' + ids.map(function (id) {
-      var r = MM.route(fromId, id, app.state.pref || 'balanced');
-      return '<button class="nextchip" data-act="addplace" data-p="' + id + '" type="button"><b>' + esc(P[id].n) + '</b>' + (r ? ' <small>' + hours(r.h) + ' · ~' + money(r.u) + '</small>' : '') + '</button>';
+    var ranked = MM.nextRanked(fromId).filter(function (x) { return x.id !== fromId; }).slice(0, 5);
+    if (!ranked.length) return '';
+    return '<div class="nextbar"><span class="over">' + esc(title) + '</span>' + ranked.map(function (x) {
+      var r = MM.route(fromId, x.id, app.state.pref || 'balanced');
+      return '<button class="nextchip" data-act="addplace" data-p="' + x.id + '" type="button"><b>' + esc(P[x.id].n) + '</b>' + (r ? ' <small>' + hours(r.h) + ' · ~' + money(r.u) + '</small>' : '') + (x.why.length ? '<em class="whytag">' + esc(x.why[0]) + '</em>' : '') + '</button>';
     }).join('') + '</div>';
+  }
+  function tweakRow() {
+    var h = '<div class="tweaks"><button class="btn btn--sm btn--paper" data-act="suggest" type="button">Suggest my next stop</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="cheaper" type="button">Make it cheaper</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="faster" type="button">Make it faster</button></div>';
+    if (app.open.suggest) {
+      var sg = MM.suggestNext(app.state);
+      h += '<div class="nextbar"><span class="over">Picked for your route</span>' + (sg.length ? sg.map(function (x) { return '<button class="nextchip" data-act="addplace" data-p="' + x.id + '" type="button"><b>' + esc(P[x.id].n) + '</b> <small>' + hours(x.leg.h) + ' · ~' + money(x.leg.u) + '</small><em class="whytag">' + esc(x.why.slice(0, 2).join(' · ')) + '</em></button>'; }).join('') : '<small>Nothing else fits within a day\'s travel.</small>') + '</div>';
+    }
+    return h;
+  }
+  function budgetBar(t) {
+    var pct = Math.min(100, Math.round(t.total / t.budget * 100)), over = t.total > t.budget;
+    return '<div class="bbar' + (over ? ' over' : '') + '"><div class="bbar__t"><i style="width:' + pct + '%"></i></div><span>' + (over ? 'Over budget by ' + money(t.total - t.budget) : money(t.budgetLeft) + ' left of ' + money(t.budget)) + '</span></div>';
+  }
+  function seasonStrip(pl) {
+    var av = MM.bestMonths(pl.places), sd = U.parseDate(app.state.start), cur = sd ? sd.getUTCMonth() : (app.state.month != null ? app.state.month : null);
+    var mx = Math.max.apply(0, av), best = [], thr = mx >= 2.6 ? 2.6 : mx - 0.15; av.forEach(function (v, m) { if (v >= thr) best.push(U.MONTHN[m]); });
+    var note = cur != null && av[cur] < 2.1 ? 'Your dates are in the wet or rough-sea season for this route.' : (cur != null && av[cur] >= 2.6 ? 'Your dates are prime season for this route.' : '');
+    return '<div class="seas-wrap"><div class="over" style="color:var(--ink-dim-on-black)">Best time for this route</div><div class="seas" role="img" aria-label="Best months for this route: ' + best.join(', ') + '">' +
+      av.map(function (v, m) { var k = v >= 2.6 ? 3 : v >= 2.1 ? 2 : 1; return '<i class="s' + k + (cur === m ? ' cur' : '') + '" title="' + U.MONTHN[m] + '"><u style="height:' + (k === 3 ? 100 : k === 2 ? 62 : 28) + '%"></u><span>' + U.MONTHN[m][0] + '</span></i>'; }).join('') + '</div><div class="fine" style="color:var(--ink-dim-on-black)">' + (best.length < 12 ? 'Best: ' + best.slice(0, 5).join(', ') + '. ' : '') + note + '</div></div>';
+  }
+  function timelineHTML(pl) {
+    var out = '';
+    pl.segs.forEach(function (sg, i) {
+      var w, label, c;
+      if (sg.kind === 'allin') { w = sg.trip.days - 1; label = 'ALL IN ' + sg.trip.n; c = 'ALL'; }
+      else { w = sg.n + sg.epics.reduce(function (acc, e) { return acc + e.multi.n; }, 0); label = P[sg.p].n; c = P[sg.p].c; }
+      out += '<button class="tl__seg" style="flex:' + Math.max(w, 1.2) + ' 1 0" data-c="' + c + '" data-act="goto" data-i="' + i + '" type="button" title="' + esc(label) + '"><b>' + esc(label) + '</b><span>' + w + 'n</span></button>';
+      var leg = pl.legs.filter(function (l) { return l.index === i; })[0];
+      if (leg) out += '<i class="tl__leg" title="' + esc(leg.chosen.modeLabel + ' · ' + hours(leg.h)) + '">' + MM.modeIcon(leg.chosen.main) + '</i>';
+    });
+    return '<div class="tl" aria-label="Trip timeline">' + out + '</div>';
+  }
+  function entryHTML(pl) {
+    var open = !!app.open.entry, pass = app.passport;
+    var body = '<div class="field"><label for="passport">Your passport</label><div class="sel-wrap"><select class="select" id="passport">' + MM.PASSPORTS.map(function (x) { return '<option value="' + x.k + '"' + (x.k === pass ? ' selected' : '') + '>' + x.n + '</option>'; }).join('') + '</select></div></div>' +
+      pl.countries.map(function (c) { var e = MM.ENTRY[c]; return '<div class="entry"><span class="dotc" data-c="' + c + '"></span><div><b>' + MM.COUNTRIES[c].n + '</b><p>' + esc(e.by[pass]) + ' ' + esc(e.extra) + '</p><a href="' + e.link + '" target="_blank" rel="noopener">' + esc(e.cta) + ' ↗</a></div></div>'; }).join('') +
+      '<p class="fine">Entry rules change often and we can\'t promise these are current. Always confirm on the official link before you book flights.</p>';
+    return '<div class="blk"><button class="blk__hd" data-act="toggle" data-k="entry" aria-expanded="' + open + '" type="button"><h3>Entry rules</h3><span class="pill pill--sm pill--paper">' + plural(pl.countries.length, 'country', 'countries') + ' · ' + (open ? 'Hide' : 'Show') + '</span></button>' + (open ? '<div class="blk__bd">' + body + '</div>' : '') + '</div>';
+  }
+  function galleryStrip(id) {
+    var g = MM.gallery(id); if (g.length < 2) return '';
+    return '<div class="gal">' + g.slice(0, 4).map(function (u, k) { return '<button type="button" class="gal__i" data-act="gal" data-p="' + id + '" data-k="' + k + '" aria-label="Open photo ' + (k + 1) + ' of ' + g.length + '"><img src="' + u + '" alt="" loading="lazy" onerror="this.parentNode.remove()"></button>'; }).join('') + '<button type="button" class="gal__more" data-act="gal" data-p="' + id + '" data-k="0">' + g.length + ' photos</button></div>';
+  }
+  function openGallery(id, k) {
+    var g = MM.gallery(id); if (!g.length) return; k = Math.max(0, Math.min(g.length - 1, k));
+    var rv = (MM.REVIEWS[id] || [])[0];
+    openModal('<div class="modal__hd"><div><div class="over">Mad Monkey ' + esc(P[id].n) + '</div><h2 class="disp">' + (k + 1) + ' / ' + g.length + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd"><div class="photo lb"><img src="' + g[k] + '" alt="Photo ' + (k + 1) + ' of Mad Monkey ' + esc(P[id].n) + '"></div>' +
+      '<div style="display:flex;gap:var(--s-2)"><button class="btn btn--sm btn--paper" data-act="galnav" data-p="' + id + '" data-k="' + (k - 1 + g.length) % g.length + '" type="button">← Back</button><button class="btn btn--sm" data-act="galnav" data-p="' + id + '" data-k="' + (k + 1) % g.length + '" type="button">Next →</button></div>' +
+      (rv ? '<blockquote class="quote">“' + esc(rv.q) + '”<cite>' + esc(rv.by) + (rv.from ? ', ' + esc(rv.from) : '') + '</cite></blockquote>' : '') + '</div>');
   }
 
   function stopCard(sg, i, pl) {
@@ -310,11 +376,12 @@
     var travelDays = pl.days.filter(function (d) { return d.si === i && d.loc === sg.p; });
     var sub = [MM.COUNTRIES[p.c].n, 'dorm from ' + money(p.bed) + '/night', plural(sg.n, 'night')];
     var epicNights = sg.epics.reduce(function (a, e) { return a + e.multi.n; }, 0); if (epicNights) sub.push('+ ' + plural(epicNights, 'night') + ' away');
-    var h = '<div class="stopc" id="stop' + i + '"><div class="stopc__head"><div class="stopc__thumb photo">' + photo(MM.hostelImg(p.id)).replace('class="photo ', 'class="photo ').replace('<div', '<div style="width:100%;height:100%"') + '<span class="stopc__num">' + (i + 1) + '</span></div>' +
+    var h = '<div class="stopc" id="stop' + i + '" data-seg="' + i + '"><div class="stopc__head"><div class="stopc__thumb photo">' + photo(MM.hostelImg(p.id)).replace('class="photo ', 'class="photo ').replace('<div', '<div style="width:100%;height:100%"') + '<span class="stopc__num">' + (i + 1) + '</span></div>' +
       '<div><h3><span class="dotc" data-c="' + p.c + '"></span>' + esc(p.n) + (p.partner ? ' ' + chip('Partner', 'pill--yellow') : '') + '</h3><div class="stopc__sub">' + sub.join(' · ') + '</div></div>' +
       '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
-      '<div class="stopc__tools"><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + '" type="button">×</button></div></div></div>';
+      '<div class="stopc__tools"><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" type="button"></button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + '" type="button">×</button></div></div></div>';
     if (chosen.length && !open) h += '<div class="stopc__picks">' + chosen.slice(0, 4).map(function (a) { return '<span class="pill pill--sm">' + esc(a.n) + '</span>'; }).join('') + (chosen.length > 4 ? '<span class="pill pill--sm pill--paper">+' + (chosen.length - 4) + ' more</span>' : '') + '</div>';
+    h += galleryStrip(p.id);
     h += '<button class="stopc__more" data-act="toggle" data-k="acts' + i + '" aria-expanded="' + open + '" type="button"><span>Things to do at ' + esc(p.n) + '</span><span class="count"><span class="pill pill--sm pill--paper">' + chosen.length + ' picked</span><b>' + (open ? '−' : '+') + '</b></span></button>';
     if (open) h += actsPanel(sg, i);
     return h + '</div>';
@@ -339,13 +406,14 @@
   }
 
   function legCard(leg) {
-    var from = P[leg.from].n, to = P[leg.to].n;
-    var h = '<div class="legc"><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
+    var from = P[leg.from].n, to = P[leg.to].n, ex = MM.explainLeg(leg), whyOpen = !!app.open['why' + leg.index];
+    var h = '<div class="legc" id="leg' + leg.index + '"><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
     leg.options.forEach(function (o) {
       h += '<button class="legopt" type="button" data-act="leg" data-i="' + leg.index + '" data-k="' + o.key + '" aria-pressed="' + (o.key === leg.key) + '">' + legIcon(leg, o) +
-        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span></div><div class="tm">~' + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
+        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span></div><div class="tm">~' + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
     });
-    h += '</div>';
+    h += '</div><button class="why" data-act="toggle" data-k="why' + leg.index + '" aria-expanded="' + whyOpen + '" type="button">Why this leg? <b>' + (whyOpen ? '−' : '+') + '</b></button>';
+    if (whyOpen) h += '<div class="why__bd"><p><b>' + ex.verdict + '</b></p>' + (ex.lines.length ? ex.lines.map(function (l) { return '<p>' + l + '</p>'; }).join('') : '<p>This is the only sensible way to do it.</p>') + '</div>';
     var x = '';
     if (leg.border) x += '<div class="legc__warn">' + esc(leg.border) + '</div>';
     if (leg.tickets) x += '<div>Mad Monkey sells the train tickets: ' + leg.tickets.map(function (t) { return t.n + ' ' + money(t.usd); }).join(' · ') + ' <a href="https://madmonkeyhostels.com/tours-events/' + leg.tickets[1].slug + '" target="_blank" rel="noopener">Book ↗</a></div>';
@@ -356,10 +424,10 @@
 
   function blockCard(sg, i, pl) {
     var t = sg.trip, route = (MM.ALL_IN_ROUTE[t.id] || []), nd = MM.nextDeparture(t, U.parseDate(app.state.start) || tomorrow());
-    var h = '<div class="blockc" id="stop' + i + '"><div class="blockc__top"><div><span class="pill pill--sm">ALL IN</span><h3 style="margin-top:8px">' + esc(t.n) + '</h3><div class="route">' + esc(t.tag) + '</div></div><div class="blockc__px"><b>' + money(t.usd) + '</b><span>' + t.days + ' days · ' + (t.status === 'soon' ? 'rrp' : 'from') + '</span></div></div>' +
+    var h = '<div class="blockc" id="stop' + i + '" data-seg="' + i + '"><div class="blockc__top"><div><span class="pill pill--sm">ALL IN</span><h3 style="margin-top:8px">' + esc(t.n) + '</h3><div class="route">' + esc(t.tag) + '</div></div><div class="blockc__px"><b>' + money(t.usd) + '</b><span>' + t.days + ' days · ' + (t.status === 'soon' ? 'rrp' : 'from') + '</span></div></div>' +
       '<div class="blockc__days">' + route.map(function (r) { return '<div><b>DAY ' + r[0] + '</b><span><strong style="color:var(--paper)">' + esc(r[1]) + '.</strong> ' + esc(r[2]) + '</span></div>'; }).join('') + '</div>' +
       '<div class="blockc__foot"><span class="fine" style="color:var(--ink-dim-on-black);flex:1;min-width:200px">' + (t.status === 'soon' ? 'Launching soon. Pop your details in to be first on the list.' : 'Departs every ' + U.DOWN[t.dep] + ' · next ' + U.fmtDate(nd) + (t.until ? ' · until ' + t.until : '') + ' · $' + MM.DEPOSIT + ' holds your spot') + '</span>' +
-      '<button class="btn btn--sm" data-act="customiseblock" data-i="' + i + '" type="button">Customise</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="remove" data-i="' + i + '" aria-label="Remove ALL IN ' + esc(t.n) + '" type="button">×</button></div></div>';
+      '<button class="btn btn--sm" data-act="customiseblock" data-i="' + i + '" type="button">Customise</button><button class="iconbtn grip" style="color:var(--paper);border-color:var(--paper)" data-grip="' + i + '" aria-label="Drag to reorder" type="button"></button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="remove" data-i="' + i + '" aria-label="Remove ALL IN ' + esc(t.n) + '" type="button">×</button></div></div>';
     return h;
   }
 
@@ -493,6 +561,15 @@
     var el = e.target.closest('[data-act]'); if (!el) return;
     var act = el.getAttribute('data-act'), i = +el.getAttribute('data-i'), S = app.state;
     switch (act) {
+      case 'goto': { var tg = document.getElementById('stop' + i); if (tg) tg.scrollIntoView({ behavior: 'smooth', block: 'center' }); break; }
+      case 'suggest': app.open.suggest = !app.open.suggest; refreshBuilder(); break;
+      case 'tweak': { var before = MM.plan(app.state).totals.total, ns2 = MM.tweak(app.state, el.getAttribute('data-v')), after = MM.plan(ns2).totals; app.state = Object.assign(MM.defaultState(), ns2); persist(); refreshBuilder();
+        toast(el.getAttribute('data-v') === 'cheaper' ? (before - after.total > 1 ? 'Cheaper route: saves about ' + money(before - after.total) : 'That\'s already about as cheap as it gets') : 'Fastest connections picked: ' + (after.total - before > 1 ? 'about ' + money(after.total - before) + ' more' : 'no extra cost')); break; }
+      case 'gal': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
+      case 'galnav': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
+      case 'group': if (app.group) app.group.start(); break;
+      case 'mapzoom': MM.BuilderMap.zoom(+el.getAttribute('data-f')); break;
+      case 'mapfit': MM.BuilderMap.reset(); break;
       case 'scroll': { var t = document.getElementById(el.getAttribute('data-to')); if (t) t.scrollIntoView({ behavior: 'smooth' }); break; }
       case 'close': closeModal(); break;
       /* quiz */
@@ -520,7 +597,7 @@
       case 'pref': mutate(function (s2) { s2.pref = el.getAttribute('data-v'); s2.legPick = {}; }); break;
       case 'crew': mutate(function (s2) { s2.crew = Math.max(0, Math.min(8, (s2.crew || 0) + (+el.getAttribute('data-d')))); }); break;
       case 'reset': if (confirm('Clear this trip and start over?')) { app.state = MM.defaultState(); app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); } break;
-      case 'lead': openLead(); break;
+      case 'lead': if (app.review) app.review.open(); else openLead(); break;
       case 'share': openShare(); break;
       case 'story': openStory(); break;
       case 'print': app.open.days = true; refreshBuilder(); setTimeout(function () { window.print(); }, 150); break;
@@ -537,20 +614,49 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     if (t.id === 'startd') mutate(function (s) { s.start = t.value || ''; });
+    if (t.id === 'passport') { app.passport = t.value; store('mm-passport', t.value); refreshBuilder(); }
     if (t.id === 'addsel' && t.value) { var v = t.value; t.value = ''; addStop(v); }
   });
   document.addEventListener('input', function (e) {
+    if (e.target.id === 'budget') { var bv = +e.target.value; app.state.budget = bv; var bl = $('label[for=budget]'); if (bl) bl.textContent = 'Budget target: ' + (bv ? money(bv) : 'not set'); clearTimeout(app._bt); app._bt = setTimeout(function () { persist(); refreshBuilder(); }, 160); }
     if (e.target.id === 'fund') { var v = +e.target.value; app.state.fund = v; var lb = $('label[for=fund]'); if (lb) lb.textContent = 'Food + fun fund: ' + money(v) + ' a day'; clearTimeout(app._ft); app._ft = setTimeout(function () { persist(); refreshBuilder(); }, 160); }
   });
+  /* ---------- drag to reorder (mouse + touch) ---------- */
+  document.addEventListener('pointerdown', function (e) {
+    var g = e.target.closest && e.target.closest('.grip'); if (!g) return; e.preventDefault();
+    var idx = +g.getAttribute('data-grip'), cards = $$('[data-seg]'), card = cards[idx]; if (!card) return;
+    var rects = cards.map(function (c) { var r = c.getBoundingClientRect(); return { top: r.top + window.scrollY, h: r.height }; });
+    var y0 = e.clientY, sy0 = window.scrollY, target = idx, auto = 0, lastY = e.clientY;
+    card.classList.add('dragging'); try { g.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
+    function place() {
+      var dy = lastY - y0 + (window.scrollY - sy0); card.style.transform = 'translateY(' + dy + 'px)';
+      var mid = rects[idx].top + rects[idx].h / 2 + dy, t = idx;
+      rects.forEach(function (r, k) { if (k !== idx && ((k < idx && mid < r.top + r.h / 2) || (k > idx && mid > r.top + r.h / 2))) { if ((k < idx && k < t) || (k > idx && k > t) || t === idx) t = k; } });
+      target = t;
+      cards.forEach(function (c, k) { if (k === idx) return; var sh = 0; if (idx < target && k > idx && k <= target) sh = -rects[idx].h - 16; if (idx > target && k < idx && k >= target) sh = rects[idx].h + 16; c.style.transform = sh ? 'translateY(' + sh + 'px)' : ''; c.style.transition = 'transform .15s'; });
+    }
+    function move(ev) { lastY = ev.clientY; place(); auto = ev.clientY < 90 ? -14 : ev.clientY > window.innerHeight - 90 ? 14 : 0; }
+    var tick = setInterval(function () { if (auto) { window.scrollBy(0, auto); place(); } }, 16);
+    function up() {
+      clearInterval(tick); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      cards.forEach(function (c) { c.style.transform = ''; c.style.transition = ''; c.classList.remove('dragging'); });
+      if (target !== idx) mutate(function (s) { var it = s.items.splice(idx, 1)[0]; s.items.splice(target, 0, it); s.legPick = {}; });
+    }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modalRoot.firstChild) closeModal(); });
+
+  app.util = { esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
   window.addEventListener('hashchange', route);
 
   /* ---------- boot ---------- */
   (function boot() {
     var q = new URLSearchParams(location.search); app.meta.ref = (q.get('ref') || q.get('r') || '').slice(0, 40); app.meta.from = P[q.get('from')] ? q.get('from') : '';
+    var pp2 = store('mm-passport'); if (pp2) app.passport = pp2;
     var sc = store('mm-cur'); if (sc === 'GBP' || sc === 'USD') app.cur = sc;
     $$('[data-cur]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-cur') === app.cur)); });
     var qa = store('mm-quiz'); if (qa) { app.quiz.a = Object.assign({ days: 14, vibes: [], must: [] }, qa); }
     if (app.meta.from && !location.hash) { app.state = MM.defaultState(); location.hash = '#/build'; return; }
-    route();
+    window.addEventListener('DOMContentLoaded', function () { route(); }); if (document.readyState !== 'loading') setTimeout(route, 0);
   })();
 })();

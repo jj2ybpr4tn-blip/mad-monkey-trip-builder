@@ -7,7 +7,7 @@ Plain static site. No build step, no framework, no server.
 
 ```bash
 npm start        # python3 -m http.server 8000  → http://localhost:8000
-npm test         # 91 logic checks (routing, costs, dates, share links, quiz matcher)
+npm test         # 137 logic checks (routing, costs, dates, share links, quiz matcher)
 ```
 
 ## What's in it
@@ -23,6 +23,14 @@ npm test         # 91 logic checks (routing, costs, dates, share links, quiz mat
 | **Season + event flags** | Wet / rough-sea months per hostel, Rinjani closure, Kampot's 1 Nov opening, Halloween parties, the Thailand–Cambodia border. |
 | **Share** | Link that reopens the exact trip (short, stable, editable), WhatsApp share, 1080×1920 story card PNG, print / PDF. |
 | **Lead capture** | Sends the whole plan to your endpoint. Runs in clearly-labelled **demo mode** until you set one. |
+| **Declutter map** | Nearby hostels merge into numbered bubbles that split as you zoom; country chips are a multi-select focus (Indonesia + Thailand dims everything else); mode/time pills show only on hover or when you tap a leg; drag, scroll or pinch to move, +/− and FIT buttons. |
+| **Drag-and-drop + timeline** | Reorder stops by dragging the grip (mouse or touch), with a colour-coded timeline strip across the top. |
+| **"Why this leg?"** | Plain-English trade-offs ("flight saves 11h25, costs ~$43 more; the bus doubles as your bed") plus arrival times, with a warning when something lands at 3am. |
+| **Guests go next** | Ranked from Mad Monkey's own products (ALL IN itineraries, The Gap Collective, Mad Packages, the LP↔VV tickets), each chip tagged with where it comes from. |
+| **Smarter planning** | Best months for the route (your month highlighted), budget target with live bar, *Suggest my next stop*, *Make it cheaper / faster*, entry rules by passport with official links. |
+| **Photos + trust** | Real photo strips + lightbox for every hostel (127 photos), the published 4.9/5 from 53,000+ travellers and the three named quotes. No hostel-level reviews are published, so none are shown (drop real ones into `MM.REVIEWS`). |
+| **Human review + bed hold** | "Hold my beds + get it checked": the trip goes to a real crew member, beds are held while they check, the guest gets a reference and a status page, and approves before paying. Highlighted across the site. See [docs/LEADS.md](docs/LEADS.md). |
+| **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
 | **USD / GBP** | Fixed indicative rate (1.27). Real conversion belongs to the booking engine. |
 
 ## Go live (3 steps)
@@ -45,7 +53,11 @@ The brief was to build it from what Mad Monkey already publishes, so **every num
 | **Thailand** activity prices, **Laos** activity prices, Kampot, Koh Sdach extras, a few Saigon / Manila / Apo Island items | **Estimates, shown as "~$X est."** Thailand + Laos have no public tour pages yet. Laos trip price ($449) is the recommended RRP from the internal proposal and **still needs sign-off**. Internal cost / margin data is deliberately not used anywhere. |
 | **Transport legs** (`data/legs.js`) | **Typical / researched figures**, rounded, always shown with "~". Aggregator + operator pages, Oct 2026. Ops should sanity-check this file; it's the one most likely to be wrong in places (flights especially move weekly). |
 | Surf-camp beds | Siargao packages are "all-inclusive" so beds are treated as included. **Lombok surf camp isn't assumed to include beds**: confirm. |
-| Season ratings, "guests go next", hostel hooks | **Editorial judgement**, not booking data. Swap `next` ordering for real booking flow data when you have it. |
+| Season ratings, hostel hooks | **Editorial judgement**, not booking data. |
+| "Guests go next" | Ranked from Mad Monkey's own trips and packages (see above), **not** from booking data. Real check-out → check-in flows would be better. |
+| **Entry rules** (`data/entry.js`) | **From general knowledge, not checked against 2026 rules.** They change often. Verify them before launch, or strip the per-passport sentences and keep the official links. The UI already says to confirm on the official site. |
+| **Bed hold** | The app only *asks*; the hold has to be made by whoever receives the lead. `HOLD_HOURS` (48) is a placeholder: don't leave it at a number ops can't honour. |
+| Gallery photos | Loaded through madmonkeyhostels.com's own image optimiser (≈750px). Mirror them to your CDN for launch. |
 | Photos | Hot-linked from madmonkeyhostels.com share images. They fall back to a flat block if one 404s. Copy into `/assets` or your CDN before launch so the page doesn't depend on the main site. |
 
 **Thailand ↔ Cambodia border:** reports from Feb–Jul 2026 say the land crossings are closed, so Bangkok ↔ Siem Reap / Phnom Penh is flights-only in the graph and every such leg shows a warning. When it reopens, flip `open` in `MM.BORDERS` and add bus edges.

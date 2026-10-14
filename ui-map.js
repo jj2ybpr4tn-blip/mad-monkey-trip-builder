@@ -110,98 +110,147 @@
      BUILDER MAP — interactive
      ============================================================ */
   var BM = MM.BuilderMap = (function () {
-    var box, svg, gLand, gRoute, gPins, tip, vb, vbTarget, anim, scale = 1, handlers = {}, drawn = {}, focus = [], lastPlan = null, lastState = null, selMap = {}, showLabelsAll = false;
+    var box, svg, gRoute, gCl, gPins, tip, vb = null, anim, scale = 1, handlers = {}, drawn = {}, focus = [], lastPlan = null, manual = false, selLeg = null,
+      st = {}, ptrs = {}, moved = false, clPool = [], lastKey = '';
 
     function el(name, attrs, parent) { var e = document.createElementNS(NS, name); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
     function size() { var b = box.getBoundingClientRect(); return { w: Math.max(200, b.width), h: Math.max(200, b.height) }; }
+    function aspect() { var s = size(); return s.w / s.h; }
+    function inFocus(c) { return !focus.length || focus.indexOf(c) > -1; }
 
+    /* ---------- mount ---------- */
     function mount(container, h) {
       box = container; handlers = h || {}; box.innerHTML = '';
-      svg = el('svg', { xmlns: NS, role: 'application', 'aria-label': 'Interactive map. Tab to a hostel and press Enter to add it to your trip.', preserveAspectRatio: 'xMidYMid meet' }); box.appendChild(svg);
-      gLand = el('g', {}, svg); gLand.innerHTML = landMarkup();
-      var cl = el('g', { 'class': 'm-ctry' }, svg);
-      gRoute = el('g', {}, svg); gPins = el('g', {}, svg);
+      svg = el('svg', { xmlns: NS, role: 'application', 'aria-label': 'Interactive map. Drag to pan, scroll or pinch to zoom. Tab to a hostel and press Enter to add it to your trip.', preserveAspectRatio: 'xMidYMid meet' }); box.appendChild(svg);
+      var gLand = el('g', {}, svg); gLand.innerHTML = landMarkup();
+      var cl = el('g', {}, svg);
+      gRoute = el('g', {}, svg); gCl = el('g', {}, svg); gPins = el('g', {}, svg);
       COUNTRY_LBL.forEach(function (c) { var q = proj(c[1], c[2]); var t = el('text', { 'class': 'm-lbl', x: q[0], y: q[1], 'data-c': c[3] }, cl); t.textContent = c[0]; });
+      st = {}; clPool = [];
       Object.keys(MM.PLACES).forEach(function (id) {
         var p = MM.PLACES[id], q = pp(id), l = LBL[id] || {};
         var g = el('g', { 'class': 'm-pin' + (p.partner ? ' partner' : ''), 'data-p': id, tabindex: 0, role: 'button', 'aria-label': 'Add ' + p.n + ' to your trip' }, gPins);
         var inner = el('g', { 'data-pos': q[0] + ',' + q[1] }, g);
-        el('circle', { r: 20, fill: 'transparent' }, inner);
-        el('circle', { 'class': 'dot', r: 9 }, inner);
-        var n = el('text', { 'class': 'n', y: 1 }, inner);
+        el('circle', { r: 20, fill: 'transparent' }, inner); el('circle', { 'class': 'dot', r: 9 }, inner);
+        el('text', { 'class': 'n', y: 1 }, inner);
         var nm = el('text', { 'class': 'nm', x: l.a === 'end' ? -15 : 15, y: l.dy == null ? 4 : l.dy, 'text-anchor': l.a || 'start', 'font-size': 12 }, inner); nm.textContent = p.n;
-        g.addEventListener('click', function (e) { e.stopPropagation(); handlers.pin && handlers.pin(id); });
+        g.addEventListener('click', function (e) { e.stopPropagation(); if (moved) return; handlers.pin && handlers.pin(id); });
         g.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlers.pin && handlers.pin(id); } });
-        g.addEventListener('mouseenter', function () { showTip(id, g); });
-        g.addEventListener('focus', function () { showTip(id, g); });
+        g.addEventListener('mouseenter', function () { showTip(id, g); }); g.addEventListener('focus', function () { showTip(id, g); });
         g.addEventListener('mouseleave', hideTip); g.addEventListener('blur', hideTip);
+        st[id] = { el: g, x: q[0], y: q[1], vis: true, sel: false };
       });
       tip = document.createElement('div'); tip.className = 'bmap__tip'; box.appendChild(tip);
-      window.removeEventListener('resize', onResize); window.addEventListener('resize', onResize);
-      vb = null; drawn = {}; lastPlan = null;
+      // gestures: mouse drag + wheel; two-finger pinch/pan on touch (one finger still scrolls the page)
+      svg.addEventListener('pointerdown', onDown); svg.addEventListener('wheel', onWheel, { passive: false });
+      window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp); window.removeEventListener('resize', onResize);
+      window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp); window.addEventListener('resize', onResize);
+      vb = null; drawn = {}; lastPlan = null; manual = false; selLeg = null; lastKey = '';
     }
-    function onResize() { if (!box || !box.isConnected) return; refit(true); }
+    function onResize() { if (!box || !box.isConnected) return; if (manual && vb) { vb.h = vb.w / aspect(); setView(vb); } else refit(true); }
 
+    function onDown(e) {
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, t: e.pointerType };
+      if (Object.keys(ptrs).length === 1) moved = false; hideTip(); cancelAnimationFrame(anim);
+    }
+    function onMove(e) {
+      var p = ptrs[e.pointerId]; if (!p || !svg) return; var ids = Object.keys(ptrs);
+      if (ids.length === 1 && p.t === 'mouse') {
+        if (!moved && Math.hypot(e.clientX - p.ox, e.clientY - p.oy) > 5) moved = true;
+        if (moved) { pan(e.clientX - p.x, e.clientY - p.y); }
+      } else if (ids.length === 2) {
+        var a = ptrs[ids[0]], b = ptrs[ids[1]], od = Math.hypot(a.x - b.x, a.y - b.y), omx = (a.x + b.x) / 2, omy = (a.y + b.y) / 2;
+        p.x = e.clientX; p.y = e.clientY;
+        var nd = Math.hypot(a.x - b.x, a.y - b.y), nmx = (a.x + b.x) / 2, nmy = (a.y + b.y) / 2;
+        if (od > 10) { zoomAt(nmx, nmy, nd / od); pan(nmx - omx, nmy - omy); moved = true; }
+        return;
+      }
+      p.x = e.clientX; p.y = e.clientY;
+    }
+    function onUp(e) { delete ptrs[e.pointerId]; }
+    function onWheel(e) { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.18 : 1 / 1.18); }
+
+    function pan(dx, dy) { if (!vb) return; manual = true; setView({ x: vb.x - dx * scale, y: vb.y - dy * scale, w: vb.w, h: vb.h }); }
+    function zoomAt(cx, cy, f) {
+      if (!vb) return; var r = box.getBoundingClientRect(), fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height;
+      var px = vb.x + fx * vb.w, py = vb.y + fy * vb.h, nw = Math.max(70, Math.min(1500, vb.w / f)), nh = nw / aspect();
+      manual = true; setView({ x: px - fx * nw, y: py - fy * nh, w: nw, h: nh });
+    }
+    function zoom(f) { var r = box.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, f); }
+    function reset() { manual = false; refit(false); }
+
+    /* ---------- tooltip ---------- */
     function showTip(id, g) {
-      if (!tip) return; var p = MM.PLACES[id], img = MM.hostelImg(id), c = g.querySelector('.dot').getBoundingClientRect(), b = box.getBoundingClientRect();
-      var ctry = MM.COUNTRIES[p.c].n;
+      if (!tip || Object.keys(ptrs).length) return; var p = MM.PLACES[id], img = MM.hostelImg(id), c = g.querySelector('.dot').getBoundingClientRect(), b = box.getBoundingClientRect();
+      var nr = MM.nextRanked(id).slice(0, 3).map(function (n) { return MM.PLACES[n.id].n; });
       tip.innerHTML = (img ? '<div class="photo"><img src="' + img + '" alt="" loading="lazy" onerror="this.parentNode.className+=\' photo--none\';this.remove()"></div>' : '') +
-        '<div class="tx"><b>' + p.n + '</b><p>' + p.hook + '</p><small>' + ctry + ' · dorm from ' + MM.money(p.bed, (window.MMApp && MMApp.cur) || 'USD') + '/night' + (p.opens ? ' · opens ' + p.opens.slice(8) + '/' + p.opens.slice(5, 7) : '') + (p.partner ? ' · partner hostel' : '') + '</small>' +
-        (p.next.length ? '<small style="color:#5b574d;margin-top:3px;text-transform:none;letter-spacing:0;font-weight:600">Guests go next: ' + p.next.slice(0, 3).map(function (n) { return MM.PLACES[n].n; }).join(' · ') + '</small>' : '') + '</div>';
+        '<div class="tx"><b>' + p.n + '</b><p>' + p.hook + '</p><small>' + MM.COUNTRIES[p.c].n + ' · dorm from ' + MM.money(p.bed, (window.MMApp && MMApp.cur) || 'USD') + '/night' + (p.opens ? ' · opens ' + p.opens.slice(8) + '/' + p.opens.slice(5, 7) : '') + (p.partner ? ' · partner hostel' : '') + '</small>' +
+        (nr.length ? '<small style="color:#5b574d;margin-top:3px;text-transform:none;letter-spacing:0;font-weight:600">Mad Monkey guests go next: ' + nr.join(' · ') + '</small>' : '') + '</div>';
       var x = c.left + c.width / 2 - b.left, y = c.top - b.top, below = y < 270;
       x = Math.max(124, Math.min(b.width - 124, x)); tip.style.left = x + 'px'; tip.style.top = (below ? y + c.height : y) + 'px'; tip.classList.toggle('below', below); tip.classList.add('on');
     }
     function hideTip() { if (tip) tip.classList.remove('on'); }
 
+    /* ---------- view + scale ---------- */
     function setView(v) {
+      var a = aspect(); if (Math.abs(v.w / v.h - a) > 0.005) { var cy = v.y + v.h / 2; v = { x: v.x, w: v.w, h: v.w / a, y: cy - v.w / a / 2 }; }
       vb = v; svg.setAttribute('viewBox', v.x.toFixed(2) + ' ' + v.y.toFixed(2) + ' ' + v.w.toFixed(2) + ' ' + v.h.toFixed(2));
       scale = v.w / size().w; applyScale();
     }
     function applyScale() {
       var u = scale;
-      var pins = gPins.children;
-      for (var i = 0; i < pins.length; i++) { var inner = pins[i].firstChild, pos = inner.getAttribute('data-pos').split(','); inner.setAttribute('transform', 'translate(' + pos[0] + ' ' + pos[1] + ') scale(' + u.toFixed(4) + ')'); }
+      Object.keys(st).forEach(function (id) { var inner = st[id].el.firstChild; inner.setAttribute('transform', 'translate(' + st[id].x + ' ' + st[id].y + ') scale(' + u.toFixed(4) + ')'); });
       var lb = svg.querySelectorAll('.m-lbl'); for (var j = 0; j < lb.length; j++) lb[j].setAttribute('font-size', (15 * u).toFixed(2));
       var cs = gRoute.querySelectorAll('[data-w]'); for (var k = 0; k < cs.length; k++) cs[k].setAttribute('stroke-width', (+cs[k].getAttribute('data-w') * u).toFixed(2));
       var ms = gRoute.querySelectorAll('.m-mode'); for (var m2 = 0; m2 < ms.length; m2++) { var mp = ms[m2].getAttribute('data-pos').split(','); ms[m2].setAttribute('transform', 'translate(' + mp[0] + ' ' + mp[1] + ') scale(' + u.toFixed(4) + ')'); }
+      cluster();
     }
-    function inFocus(c) { return !focus.length || focus.indexOf(c) > -1; }
+    // merge hostels that would overlap on screen into one numbered bubble; selected stops never merge
+    function cluster() {
+      var th = 34 * scale, items = [];
+      Object.keys(st).forEach(function (id) { var s = st[id]; s.el.style.display = s.vis ? '' : 'none'; if (s.vis && !s.sel) items.push({ id: id, x: s.x, y: s.y }); });
+      var used = {}, groups = [];
+      items.forEach(function (a) { if (used[a.id]) return; var g = [a]; used[a.id] = 1; items.forEach(function (b) { if (!used[b.id] && Math.hypot(a.x - b.x, a.y - b.y) < th) { g.push(b); used[b.id] = 1; } }); if (g.length > 1) groups.push(g); });
+      var n = 0;
+      groups.forEach(function (g) {
+        g.forEach(function (mem) { st[mem.id].el.style.display = 'none'; });
+        var cx = 0, cy = 0; g.forEach(function (mem) { cx += mem.x; cy += mem.y; }); cx /= g.length; cy /= g.length;
+        var b = clPool[n]; if (!b) { var ge = el('g', { 'class': 'm-cl' }, gCl); el('circle', { r: 15 }, ge); el('text', { y: 1 }, ge); el('title', {}, ge); ge.addEventListener('click', function (e) { e.stopPropagation(); if (moved) return; var ids = ge.getAttribute('data-ids').split(','); focusOn(ids); }); b = clPool[n] = ge; }
+        b.style.display = ''; b.setAttribute('data-ids', g.map(function (x) { return x.id; }).join(','));
+        b.setAttribute('transform', 'translate(' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ') scale(' + scale.toFixed(4) + ')');
+        b.querySelector('text').textContent = g.length; b.querySelector('title').textContent = g.map(function (x) { return MM.PLACES[x.id].n; }).join(', ') + ' (click to zoom in)';
+        n++;
+      });
+      for (; n < clPool.length; n++) clPool[n].style.display = 'none';
+    }
+    function focusOn(ids) { manual = true; animateTo(viewBoxFor(routePx(ids, 130), aspect(), 0.35)); }
+    function animateTo(t) {
+      var from = { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, t0 = null, dur = 600; cancelAnimationFrame(anim);
+      (function step(ts) { if (t0 == null) t0 = ts; var p = Math.min(1, (ts - t0) / dur), e = p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+        setView({ x: from.x + (t.x - from.x) * e, y: from.y + (t.y - from.y) * e, w: from.w + (t.w - from.w) * e, h: from.h + (t.h - from.h) * e }); if (p < 1) anim = requestAnimationFrame(step); })(performance.now());
+    }
     function targetView(plan) {
-      var s = size(), aspect = s.w / s.h;
-      if (focus.length) {
-        var ps = Object.keys(MM.PLACES).filter(function (id) { return focus.indexOf(MM.PLACES[id].c) > -1; });
-        return viewBoxFor(routePx(ps, 120), aspect, 0.16);
-      }
+      var a = aspect();
+      if (focus.length) { var ps = Object.keys(MM.PLACES).filter(function (id) { return focus.indexOf(MM.PLACES[id].c) > -1; }); return viewBoxFor(routePx(ps, 120), a, 0.16); }
       var rp = plan && plan.places && plan.places.length ? plan.places : null;
-      if (!rp) return viewBoxFor(bboxPx(MM.REGIONS.all.b), aspect, 0.02);
-      return viewBoxFor(routePx(rp, 330), aspect, 0.28);
+      if (!rp) return viewBoxFor(bboxPx(MM.REGIONS.all.b), a, 0.02);
+      return viewBoxFor(routePx(rp, 330), a, 0.28);
     }
-    function refit(instant) {
-      if (!svg) return; var t = targetView(lastPlan);
-      if (instant || !vb) { cancelAnimationFrame(anim); setView(t); return; }
-      var from = { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, t0 = null, dur = 650;
-      cancelAnimationFrame(anim);
-      (function step(ts) {
-        if (t0 == null) t0 = ts; var p = Math.min(1, (ts - t0) / dur), e = p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-        setView({ x: from.x + (t.x - from.x) * e, y: from.y + (t.y - from.y) * e, w: from.w + (t.w - from.w) * e, h: from.h + (t.h - from.h) * e });
-        if (p < 1) anim = requestAnimationFrame(step);
-      })(performance.now());
-    }
+    function refit(instant) { if (!svg) return; var t = targetView(lastPlan); if (instant || !vb) { cancelAnimationFrame(anim); setView(t); } else animateTo(t); }
 
+    /* ---------- update ---------- */
     function update(plan, state, foc) {
-      if (!svg) return; lastPlan = plan; lastState = state;
-      var prevKey = focus.join(','); focus = foc || [];
-      // pins: numbers + selected
-      selMap = {}; var seq = [];
-      plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (st) { seq.push(st.p); }); else seq.push(s.p); });
+      if (!svg) return; lastPlan = plan; focus = foc || [];
+      var key = focus.join(','), placesKey = plan.places.join('>'), keyChanged = key !== lastKey, placesChanged = placesKey !== (BM._pk || ''); lastKey = key; BM._pk = placesKey;
+      var selMap = {}, seq = [];
+      plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (x) { seq.push(x.p); }); else seq.push(s.p); });
       seq = seq.filter(function (p, i) { return i === 0 || p !== seq[i - 1]; });
       seq.forEach(function (p, i) { if (!selMap[p]) selMap[p] = i + 1; });
-      var labelsAll = focus.length === 1 || (!focus.length && plan.places.length && viewSpanSmall(plan));
-      Array.prototype.forEach.call(gPins.children, function (g) {
-        var id = g.getAttribute('data-p'), n = selMap[id];
-        var inF = inFocus(MM.PLACES[id].c);
+      var labelsAll = focus.length === 1;
+      Object.keys(st).forEach(function (id) {
+        var g = st[id].el, n = selMap[id], inF = inFocus(MM.PLACES[id].c);
+        st[id].sel = !!n; st[id].vis = inF || !!n;
         g.setAttribute('class', 'm-pin' + (MM.PLACES[id].partner ? ' partner' : '') + (n ? ' sel' : '') + (!inF && n ? ' off' : ''));
-        g.style.display = (!inF && !n) ? 'none' : '';
         g.querySelector('.n').textContent = n || '';
         g.querySelector('.nm').style.display = (n || (labelsAll && inF)) ? '' : 'none';
         g.setAttribute('aria-label', (n ? 'Stop ' + n + ': ' : 'Add ') + MM.PLACES[id].n + (n ? '' : ' to your trip'));
@@ -210,39 +259,37 @@
       Array.prototype.forEach.call(svg.querySelectorAll('.m-lbl'), function (t) { t.style.display = inFocus(t.getAttribute('data-c')) ? '' : 'none'; });
       // route
       var now = {}; gRoute.innerHTML = '';
-      var path = [], idx = 0;
-      plan.segs.forEach(function (s, si) {
-        if (s.kind === 'allin') s.trip.stops.forEach(function (st) { path.push({ p: st.p, block: true }); });
-        else path.push({ p: s.p, block: false });
-      });
+      var path = []; plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (x) { path.push({ p: x.p, block: true }); }); else path.push({ p: s.p, block: false }); });
       var legByFrom = {}; plan.legs.forEach(function (l) { legByFrom[l.from + '>' + l.to] = l; });
       for (var i = 1; i < path.length; i++) {
         var a = path[i - 1].p, b = path[i].p; if (a === b) continue;
-        var A = pp(a), B = pp(b), c = arc(A, B), key = a + '>' + b, blk = path[i].block && path[i - 1].block;
-        var isNew = !drawn[key]; now[key] = 1;
-        var sg = el('g', { 'class': 'm-seg' + (inFocus(MM.PLACES[a].c) && inFocus(MM.PLACES[b].c) ? '' : ' m-faded') }, gRoute);
-        var cs = el('path', { 'class': 'm-case', d: c.d, 'data-w': 10 }, sg);
+        var A = pp(a), B = pp(b), c = arc(A, B), k2 = a + '>' + b, blk = path[i].block && path[i - 1].block, isNew = !drawn[k2]; now[k2] = 1;
+        var sg = el('g', { 'class': 'm-seg' + (inFocus(MM.PLACES[a].c) && inFocus(MM.PLACES[b].c) ? '' : ' m-faded') + (selLeg === k2 ? ' on' : ''), 'data-key': k2 }, gRoute);
+        el('path', { 'class': 'm-case', d: c.d, 'data-w': 10 }, sg);
         var rp = el('path', { 'class': 'm-route' + (isNew ? ' m-draw' : ''), d: c.d, 'data-w': 4.6, style: blk ? 'stroke:#ff01aa' : '' }, sg);
+        el('path', { 'class': 'm-hit', d: c.d, 'data-w': 28 }, sg);
         if (isNew) { rp.style.setProperty('--len', c.len * 1.4); rp.style.strokeDasharray = c.len * 1.4; }
-        var leg = legByFrom[key];
+        var leg = legByFrom[k2];
         if (leg || blk) {
           var main = leg ? leg.chosen.main : 'bus', label = leg ? MM.util.hoursLabel(leg.h) : 'ALL IN';
-          var g = el('g', { 'class': 'm-mode', 'data-pos': c.mid[0].toFixed(1) + ',' + c.mid[1].toFixed(1) }, sg);
+          var g2 = el('g', { 'class': 'm-mode', 'data-pos': c.mid[0].toFixed(1) + ',' + c.mid[1].toFixed(1) }, sg);
           var w = Math.max(46, 34 + label.length * 8);
-          el('rect', { x: -w / 2, y: -12, width: w, height: 24, rx: 12 }, g);
-          var ic = el('path', { d: ICON[main] || ICON.bus, transform: 'translate(' + (-w / 2 + 6) + ' -8) scale(.66)' }, g);
-          var tx = el('text', { x: -w / 2 + 25, y: 1 }, g); tx.textContent = label;
-          if (blk) { g.querySelector('rect').setAttribute('style', 'stroke:#ff01aa'); ic.setAttribute('style', 'fill:#ff01aa'); }
+          el('rect', { x: -w / 2, y: -12, width: w, height: 24, rx: 12 }, g2);
+          var ic = el('path', { d: ICON[main] || ICON.bus, transform: 'translate(' + (-w / 2 + 6) + ' -8) scale(.66)' }, g2);
+          var tx = el('text', { x: -w / 2 + 25, y: 1 }, g2); tx.textContent = label;
+          if (blk) { g2.querySelector('rect').setAttribute('style', 'stroke:#ff01aa'); ic.setAttribute('style', 'fill:#ff01aa'); }
         }
+        (function (key, lg) { sg.addEventListener('click', function (e) { e.stopPropagation(); if (moved) return; selectLeg(key); handlers.leg && handlers.leg(key, lg ? lg.index : null); }); })(k2, leg);
       }
       drawn = now;
+      if (selLeg && !now[selLeg]) selLeg = null;
+      if (placesChanged && manual) manual = false;                // a new stop should come into view
       applyScale();
-      // view
-      if (!vb) refit(true); else if (prevKey !== focus.join(',') || !focus.length) refit(false);
+      if (!vb) refit(true); else if (keyChanged || !manual) refit(false);
     }
-    function viewSpanSmall(plan) { var px = routePx(plan.places, 150); return (px.x1 - px.x0) < 520; }
+    function selectLeg(key) { selLeg = key; if (!gRoute) return; Array.prototype.forEach.call(gRoute.querySelectorAll('.m-seg'), function (g) { g.classList.toggle('on', g.getAttribute('data-key') === key); }); }
 
-    return { mount: mount, update: update, refit: refit };
+    return { mount: mount, update: update, refit: refit, zoom: zoom, reset: reset, selectLeg: selectLeg };
   })();
 
   if (typeof module !== 'undefined') module.exports = {};

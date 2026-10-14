@@ -1,7 +1,29 @@
-# Lead payload
+# Lead / review-request payload
 
 When a guest taps **Send it**, the builder `POST`s this JSON (`Content-Type: application/json`) to `LEAD_ENDPOINT`
 in `config.js`. Any 2xx response shows the guest a success screen; anything else shows an error with a copy fallback.
+
+The main button is **"Hold my beds + get it checked"**. It sends the same payload with three extra fields so the crew knows it is a *review request* and whether beds should be held:
+
+```jsonc
+  "type": "review_request",                      // always, from the main CTA
+  "status": "submitted",
+  "hold": { "requested": true, "hours": 48 }     // true only if the guest ticked it AND picked a start date; hours = HOLD_HOURS in config.js
+```
+
+Respond with JSON `{ "ref": "MM-ABC123", "status": "submitted" }` if you want to issue your own reference; otherwise the browser makes one. **The hold itself happens on your side**: when `hold.requested` is true, place a soft hold on the beds for those nights for `hold.hours`, and let it lapse if the trip isn't confirmed.
+
+### Trip status page (optional)
+
+The guest lands on `#/trip/<ref>` after sending. With `STATUS_ENDPOINT` set, it calls `GET <STATUS_ENDPOINT>?ref=MM-ABC123` and expects:
+
+```jsonc
+{ "status": "submitted | checking | ready | approved", "note": "Everything checks out, here's your confirmed plan", "payLink": "https://…" }
+```
+
+`ready` shows the guest an **Approve + pay deposit** button (it opens `payLink`). Without the endpoint the page runs in demo mode with buttons that step through each state so you can see them.
+
+### Full payload
 
 ```jsonc
 {
