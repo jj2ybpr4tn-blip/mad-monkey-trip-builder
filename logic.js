@@ -406,7 +406,8 @@
   function autoActs(placeId, nights, prof) {
     var vibes = (prof && prof.vibes) || [], musts = (prof && prof.must) || [], budget = (prof && prof.budget) || 'mid';
     var want = {}; vibes.forEach(function (v) { (VIBE_TAGS[v] || []).forEach(function (t) { want[t] = 1; }); });
-    var list = MM.actsAt(placeId).filter(function (a) { return !(a.multi && a.multi.d > 1) || musts.some(function (m) { var M = MM.MUSTS.filter(function (x) { return x.k === m; })[0]; return M && M.test(a); }); });
+    var capUsd = { cheap: 140, mid: 320, splash: 1e9 }[budget];
+    var list = MM.actsAt(placeId).filter(function (a) { return (a.usd == null || a.usd <= capUsd); }).filter(function (a) { return !(a.multi && a.multi.d > 1) || musts.some(function (m) { var M = MM.MUSTS.filter(function (x) { return x.k === m; })[0]; return M && M.test(a); }); });
     var scored = list.map(function (a) {
       var s = a.star ? 2 : 0; a.tags.forEach(function (t) { if (want[t]) s += 1.5; });
       musts.forEach(function (m) { var M = MM.MUSTS.filter(function (x) { return x.k === m; })[0]; if (M && M.test(a)) s += 6; });
@@ -584,11 +585,121 @@
         out.push(hyb); out.sort(function (a, b) { return b.score - a.score; });
       }
     }
+    // from-scratch routes lead; a packaged ALL IN only makes the cut when it genuinely fits
+    var gen = generate(prof), bestAll = out.filter(function (x) { return x.isAllIn; })[0];
+    var mixed = gen.slice(0, 2);
+    if (bestAll && bestAll.score >= 8) mixed.splice(1, 0, bestAll);
+    while (mixed.length < 3 && gen[mixed.length]) mixed.push(gen[mixed.length]);
+    if (mixed.length) return mixed.slice(0, 3);
     // keep top 3 distinct
     var seen = {}, top = [];
     out.forEach(function (x) { var k = x.cand.tpl.id + (x.hybrid ? '+' : ''); if (!seen[k] && top.length < 3) { seen[k] = 1; top.push(x); } });
     return top;
   }
+
+  /* ============================================================
+     GENERATE — build a route from scratch
+     Scores every hostel against vibe / must-dos / month / budget, then beam-searches
+     the real transport graph for the best sequence that fits the days and the money.
+     ============================================================ */
+  function vibesGiven(p) { return !!(p && p.vibes && p.vibes.length); }
+  var PERDAY = { cheap: 45, mid: 80, splash: 140 };           // all-in USD/day on the ground (no flights home)
+  MM.PERDAY = PERDAY;
+  var GATES = ['bangkok', 'hanoi', 'uluwatu', 'manila', 'phnom-penh', 'siem-reap', 'chiang-mai', 'luang-prabang', 'hoi-an'];
+  function mustHit(placeId, k) { var M = MM.MUSTS.filter(function (x) { return x.k === k; })[0]; return !!M && MM.actsAt(placeId).some(function (a) { return M.test(a); }); }
+
+  function generate(prof) {
+    prof = prof || {};
+    var D = Math.max(4, prof.days || 14), budget = prof.budget || 'mid', perDay = prof.perDay || PERDAY[budget], cap = perDay * D;
+    var fund = budget === 'cheap' ? 14 : budget === 'splash' ? 30 : 20, pref = budget === 'cheap' ? 'cheap' : budget === 'splash' ? 'fast' : 'balanced';
+    var maxLeg = budget === 'splash' ? 20 : budget === 'cheap' ? 11 : 13, nightsCap = D - 1, switchPen = D < 12 ? 3.5 : D < 20 ? 1.6 : 0.8;
+    var want = {}; (prof.vibes || []).forEach(function (v) { (VIBE_TAGS[v] || []).forEach(function (t) { want[t] = 1; }); });
+    var musts = prof.must || [], month = prof.month;
+    var ids = Object.keys(P()).filter(function (id) { return !P()[id].partner || id === prof.start; });
+
+    var ps = {};
+    ids.forEach(function (id) {
+      var p = P()[id], sc = 0;
+      p.tags.forEach(function (t) { if (want[t]) sc += 2; });
+      MM.actsAt(id).forEach(function (a) { if (a.star) sc += 0.25; a.tags.forEach(function (t) { if (want[t]) sc += 0.12; }); });
+      musts.forEach(function (k) { if (mustHit(id, k)) sc += 6; });
+      if (month != null) sc += ({ 3: 1.5, 2: 0, 1: -3.5 })[seasonOf(id, month)];
+      if (budget === 'cheap') sc += (12 - p.bed) * 0.2; if (budget === 'splash') sc += 0.5;
+      if (!(vibesGiven(prof)) && !musts.length) sc += 1;
+      ps[id] = sc;
+    });
+    function nightsFor(id, remaining) {
+      var p = P()[id], base = Math.round(p.sug * (0.8 + Math.max(0, ps[id]) / 16));
+      return Math.max(1, Math.min(remaining, Math.max(p.min, Math.min(p.sug + 2, base))));
+    }
+    var starts = prof.start ? [prof.start] : GATES.filter(function (g) { return P()[g]; }).sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 6);
+    var beam = [], done = [];
+    starts.forEach(function (s) {
+      var n = nightsFor(s, nightsCap - 0), bed = P()[s].bed * n + n * fund + n * 10;
+      beam.push({ seq: [{ p: s, n: n }], used: n, cost: bed, score: ps[s] * Math.pow(n, 0.85) + 1, h: 0, sw: 0 });
+    });
+    for (var depth = 0; depth < 9 && beam.length; depth++) {
+      var next = [];
+      beam.forEach(function (st) {
+        var left = nightsCap - st.used;
+        if (left <= 2) { done.push(st); return; }
+        var last = st.seq[st.seq.length - 1].p, grew = false;
+        ids.forEach(function (q) {
+          if (st.seq.some(function (x) { return x.p === q; })) return;
+          var leg = route(last, q, pref); if (!leg || leg.h > maxLeg) return;
+          var rem = left - leg.nights; if (rem < 1) return;
+          var n = nightsFor(q, rem), cost = st.cost + leg.u + P()[q].bed * n + (n + leg.nights) * fund + n * 10;
+          if (cost > cap * 1.12) return;
+          var same = P()[q].c === P()[last].c, back = !same && st.seq.some(function (x) { return P()[x.p].c === P()[q].c; });
+          next.push({ seq: st.seq.concat([{ p: q, n: n }]), used: st.used + leg.nights + n, cost: cost,
+            score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * leg.h - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
+          grew = true;
+        });
+        done.push(st);                                  // stopping here is always an option
+      });
+      next.sort(function (a, b) { return b.score - a.score; }); beam = next.slice(0, 60);
+    }
+    beam.forEach(function (b) { done.push(b); });
+
+    // rank: reward using the days (empty days are wasted), penalise stop-hopping on short trips
+    var ranked = done.map(function (st) {
+      var cover = Math.min(1, st.used / nightsCap), mh = 0; musts.forEach(function (k) { if (st.seq.some(function (x) { return mustHit(x.p, k); })) mh++; });
+      var rush = Math.max(0, st.seq.length - Math.ceil(D / 3.2));
+      return { st: st, total: st.score * (0.55 + 0.45 * cover) - rush * 2.5 + mh * 2 - (musts.length - mh) * 4 };
+    }).sort(function (a, b) { return b.total - a.total; });
+
+    var well = ranked.filter(function (r) { return r.st.used >= nightsCap * 0.85; }); if (well.length >= 3) ranked = well;
+    var seen = {}, picks = [];
+    ranked.forEach(function (r) {
+      if (picks.length >= 3) return;
+      var cset = {}; r.st.seq.forEach(function (x) { cset[P()[x.p].c] = 1; });
+      var key = Object.keys(cset).sort().join('') + '|' + r.st.seq[0].p + '|' + r.st.seq[r.st.seq.length - 1].p;
+      var key2 = r.st.seq.map(function (x) { return x.p; }).slice().sort().join(',');
+      if (seen[key] || seen[key2]) return; seen[key] = seen[key2] = 1;
+      // near-duplicates (share >60% of places with a pick already made) are skipped
+      var dup = picks.some(function (pk) { var a = pk.st.seq.map(function (x) { return x.p; }), b = r.st.seq.map(function (x) { return x.p; }); var sh = a.filter(function (p) { return b.indexOf(p) > -1; }).length; return sh / Math.max(a.length, b.length) > 0.6; });
+      if (dup) return; picks.push(r);
+    });
+    if (picks.length < 3) ranked.forEach(function (r) { if (picks.length < 3 && picks.indexOf(r) < 0 && !picks.some(function (pk) { return pk.st.seq.map(function (x) { return x.p; }).sort().join() === r.st.seq.map(function (x) { return x.p; }).sort().join(); })) picks.push(r); });
+
+    return picks.map(function (r, i) {
+      var stops = r.st.seq.map(function (x) { return { p: x.p, n: x.n, acts: [] }; });
+      stops.forEach(function (s) { s.acts = autoActs(s.p, s.n, prof); });
+      var fit = fitDays(stops, D, prof);
+      // top the days back up if must-do epics ate none and we ended short
+      if (D - fit.days >= 2) { var g = 0; while (D - plan(toState(stops, prof)).totals.days >= 2 && g++ < 6) { var b = 0; stops.forEach(function (s, j) { if (P()[s.p].sug + 2 - s.n > P()[stops[b].p].sug + 2 - stops[b].n) b = j; }); if (stops[b].n >= P()[stops[b].p].sug + 2) break; stops[b].n++; } }
+      var stt = toState(stops, prof); stt.fund = fund; var pl = plan(stt);
+      var cs = {}; stops.forEach(function (s) { cs[P()[s.p].c] = 1; });
+      var why = ['built from scratch for you', 'about ' + MM.money(Math.round(pl.totals.total / pl.totals.days), 'USD') + ' a day, inside your budget'];
+      if (prof.start && stops[0].p === prof.start) why.push('starts where you land');
+      var mh = musts.filter(function (k) { return stops.some(function (s) { return mustHit(s.p, k); }); }).length; if (mh) why.push(mh + ' of your must-dos');
+      if (month != null) { var av = stops.reduce(function (a, s) { return a + seasonOf(s.p, month); }, 0) / stops.length; if (av >= 2.5) why.push('prime season in ' + MONTHN[month]); }
+      return { cand: { tpl: { id: 'custom-' + i, n: stops.map(function (s) { return P()[s.p].n; }).join(' → '), pitch: 'Picked by scoring every Mad Monkey for your vibe, budget and days, then routing the real buses, boats and flights between them.' } },
+        isAllIn: false, generated: true, score: 100 - i, why: why, state: stt, days: pl.totals.days, o: {} };
+    });
+  }
+  MM.generate = generate;
+
   MM.suggest = suggest; MM.orient = orient;
 
   /* ============================================================
