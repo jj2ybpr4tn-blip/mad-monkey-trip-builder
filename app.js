@@ -128,10 +128,10 @@
     { k: 'month', over: 'Step 3 of 7', h: 'When are you going?', help: 'Month is enough. It lets us flag wet seasons and rough seas.', type: 'month' },
     { k: 'vibes', over: 'Step 4 of 7', h: 'What\'s the vibe?', help: 'Pick as many as you like.', type: 'multi' },
     { k: 'must', over: 'Step 5 of 7', h: 'Any must-dos?', help: 'The thing you\'d be gutted to miss. Skip if you\'re easy.', type: 'multi', optional: true },
-    { k: 'budget', over: 'Step 6 of 7', h: 'Budget feel?', help: 'It decides bus vs flight, and how many paid activities we pack in.', type: 'single' },
+    { k: 'budget', over: 'Step 6 of 7', h: 'Budget feel?', help: 'Ground costs only (beds, transport, activities, food), not flights to Asia. It shapes the whole route: how far we hop, bus vs flight, and which paid activities make the cut.', type: 'single' },
     { k: 'crew', over: 'Step 7 of 7', h: 'Solo or a crew?', help: 'Rolling alone is fine. Most people find their people by night two.', type: 'single' }
   ];
-  var BUDGETS = [{ v: 'cheap', t: 'Every dollar counts', s: 'Dorms, buses, cheap eats' }, { v: 'mid', t: 'Comfortable, not fussy', s: 'Flights where they save a day' }, { v: 'splash', t: 'Happy to spend', s: 'Do the big stuff properly' }];
+  var BUDGETS = [{ v: 'cheap', t: 'Every dollar counts', s: 'About $45 a day · dorms, buses, cheap eats' }, { v: 'mid', t: 'Comfortable, not fussy', s: 'About $80 a day · flights where they save a day' }, { v: 'splash', t: 'Happy to spend', s: 'About $140 a day · do the big stuff properly' }];
   var CREWS = [{ v: 'solo', t: 'Solo', s: 'I\'ll find my people' }, { v: 'mates', t: 'Me + a mate or two', s: 'Small and sorted' }, { v: 'crew', t: 'A whole crew', s: 'The more the louder' }];
   function monthOptions() { var d = new Date(), out = []; for (var i = 0; i < 12; i++) { var m = (d.getMonth() + i) % 12, y = d.getFullYear() + Math.floor((d.getMonth() + i) / 12); out.push({ v: m + ':' + y, m: m, y: y, t: U.MONTHN[m], s: String(y) }); } return out; }
 
@@ -191,7 +191,7 @@
   function resultCard(r, i) {
     var pl = MM.plan(r.state), t = r.cand.tpl, top = i === 0, price = r.isAllIn && !r.hybrid;
     var map = MM.staticMap({ places: pl.places, aspect: top ? 1.25 : 1.6, labels: pl.places.length <= 5, px: top ? 640 : 420, pad: 0.3, minW: 190 });
-    return '<article class="rcard' + (top ? ' rcard--top' : '') + '"><div class="rcard__map">' + map + '<span class="rcard__rank pill ' + (top ? 'pill--pink' : 'pill--paper') + '">' + (top ? 'Best fit' : '#' + (i + 1)) + '</span></div>' +
+    return '<article class="rcard' + (top ? ' rcard--top' : '') + '"><div class="rcard__map">' + map + '<span class="rcard__rank pill ' + (top ? 'pill--pink' : 'pill--paper') + '">' + (top ? 'Best fit' : '#' + (i + 1)) + '</span><span class="pill pill--sm ' + (r.generated ? 'pill--paper' : 'pill--yellow') + '" style="position:absolute;right:12px;top:12px">' + (r.generated ? 'Built for you' : 'Ready-made ALL IN') + '</span></div>' +
       '<div class="rcard__body"><div><h3>' + esc(resultName(r)) + '</h3><div class="rcard__route">' + esc(MM.routeLine(pl)) + '</div></div>' +
       '<div class="stats"><div class="stat"><b>' + pl.totals.days + '</b><span>days</span></div><div class="stat"><b>' + (price && t.nStops ? t.nStops : pl.totals.stops) + '</b><span>stops</span></div><div class="stat"><b>' + (price ? money(t.usd) : '~' + money(pl.totals.total)) + '</b><span>' + (price ? 'ALL IN from' : r.hybrid ? 'est. all-in' : 'est. total') + '</span></div></div>' +
       '<div class="why">' + r.why.map(function (w) { return '<span class="pill pill--sm">' + esc(w) + '</span>'; }).join('') + '</div>' +
