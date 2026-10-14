@@ -113,7 +113,11 @@
     ['balanced', 'cheap', 'fast'].forEach(function (pref) {
       var rt = route(a, b, pref); if (!rt || seen[rt.sig]) return; seen[rt.sig] = 1;
       var d = describe(rt, a, b);
-      out.push({ key: pref, label: PREF_LABEL[pref], route: rt, h: rt.h, u: rt.u, ovn: rt.ovn, nights: rt.nights, main: d.main, modeLabel: d.label, mm: d.mm });
+      var dep = rt.ovn ? 19.5 : 8.5, arrAbs = dep + rt.h, arrH = arrAbs % 24, arrDays = Math.floor(arrAbs / 24);
+      var hh = Math.floor(arrH), mm2 = Math.round((arrH - hh) * 60 / 5) * 5; if (mm2 === 60) { hh++; mm2 = 0; }
+      var arrive = (hh < 10 ? '0' : '') + (hh % 24) + ':' + (mm2 < 10 ? '0' : '') + mm2;
+      out.push({ key: pref, label: PREF_LABEL[pref], route: rt, h: rt.h, u: rt.u, ovn: rt.ovn, nights: rt.nights, main: d.main, modeLabel: d.label, mm: d.mm,
+        arrive: arrive, arriveNext: arrDays > 0, odd: rt.nights < 2 && ((arrH < 5.5) || (!rt.ovn && arrH >= 22.5)) });
     });
     // collapse labels when only one distinct route exists
     if (out.length === 1) out[0].label = 'Best route';
@@ -144,7 +148,7 @@
   function blockFirst(trip) { return trip.stops[0].p; }
   function blockLast(trip) { return trip.stops[trip.stops.length - 1].p; }
 
-  function defaultState() { return { items: [], start: '', pref: 'balanced', legPick: {}, fund: 18, crew: 0 }; }
+  function defaultState() { return { items: [], start: '', pref: 'balanced', legPick: {}, fund: 18, crew: 0, budget: 0 }; }
   MM.defaultState = defaultState;
 
   function plan(state) {
@@ -302,6 +306,7 @@
     });
     legBetween.forEach(function (l) {
       if (!l) return; if (l.border) out.warnings.push({ t: 'warn', m: l.border });
+      if (l.chosen.odd) out.warnings.push({ t: 'warn', m: P()[l.from].n + ' → ' + P()[l.to].n + ' (' + l.chosen.modeLabel.toLowerCase() + ') lands around ' + l.chosen.arrive + '. Ask the hostel about early or late check-in so you\'re not on a doorstep.' });
       if (l.chosen.h >= 18 && !l.chosen.ovn) out.warnings.push({ t: 'info', m: P()[l.from].n + ' → ' + P()[l.to].n + ' is a very long journey. Consider the flight option.' });
     });
     out.unscheduled.forEach(function (u) { out.warnings.push({ t: 'warn', p: u.p, m: u.act.n + ' at ' + P()[u.p].n + ' doesn\'t fit: ' + u.why + '.' }); });
@@ -344,7 +349,7 @@
     out.stops = segs; out.segs = segs;
     out.totals = { nights: N, days: N ? N + 1 : 0, bedNights: bedNights, coveredBed: coveredBed, beds: Math.round(beds), acts: Math.round(acts), transport: Math.round(transport), allin: allin, squad: squad,
       fund: fund, total: total, payOnDay: payDay, est: estAny, stops: Object.keys(stopCount).length, overnightLegs: out.legs.filter(function (l) { return l.ovn; }).length,
-      diy: Math.round(beds + acts + transport + fund), mates: mates };
+      diy: Math.round(beds + acts + transport + fund), mates: mates, budget: +state.budget || 0, budgetLeft: (+state.budget || 0) - total };
     out.match = matchAllIn(out, state);
     return out;
   }
@@ -700,6 +705,94 @@
   }
   MM.generate = generate;
 
+
+  /* ============================================================
+     GUESTS GO NEXT — ranked from Mad Monkey's own products
+     ALL IN itineraries, The Gap Collective, Mad Packages and the LP↔VV tickets are
+     the strongest signal we have without booking data; editorial `next` fills the gaps.
+     ============================================================ */
+  var flowCache = null;
+  function flow() {
+    if (flowCache) return flowCache; var W = {};
+    function add(a, b, w, label) {
+      if (!P()[a] || !P()[b] || a === b) return;
+      [[a, b, w], [b, a, w * 0.5]].forEach(function (x) { var k = x[0] + '>' + x[1], o = W[k] = W[k] || { w: 0, l: {} }; o.w += x[2]; if (label) o.l[label] = 1; });
+    }
+    MM.ALL_IN.forEach(function (t) { var ps = t.stops.map(function (s) { return s.p; }).filter(function (p, i, a) { return i === 0 || p !== a[i - 1]; }); for (var i = 1; i < ps.length; i++) add(ps[i - 1], ps[i], 3, 'ALL IN ' + t.n); });
+    MM.SPECIALS.forEach(function (t) { var ps = t.stops.map(function (s) { return s.p; }).filter(function (p, i, a) { return i === 0 || p !== a[i - 1]; }); for (var i = 1; i < ps.length; i++) add(ps[i - 1], ps[i], 2, t.n); });
+    Object.keys(MM.LEG_PKGS).forEach(function (k) { var q = k.split('|'); add(q[0], q[1], 2, 'Mad Package'); });
+    Object.keys(MM.TICKETS).forEach(function (k) { var q = k.split('|'); add(q[0], q[1], 2, 'Mad Monkey train tickets'); });
+    Object.keys(P()).forEach(function (id) { P()[id].next.forEach(function (n, i) { add(id, n, Math.max(0.4, 1.5 - i * 0.2), null); }); });
+    return (flowCache = W);
+  }
+  MM.nextRanked = function (id) {
+    var W = flow();
+    return Object.keys(P()).filter(function (q) { return W[id + '>' + q] && !P()[q].partner || (W[id + '>' + q] && q === 'saigon'); }).map(function (q) {
+      var o = W[id + '>' + q]; return { id: q, w: o.w, why: Object.keys(o.l).slice(0, 2) };
+    }).sort(function (a, b) { return b.w - a.w; }).slice(0, 6);
+  };
+
+  /* ============================================================
+     WHY THIS LEG — plain-English comparison
+     ============================================================ */
+  MM.explainLeg = function (leg) {
+    var c = leg.chosen, lines = [];
+    leg.options.forEach(function (o) {
+      if (o === c) return;
+      var dt = o.h - c.h, du = o.u - c.u;
+      var time = Math.abs(dt) < 0.4 ? 'about the same time' : dt > 0 ? 'saves ' + hoursLabel(dt) : 'takes ' + hoursLabel(-dt) + ' longer';
+      var money = Math.abs(du) < 3 ? 'costs about the same' : du > 0 ? 'is ~' + MM.money(du, 'USD') + ' cheaper' : 'costs ~' + MM.money(-du, 'USD') + ' more';
+      var night = o.ovn && !c.ovn ? ' The ' + o.modeLabel.toLowerCase() + ' covers a night, so you\'d skip a bed (~$8) but lose the sleep.' : c.ovn && !o.ovn ? ' It doubles as your bed for the night, so you wake up in ' + P()[leg.to].n + '.' : '';
+      lines.push('<b>' + c.modeLabel + '</b> vs <b>' + o.label.toLowerCase() + ' (' + o.modeLabel.toLowerCase() + ')</b>: ' + time + ' and ' + money + '.' + night);
+    });
+    var verdict = { cheap: 'Best if every dollar counts.', fast: 'Best if your time matters more than the money.', balanced: 'The best mix of time and money for most people.' }[c.key];
+    return { lines: lines, verdict: verdict };
+  };
+
+  /* ============================================================
+     BEST MONTHS for a set of places
+     ============================================================ */
+  MM.bestMonths = function (places) {
+    var out = []; for (var m = 0; m < 12; m++) { var t = 0; places.forEach(function (p) { t += seasonOf(p, m); }); out.push(places.length ? t / places.length : 2); }
+    return out;
+  };
+
+  /* ============================================================
+     SUGGEST NEXT STOP — scores what comes after the current route
+     ============================================================ */
+  MM.suggestNext = function (state) {
+    var pl = plan(state); if (!pl.places.length) return [];
+    var last = pl.segs[pl.segs.length - 1].last, tags = {}, used = {};
+    pl.places.forEach(function (p) { used[p] = 1; });
+    pl.segs.forEach(function (sg) {
+      if (sg.kind === 'stop') { sg.acts.forEach(function (a) { a.tags.forEach(function (t) { tags[t] = (tags[t] || 0) + 1; }); }); P()[sg.p].tags.forEach(function (t) { tags[t] = (tags[t] || 0) + 0.5; }); }
+      else blockPlaces(sg.trip).forEach(function (p) { P()[p].tags.forEach(function (t) { tags[t] = (tags[t] || 0) + 0.5; }); });
+    });
+    var W = flow(), start = parseDate(state.start), month = start ? start.getUTCMonth() + Math.floor(pl.totals.days / 30) : (state.month != null ? state.month : null);
+    if (month != null) month = month % 12;
+    return Object.keys(P()).filter(function (id) { return !used[id] && !P()[id].partner; }).map(function (id) {
+      var leg = route(last, id, state.pref || 'balanced'); if (!leg || leg.h > 16) return null;
+      var sc = 0, best = null, bv = 0; P()[id].tags.forEach(function (t) { var v = (tags[t] || 0) * 0.6; sc += v; if (v > bv) { bv = v; best = t; } });
+      var f = W[last + '>' + id]; if (f) sc += f.w * 1.2;
+      var seas = month != null ? seasonOf(id, month) : 2; if (month != null) sc += ({ 3: 1.5, 2: 0, 1: -3.5 })[seas];
+      sc -= leg.h * 0.35 + leg.u * 0.01;
+      var why = []; if (f && Object.keys(f.l).length) why.push('on ' + Object.keys(f.l)[0]); if (best) why.push('more ' + best); if (seas === 3 && month != null) why.push('prime season'); if (!why.length) why.push('fits your route');
+      return { id: id, s: sc, leg: leg, why: why };
+    }).filter(Boolean).sort(function (a, b) { return b.s - a.s; }).slice(0, 3);
+  };
+
+  /* ============================================================
+     MAKE IT CHEAPER / FASTER
+     ============================================================ */
+  MM.tweak = function (state, mode) {
+    var st = JSON.parse(JSON.stringify(state)); st.legPick = {};
+    if (mode === 'cheaper') {
+      st.pref = 'cheap'; st.fund = Math.max(10, (st.fund || 18) - 4);
+      st.items.forEach(function (it) { if (it.kind !== 'stop') return; it.acts = it.acts.filter(function (id) { var a = MM.ACTS[id]; return !a || a.usd == null || a.usd <= 40 || (a.multi && a.multi.n > 0 && a.usd <= 160); }); });
+    } else if (mode === 'faster') { st.pref = 'fast'; }
+    return st;
+  };
+
   MM.suggest = suggest; MM.orient = orient;
 
   /* ============================================================
@@ -732,6 +825,7 @@
     var lp = Object.keys(st.legPick || {}).map(function (k) { return k + ':' + st.legPick[k]; }).join(',');
     if (lp) q.push('l=' + lp);
     if (st.month != null && !st.start) q.push('m=' + st.month);
+    if (st.budget) q.push('b=' + st.budget);
     return q.join('&');
   }
   function decodeState(str) {
@@ -753,6 +847,7 @@
     if (map.f) st.fund = Math.max(0, Math.min(100, parseInt(map.f, 10) || 18));
     if (map.c) st.crew = Math.max(0, Math.min(12, parseInt(map.c, 10) || 0));
     if (map.m != null && map.m !== '') st.month = Math.max(0, Math.min(11, parseInt(map.m, 10) || 0));
+    if (map.b) st.budget = Math.max(0, Math.min(99999, parseInt(map.b, 10) || 0));
     if (map.l) map.l.split(',').forEach(function (kv) { var q = kv.split(':'); if (TV[q[1]]) st.legPick[q[0]] = q[1]; });
     return st;
   }

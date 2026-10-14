@@ -1,8 +1,8 @@
 /* Trip Builder logic tests. Run: npm test  (node test/logic.test.js) */
-['places', 'activities', 'media', 'legs', 'trips'].forEach(function (f) { require('../data/' + f + '.js'); });
+['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery'].forEach(function (f) { require('../data/' + f + '.js'); });
 var MM = require('../logic.js');
 
-var pass = 0, fail = 0;
+var pass = 0, fail = 0, pending = [];
 function ok(name, cond, extra) { if (cond) { pass++; console.log('PASS  ' + name); } else { fail++; console.log('FAIL  ' + name + (extra ? '  -> ' + extra : '')); } }
 function eq(name, a, b) { ok(name, a === b, 'got ' + JSON.stringify(a) + ', want ' + JSON.stringify(b)); }
 function st(items, extra) { var s = MM.defaultState(); s.items = items; if (extra) for (var k in extra) s[k] = extra[k]; return s; }
@@ -166,11 +166,43 @@ profiles.forEach(function (pp) {
   ok('generation is fast (<300ms)', (function () { var t = Date.now(); MM.generate(cases[2]); return Date.now() - t < 300; })());
 })();
 
+/* ---------- v2: guests go next, explainer, arrivals, tweaks, budget ---------- */
+(function () {
+  var nr = MM.nextRanked('hanoi');
+  ok('guests-go-next from Hanoi leads with Hoi An and cites a Mad Monkey trip', nr[0].id === 'hoi-an' && nr[0].why.some(function (w) { return /ALL IN/.test(w); }));
+  ok('guests-go-next from Phnom Penh puts Siem Reap first (ALL IN + Mad Package)', MM.nextRanked('phnom-penh')[0].id === 'siem-reap');
+  ok('every hostel has ranked next stops, none is itself', Object.keys(MM.PLACES).every(function (id) { var r = MM.nextRanked(id); return r.length > 0 && r.every(function (x) { return x.id !== id; }); }));
+  var s = st([stop('hanoi', 3), stop('hoi-an', 3)], { start: '2026-11-18' }), pl = MM.plan(s), ex = MM.explainLeg(pl.legs[0]);
+  ok('explainer compares the chosen leg to the alternative in plain English', ex.lines.length === 1 && /faster|saves|longer/.test(ex.lines[0]) && /cheaper|more/.test(ex.lines[0]) && !!ex.verdict);
+  ok('every leg option has an arrival time', pl.legs[0].options.every(function (o) { return /^\d\d:\d\d$/.test(o.arrive); }));
+  var odd = MM.legOptions('saigon', 'phnom-penh').concat(MM.legOptions('hanoi', 'hoi-an'), MM.legOptions('bangkok', 'chiang-mai'));
+  ok('arrival flag only fires between midnight and ~5:30 (or very late days)', odd.every(function (o) { var h = +o.arrive.slice(0, 2) + (+o.arrive.slice(3)) / 60; return !o.odd || h < 5.5 || h >= 22.5; }));
+  var cheaper = MM.tweak(s, 'cheaper'), faster = MM.tweak(s, 'faster');
+  ok('"make it cheaper" costs less, and does not mutate the original', MM.plan(cheaper).totals.total < MM.plan(s).totals.total && s.pref === 'balanced');
+  ok('"make it faster" picks fast legs and clears manual leg picks', faster.pref === 'fast' && Object.keys(faster.legPick).length === 0);
+  var sn = MM.suggestNext(s);
+  ok('suggest-next returns up to 3 unused, reachable hostels with reasons', sn.length >= 1 && sn.length <= 3 && sn.every(function (x) { return ['hanoi', 'hoi-an'].indexOf(x.id) < 0 && x.why.length && x.leg.h <= 16; }));
+  var bm = MM.bestMonths(['hoi-an', 'hanoi']); ok('best months: 12 values, Hoi An + Hanoi are better in spring than November', bm.length === 12 && bm[3] > bm[10]);
+  var b = st([stop('hanoi', 3)], { budget: 500 }), bt = MM.plan(b).totals; ok('budget target tracked: left = budget - total', bt.budget === 500 && bt.budgetLeft === 500 - bt.total);
+  ok('budget survives the share link', MM.decodeState(MM.encodeState(b)).budget === 500);
+  ok('entry rules exist for every country, for every passport', Object.keys(MM.COUNTRIES).every(function (c) { return MM.ENTRY[c] && MM.PASSPORTS.every(function (p) { return MM.ENTRY[c].by[p.k]; }) && /^https:/.test(MM.ENTRY[c].link); }));
+  ok('gallery: 22+ hostels have 4+ photos (Siargao + Nacpan only 1)', Object.keys(MM.PLACES).filter(function (id) { return MM.gallery(id).length >= 4; }).length >= 19);
+  ok('trust data matches what Mad Monkey publishes (4.9/5, 53,000+, 3 quotes)', MM.TRUST.rating === '4.9/5' && MM.TRUST.raters === '53,000+' && MM.TRUST.quotes.length === 3);
+})();
+
+/* ---------- group mode data layer ---------- */
+(function () {
+  var store = {}; global.localStorage = { getItem: function (k) { return store[k] === undefined ? null : store[k]; }, setItem: function (k, v) { store[k] = v; } };
+  global.window = undefined; require('../group.js'); var G = globalThis.MM.Group, done = false;
+  pending.push(G.create('i=s.hanoi.3', 'Ewan').then(function (g) {
+    return Promise.all(['Sam', 'Ali', 'Jo'].map(function (n, i) { return G.join(g.id, n).then(function (r) { return G.update(g.id, r.me.id, { in: i < 2, votes: { '0:hanoi': i === 2 ? 'n' : 'y' } }); }); })).then(function () { return G.get(g.id); });
+  }).then(function (g) { ok('group: 3 mates joined, 2 are in', g.members.length === 3 && G.ins(g) === 2); ok('group: votes tally y/m/n', JSON.stringify(G.tally(g, '0:hanoi')) === JSON.stringify({ y: 2, m: 0, n: 1 })); }));
+})();
+
 /* ---------- text output ---------- */
 var txt = MM.planText(tt, st([]), 'USD');
 ok('plain-text itinerary mentions every stop and the total', /Hanoi/.test(txt) && /Hoi An/.test(txt) && /est\./.test(txt));
 var lead = MM.leadPayload(st(tt.stops.map(function () { return stop('hanoi', 1); })), tt, { name: 'T', email: 't@example.com' }, { ref: 'exeter', fromHostel: 'hanoi' });
 ok('lead payload carries contact, ref, route + itinerary', lead.contact.email === 't@example.com' && lead.ref === 'exeter' && lead.trip.route && lead.itinerary);
 
-console.log('\n' + pass + '/' + (pass + fail) + ' passed');
-process.exit(fail ? 1 : 0);
+Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });
