@@ -11,7 +11,7 @@
 
   var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, focus: [], open: {}, meta: { ref: '', from: '' } };
   var plan = null;
-  app.views = {}; app.passport = 'gb'; app.recoDays = 14; app.auto = false;
+  app.views = {}; app.passport = 'gb'; app.recoDays = 14; app.auto = false; app.pv = []; app.pm = []; app.pbudget = null;
 
   /* ---------- utils ---------- */
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -20,7 +20,11 @@
   var money = function (usd) { return MM.money(usd, app.cur); };
   var plural = function (n, w, ws) { return n + ' ' + (n === 1 ? w : (ws || w + 's')); };
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
-  function track(name, props) { try { (window.dataLayer = window.dataLayer || []).push({ event: 'mm_' + name, props: props || {} }); } catch (e) { /* analytics is optional */ } }
+  var SID = (function () { try { var s = sessionStorage.getItem('mm-sid'); if (!s) { s = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('mm-sid', s); } return s; } catch (e) { return 'x'; } })();
+  function track(name, props) {
+    try { (window.dataLayer = window.dataLayer || []).push({ event: 'mm_' + name, props: props || {} }); } catch (e) { /* analytics is optional */ }
+    if (C.EVENT_ENDPOINT && navigator.sendBeacon) { try { navigator.sendBeacon(C.EVENT_ENDPOINT, new Blob([JSON.stringify({ n: name, p: props || {}, s: SID })], { type: 'application/json' })); } catch (e) { /* ignore */ } }
+  }
   function toast(msg) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; toastRoot.appendChild(t); setTimeout(function () { t.remove(); }, 2400); }
   function copy(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function () { return true; }, fallback);
@@ -32,6 +36,8 @@
   function tomorrow() { var d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1)); }
   function baseUrl() { return (C.SITE_URL || (location.origin + location.pathname)).replace(/#.*$/, ''); }
   function shareLink() { return baseUrl() + '#/build/' + MM.encodeState(app.state); }
+
+  app.rerender = function () { if (app.view === 'build') refreshBuilder(); else if (app.view === 'home') renderHome(); };
 
   /* ---------- state ---------- */
   function persist() { store('mm-trip', { state: app.state, cur: app.cur }); if (app.view === 'build') history.replaceState(null, '', '#/build/' + MM.encodeState(app.state)); }
@@ -70,10 +76,15 @@
      HOME
      ============================================================ */
   var HERO_ROUTES = [['bangkok', 'chiang-mai', 'luang-prabang', 'vang-vieng', 'hanoi', 'hoi-an', 'phnom-penh', 'koh-rong'], ['uluwatu', 'nusa-lembongan', 'gili-trawangan', 'kuta-lombok'], ['manila', 'panglao', 'siargao']];
+  function spotsPill(t) {
+    var s = MM.LIVE && MM.LIVE.spots && MM.LIVE.spots[t.id]; if (!s || s.left == null) return '';
+    return '<div class="tcard__spots pill pill--sm ' + (s.left <= 5 ? 'pill--pink' : 'pill--lime') + '">' + (s.left === 0 ? 'Full: join the waitlist' : s.left + (s.left === 1 ? ' spot left' : ' spots left')) + '</div>';
+  }
+  function liveNotice() { return MM.LIVE && MM.LIVE.notice ? '<div class="livebar">' + esc(MM.LIVE.notice) + '</div>' : ''; }
   function tripCard(t) {
     var img = MM.tourImg(t.img[0]) || MM.hostelImg(t.img[1]), soon = t.status === 'soon', nd = MM.nextDeparture(t, tomorrow());
     return '<article class="tcard">' +
-      '<div class="tcard__pill pill ' + (soon ? 'pill--pink' : 'pill--black') + ' pill--sm">' + (soon ? 'Launching soon' : 'Every ' + U.DOWN[t.dep]) + '</div>' +
+      '<div class="tcard__pill pill ' + (soon ? 'pill--pink' : 'pill--black') + ' pill--sm">' + (soon ? 'Launching soon' : 'Every ' + U.DOWN[t.dep]) + '</div>' + spotsPill(t) +
       '<div class="tcard__price"><div class="burst"><span>' + (soon ? 'rrp' : 'from') + '<b>' + money(t.usd) + '</b></span></div></div>' +
       photo(img) +
       '<div class="tcard__body"><div class="over dim">' + esc(t.kicker) + '</div><h3>' + esc(t.n) + '</h3><div class="tcard__route">' + esc(t.tag) + '</div>' +
@@ -84,7 +95,7 @@
   }
   function renderHome() {
     var g = MM.gap, ticker = '23 hostels · 6 countries · 150+ things to do · every bus, boat + flight in between · $99 holds an ALL IN spot · real prices · real people · ';
-    root.innerHTML =
+    root.innerHTML = liveNotice() +
       '<section class="hero on-black"><div class="wrap hero__in"><div>' +
         '<div class="over lime" style="margin-bottom:var(--s-4)">Mad Monkey · Trip Builder</div>' +
         '<h1 class="disp">Build the trip you <span class="hl">actually</span> want.</h1>' +
@@ -254,6 +265,7 @@
 
   function panelHTML(pl) {
     var s = app.state, t = pl.totals, items = s.items, h = '';
+    if (items.length) h += '<div class="print-head"><img src="assets/logo/mad-monkey-black.png" alt="Mad Monkey"><h1>' + esc(MM.routeLine(pl)) + '</h1><p>' + t.days + ' days · ' + plural(pl.countries.length, 'country', 'countries') + ' · about ' + money(t.total) + ' per person (estimate)' + (s.start ? ' · starting ' + U.fmtDate(U.parseDate(s.start)) : '') + '</p><p class="print-link">Open this trip: ' + esc(shareLink()) + '</p></div>';
     /* summary */
     h += '<div class="bsum"><div class="bsum__top"><div><div class="over lime">Your trip</div><h2 class="disp" style="margin-top:6px">' + (items.length ? plural(t.days, 'day') + ' · ' + plural(pl.countries.length, 'country', 'countries') : 'Start anywhere') + '</h2>' +
       '<div class="bsum__route">' + (items.length ? esc(MM.routeLine(pl)) : 'Tap a hostel on the map, or pick a starter below.') + '</div></div>' +
@@ -266,12 +278,12 @@
       (items.length && s.budget ? budgetBar(t) : '') + (items.length ? seasonStrip(pl) : '') +
       '<div class="humans"><b>Checked by a real person.</b> Hit "Hold my beds" and the crew reviews your whole trip before you pay a penny.</div></div>';
 
-    if (app.focus.length) h += recoHTML();
+    if (plannerOn()) h += recoHTML();
 
     if (!items.length) {
       h += '<div class="empty"><h3>Tap the map.<br>Start anywhere.</h3><p>Every Mad Monkey is a pin. Add a few and we\'ll work out the buses, boats and flights between them, the cost, and the days.</p><div class="row">' +
         (app.meta.from && P[app.meta.from] ? '<button class="btn btn--sm btn--pink" data-act="addplace" data-p="' + app.meta.from + '" type="button">I\'m at ' + esc(P[app.meta.from].n) + '</button>' : '') +
-        '<button class="btn btn--sm" data-go="quiz" type="button">Build it for me</button></div></div>';
+        '<button class="btn btn--sm" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--paper" data-go="quiz" type="button">Take the quiz</button></div></div>';
       h += '<div><div class="over" style="margin-bottom:var(--s-2)">Or start from a classic</div><div class="nextbar">' +
         MM.ALL_IN.slice(0, 5).map(function (t) { return '<button class="nextchip" data-act="addblock" data-id="' + t.id + '" type="button"><b>ALL IN ' + esc(t.n) + '</b> <small>' + t.days + 'd · ' + money(t.usd) + '</small></button>'; }).join('') +
         MM.CLASSICS.slice(0, 5).map(function (c) { return '<button class="nextchip" data-act="customise" data-id="' + c.id + '" type="button"><b>' + esc(c.n) + '</b></button>'; }).join('') + '</div></div>';
@@ -309,19 +321,20 @@
     h += entryHTML(pl);
     /* CTA */
     h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.</div>' +
-      '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Print / PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
+      '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
       '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares, activities are listed prices (est. where marked). The crew confirms live rates, dates and availability before you pay anything.</p></div>';
     return h;
   }
 
   /* ---------- recommended itineraries for the chosen countries ---------- */
   var recoCache = { key: '', list: [] };
+  function pbudget() { return app.pbudget || (app.state.pref === 'cheap' ? 'cheap' : app.state.pref === 'fast' ? 'splash' : 'mid'); }
+  function plannerOn() { return app.focus.length > 0 || !!app.open.planner; }
   function recos() {
-    if (!app.focus.length) return [];
+    if (!plannerOn()) return [];
     var sd = U.parseDate(app.state.start), month = sd ? sd.getUTCMonth() : (app.state.month != null ? app.state.month : null);
-    var budget = app.state.pref === 'cheap' ? 'cheap' : app.state.pref === 'fast' ? 'splash' : 'mid';
-    var key = [app.focus.slice().sort().join(','), app.recoDays, budget, month].join('|');
-    if (recoCache.key !== key) recoCache = { key: key, list: MM.generate({ countries: app.focus.slice(), days: app.recoDays, budget: budget, month: month, vibes: [], must: [] }) };
+    var key = [app.focus.slice().sort().join(','), app.recoDays, pbudget(), month, app.pv.join(','), app.pm.join(',')].join('|');
+    if (recoCache.key !== key) recoCache = { key: key, list: MM.generate({ countries: app.focus.length ? app.focus.slice() : null, days: app.recoDays, budget: pbudget(), month: month, vibes: app.pv.slice(), must: app.pm.slice() }) };
     return recoCache.list;
   }
   function applyReco(r) {
@@ -331,21 +344,25 @@
   }
   // Picking countries re-plans for you, as long as you haven't started editing by hand.
   function autoReco() {
-    if (!app.focus.length) return;
+    if (!plannerOn()) return;
     if (app.state.items.length && !app.auto) return;
     var list = recos(); if (list.length) applyReco(list[0]);
   }
   function recoHTML() {
-    var names = app.focus.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + '), list = recos(), cur = plan ? MM.routeLine(plan) : '';
-    var h = '<div class="reco"><div class="reco__hd"><div><div class="over">Recommended for</div><h3 class="disp">' + esc(names) + '</h3></div><div class="reco__days" role="group" aria-label="How many days">' +
-      [7, 10, 14, 21, 30].map(function (d) { return '<button type="button" class="chip" data-act="recodays" data-v="' + d + '" aria-pressed="' + (app.recoDays === d) + '">' + d + ' days</button>'; }).join('') + '</div></div>';
-    if (!list.length) return h + '<p class="fine">Nothing sensible links ' + esc(names) + ' in ' + app.recoDays + ' days. Try more days, or fewer countries.</p></div>';
-    h += list.map(function (r, i) {
+    var names = app.focus.length ? app.focus.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + ') : 'anywhere', list = recos(), cur = plan ? MM.routeLine(plan) : '', bl = pbudget();
+    var chips = function (arr, sel, act, key, lab) { return arr.map(function (x) { return '<button type="button" class="chip" data-act="' + act + '" data-v="' + x[key] + '" aria-pressed="' + (sel.indexOf(x[key]) > -1) + '">' + x[lab] + '</button>'; }).join(''); };
+    var h = '<div class="reco"><div class="reco__hd"><div><div class="over">Plan it for me</div><h3 class="disp">' + esc(names) + '</h3></div><button class="iconbtn" data-act="plantoggle" aria-label="Close the planner" type="button">×</button></div>' +
+      '<div class="reco__row"><label for="recodays">I\'m going for</label><input class="input reco__n" id="recodays" type="number" min="4" max="45" value="' + app.recoDays + '"><span class="reco__u">days</span>' + [7, 10, 14, 21, 30].map(function (d) { return '<button type="button" class="chip" data-act="recodays" data-v="' + d + '" aria-pressed="' + (app.recoDays === d) + '">' + d + '</button>'; }).join('') + '</div>' +
+      '<div class="reco__row"><label>Vibe</label><div class="reco__chips">' + chips(MM.VIBES, app.pv, 'pvibe', 'k', 'n') + '</div></div>' +
+      '<div class="reco__row"><label>Must-dos</label><div class="reco__chips">' + chips(MM.MUSTS, app.pm, 'pmust', 'k', 'n') + '</div></div>' +
+      '<div class="reco__row"><label>Budget</label><div class="reco__chips">' + [['cheap', 'Every dollar counts · ~$45/day'], ['mid', 'Comfortable · ~$80/day'], ['splash', 'Happy to spend · ~$140/day']].map(function (b) { return '<button type="button" class="chip" data-act="pbudget" data-v="' + b[0] + '" aria-pressed="' + (bl === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</div></div>';
+    if (!list.length) return h + '<p class="fine">Nothing sensible fits ' + (app.focus.length ? esc(names) + ' ' : '') + 'in ' + app.recoDays + ' days. Try more days, or fewer countries.</p></div>';
+    h += '<div class="over" style="margin-top:4px">Routes for you</div>' + list.map(function (r, i) {
       var p = MM.plan(r.state), line = MM.routeLine(p), on = line === cur;
-      return '<div class="reco__c' + (on ? ' on' : '') + '"><div><b>' + esc(line) + '</b><span>' + p.totals.days + ' days · ~' + money(p.totals.total) + ' · ' + plural(p.countries.length, 'country', 'countries') + '</span><em>' + esc(r.why.slice(0, 2).join(' · ')) + '</em></div>' +
+      return '<div class="reco__c' + (on ? ' on' : '') + '"><div><b>' + esc(line) + '</b><span>' + p.totals.days + ' days · ~' + money(p.totals.total) + ' · ' + plural(p.countries.length, 'country', 'countries') + '</span><em>' + esc(r.why.slice(0, 3).join(' · ')) + '</em></div>' +
         (on ? '<span class="pill pill--sm">In your trip</span>' : '<button class="btn btn--sm" data-act="usereco" data-i="' + i + '" type="button">Use this</button>') + '</div>';
     }).join('');
-    return h + '<p class="fine">Built from scratch to cover ' + esc(names) + ' using real buses, boats and flights. Pick another length, or tap Use this. Edit anything and it stops re-planning on its own.</p></div>';
+    return h + '<p class="fine">Same engine as the quiz: it scores every hostel for your vibe, must-dos, month and budget, then routes the real buses, boats and flights. Change anything and it re-plans, until you edit a stop by hand.</p></div>';
   }
 
   function nextBar(fromId, title) {
@@ -358,7 +375,7 @@
     }).join('') + '</div>';
   }
   function tweakRow() {
-    var h = '<div class="tweaks"><button class="btn btn--sm btn--paper" data-act="suggest" type="button">Suggest my next stop</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="cheaper" type="button">Make it cheaper</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="faster" type="button">Make it faster</button></div>';
+    var h = '<div class="tweaks"><button class="btn btn--sm btn--paper" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--paper" data-act="suggest" type="button">Suggest my next stop</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="cheaper" type="button">Make it cheaper</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="faster" type="button">Make it faster</button></div>';
     if (app.open.suggest) {
       var sg = MM.suggestNext(app.state);
       h += '<div class="nextbar"><span class="over">Picked for your route</span>' + (sg.length ? sg.map(function (x) { return '<button class="nextchip" data-act="addplace" data-p="' + x.id + '" type="button"><b>' + esc(P[x.id].n) + '</b> <small>' + hours(x.leg.h) + ' · ~' + money(x.leg.u) + '</small><em class="whytag">' + esc(x.why.slice(0, 2).join(' · ')) + '</em></button>'; }).join('') : '<small>Nothing else fits within a day\'s travel.</small>') + '</div>';
@@ -391,13 +408,39 @@
   function entryHTML(pl) {
     var open = !!app.open.entry, pass = app.passport;
     var body = '<div class="field"><label for="passport">Your passport</label><div class="sel-wrap"><select class="select" id="passport">' + MM.PASSPORTS.map(function (x) { return '<option value="' + x.k + '"' + (x.k === pass ? ' selected' : '') + '>' + x.n + '</option>'; }).join('') + '</select></div></div>' +
-      pl.countries.map(function (c) { var e = MM.ENTRY[c]; return '<div class="entry"><span class="dotc" data-c="' + c + '"></span><div><b>' + MM.COUNTRIES[c].n + '</b><p>' + esc(e.by[pass]) + ' ' + esc(e.extra) + '</p><a href="' + e.link + '" target="_blank" rel="noopener">' + esc(e.cta) + ' ↗</a></div></div>'; }).join('') +
-      '<p class="fine">Entry rules change often and we can\'t promise these are current. Always confirm on the official link before you book flights.</p>';
+      pl.countries.map(function (c) { var e = MM.ENTRY[c]; return '<div class="entry"><span class="dotc" data-c="' + c + '"></span><div><b>' + MM.COUNTRIES[c].n + '</b><p>' + esc(e.by[pass]) + ' ' + esc(e.extra) + '</p><a href="' + e.link + '" target="_blank" rel="noopener">' + esc(e.cta) + ' ↗</a>' + (e.link2 ? ' · <a href="' + e.link2 + '" target="_blank" rel="noopener">' + esc(e.cta2) + ' ↗</a>' : '') + '</div></div>'; }).join('') +
+      '<p class="fine">Checked ' + MM.ENTRY_CHECKED + '. Entry rules change often (Thailand cut its visa-free stay to 30 days in September 2026), so always confirm on the official link before you book flights.</p>';
     return '<div class="blk"><button class="blk__hd" data-act="toggle" data-k="entry" aria-expanded="' + open + '" type="button"><h3>Entry rules</h3><span class="pill pill--sm pill--paper">' + plural(pl.countries.length, 'country', 'countries') + ' · ' + (open ? 'Hide' : 'Show') + '</span></button>' + (open ? '<div class="blk__bd">' + body + '</div>' : '') + '</div>';
+  }
+  function reviewLine(id) {
+    var rv = (MM.REVIEWS[id] || [])[0]; if (!rv) return '';
+    return '<blockquote class="quote quote--sm">“' + esc(rv.q) + '”<cite>' + esc(rv.by) + (rv.from ? ', ' + esc(rv.from) : '') + '</cite></blockquote>';
   }
   function galleryStrip(id) {
     var g = MM.gallery(id); if (g.length < 2) return '';
     return '<div class="gal">' + g.slice(0, 4).map(function (u, k) { return '<button type="button" class="gal__i" data-act="gal" data-p="' + id + '" data-k="' + k + '" aria-label="Open photo ' + (k + 1) + ' of ' + g.length + '"><img src="' + u + '" alt="" loading="lazy" onerror="this.parentNode.remove()"></button>'; }).join('') + '<button type="button" class="gal__more" data-act="gal" data-p="' + id + '" data-k="0">' + g.length + ' photos</button></div>';
+  }
+  function icsEscape(t) { return String(t).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;'); }
+  function icsDate(d) { return U.isoDate(d).replace(/-/g, ''); }
+  function buildICS(pl, state) {
+    var sd = U.parseDate(state.start); if (!sd) return null;
+    var ev = [], cur = null, stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+    function push(title, from, to, desc) { ev.push({ t: title, a: from, b: U.addDays(to, 1), d: desc || '' }); }
+    pl.days.forEach(function (d) {
+      if (!d.date || d.kind === 'depart') return;
+      var seg = pl.segs[d.si], name = d.kind === 'move' ? 'Overnight travel' : d.kind === 'epic' ? d.epic.n : d.kind === 'block' ? 'ALL IN ' + d.blockTrip.n : 'Mad Monkey ' + P[d.loc].n;
+      var key = d.kind + ':' + d.si + ':' + name;
+      if (cur && cur.key === key && U.isoDate(U.addDays(cur.last, 1)) === U.isoDate(d.date)) cur.last = d.date; else { cur = { key: key, name: name, first: d.date, last: d.date, kind: d.kind }; ev.push(cur); cur.__raw = true; }
+      if (d.travel && d.kind === 'stay') push('Travel: ' + P[d.travel.from].n + ' → ' + P[d.travel.to].n, d.date, d.date, d.travel.chosen.modeLabel + ' · about ' + hours(d.travel.chosen.h) + ' · arrives about ' + d.travel.chosen.arrive);
+    });
+    var out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mad Monkey//Trip Builder//EN', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:My Mad Monkey trip'];
+    ev.forEach(function (e, i) {
+      var a1, b1, title, desc;
+      if (e.__raw) { a1 = e.first; b1 = U.addDays(e.last, 1); var n = Math.round((b1 - a1) / 86400000); title = e.name + (e.kind === 'stay' ? ' (' + plural(n, 'night') + ')' : ''); desc = ''; }
+      else { a1 = e.a; b1 = e.b; title = e.t; desc = e.d; }
+      out.push('BEGIN:VEVENT', 'UID:mm-' + i + '-' + stamp + '@madmonkeyhostels.com', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + icsDate(a1), 'DTEND;VALUE=DATE:' + icsDate(b1), 'SUMMARY:' + icsEscape(title), 'DESCRIPTION:' + icsEscape((desc ? desc + '\n' : '') + 'Estimates only. Your trip: ' + shareLink()), 'END:VEVENT');
+    });
+    out.push('END:VCALENDAR'); return out.join('\r\n');
   }
   function openGallery(id, k) {
     var g = MM.gallery(id); if (!g.length) return; k = Math.max(0, Math.min(g.length - 1, k));
@@ -417,7 +460,7 @@
       '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
       '<div class="stopc__tools"><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" type="button"></button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + '" type="button">×</button></div></div></div>';
     if (chosen.length && !open) h += '<div class="stopc__picks">' + chosen.slice(0, 4).map(function (a) { return '<span class="pill pill--sm">' + esc(a.n) + '</span>'; }).join('') + (chosen.length > 4 ? '<span class="pill pill--sm pill--paper">+' + (chosen.length - 4) + ' more</span>' : '') + '</div>';
-    h += galleryStrip(p.id);
+    h += galleryStrip(p.id) + reviewLine(p.id);
     h += '<button class="stopc__more" data-act="toggle" data-k="acts' + i + '" aria-expanded="' + open + '" type="button"><span>Things to do at ' + esc(p.n) + '</span><span class="count"><span class="pill pill--sm pill--paper">' + chosen.length + ' picked</span><b>' + (open ? '−' : '+') + '</b></span></button>';
     if (open) h += actsPanel(sg, i);
     return h + '</div>';
@@ -425,7 +468,7 @@
 
   var SLOT = { full: 'Full day', half: 'Half day', eve: 'Evening' };
   function actCard(a, on, i) {
-    var price = a.usd == null ? 'Pay on the day' : (a.est ? '~' : '') + money(a.usd), small = a.usd == null ? '' : a.est ? 'est.' : 'from';
+    var price = a.usd == null ? 'Pay on the day' : (a.est ? '~' : '') + money(a.usd), small = a.usd == null ? '' : a.live ? 'live' : a.est ? 'est.' : 'from';
     var length = a.multi ? (a.multi.d > 1 ? a.multi.d + ' days' + (a.multi.n ? ' · ' + a.multi.n + (a.multi.n === 1 ? ' night' : ' nights') + ' away' : '') : SLOT[a.slot]) : SLOT[a.slot];
     var url = MM.actUrl(a);
     return '<div class="act" role="button" tabindex="0" data-act="act" data-i="' + i + '" data-a="' + a.id + '" aria-pressed="' + on + '">' + photo(MM.actImg(a)) +
@@ -446,7 +489,7 @@
     var h = '<div class="legc" id="leg' + leg.index + '"><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
     leg.options.forEach(function (o) {
       h += '<button class="legopt" type="button" data-act="leg" data-i="' + leg.index + '" data-k="' + o.key + '" aria-pressed="' + (o.key === leg.key) + '">' + legIcon(leg, o) +
-        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span></div><div class="tm">~' + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
+        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span></div><div class="tm">~' + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
     });
     h += '</div><button class="why" data-act="toggle" data-k="why' + leg.index + '" aria-expanded="' + whyOpen + '" type="button">Why this leg? <b>' + (whyOpen ? '−' : '+') + '</b></button>';
     if (whyOpen) h += '<div class="why__bd"><p><b>' + ex.verdict + '</b></p>' + (ex.lines.length ? ex.lines.map(function (l) { return '<p>' + l + '</p>'; }).join('') : '<p>This is the only sensible way to do it.</p>') + '</div>';
@@ -591,6 +634,7 @@
      ============================================================ */
   document.addEventListener('click', function (e) {
     if (e.target.closest('a[data-stop]')) { e.stopPropagation(); return; }
+    var door = e.target.closest('.door'); if (door) track('door', { door: door.getAttribute('data-go') || door.getAttribute('data-to') || 'x' });
     var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
     var cur = e.target.closest('[data-cur]'); if (cur) { app.cur = cur.getAttribute('data-cur'); $$('[data-cur]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === cur)); }); store('mm-cur', app.cur); if (app.view === 'build') refreshBuilder(); else route(); return; }
     var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } autoReco(); if (app.auto) persist(); refreshBuilder(); return; }
@@ -601,10 +645,15 @@
       case 'suggest': app.open.suggest = !app.open.suggest; refreshBuilder(); break;
       case 'tweak': { var before = MM.plan(app.state).totals.total, ns2 = MM.tweak(app.state, el.getAttribute('data-v')), after = MM.plan(ns2).totals; app.state = Object.assign(MM.defaultState(), ns2); persist(); refreshBuilder();
         toast(el.getAttribute('data-v') === 'cheaper' ? (before - after.total > 1 ? 'Cheaper route: saves about ' + money(before - after.total) : 'That\'s already about as cheap as it gets') : 'Fastest connections picked: ' + (after.total - before > 1 ? 'about ' + money(after.total - before) + ' more' : 'no extra cost')); break; }
+      case 'ics': { var ics = buildICS(plan, app.state); if (!ics) { toast('Pick a start date first so the days land in your calendar'); break; } var bl = new Blob([ics], { type: 'text/calendar' }), al = document.createElement('a'); al.href = URL.createObjectURL(bl); al.download = 'my-mad-monkey-trip.ics'; al.click(); setTimeout(function () { URL.revokeObjectURL(al.href); }, 2000); track('ics'); break; }
       case 'gal': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
       case 'galnav': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
       case 'group': if (app.group) app.group.start(); break;
-      case 'recodays': app.recoDays = +el.getAttribute('data-v'); if (app.auto) autoReco(); refreshBuilder(); break;
+      case 'plantoggle': app.open.planner = !plannerOn() ? true : false; if (!app.open.planner && app.focus.length) { /* closing the planner leaves the country focus alone */ } autoReco(); if (app.auto) persist(); refreshBuilder(); break;
+      case 'pvibe': { var vv = el.getAttribute('data-v'), vi = app.pv.indexOf(vv); if (vi > -1) app.pv.splice(vi, 1); else app.pv.push(vv); autoReco(); if (app.auto) persist(); refreshBuilder(); break; }
+      case 'pmust': { var mv = el.getAttribute('data-v'), mi = app.pm.indexOf(mv); if (mi > -1) app.pm.splice(mi, 1); else app.pm.push(mv); autoReco(); if (app.auto) persist(); refreshBuilder(); break; }
+      case 'pbudget': { var bv2 = el.getAttribute('data-v'); app.pbudget = bv2; app.state.pref = bv2 === 'cheap' ? 'cheap' : bv2 === 'splash' ? 'fast' : 'balanced'; app.state.legPick = {}; if (app.auto) { autoReco(); } persist(); refreshBuilder(); break; }
+      case 'recodays': app.recoDays = +el.getAttribute('data-v'); autoReco(); if (app.auto) persist(); refreshBuilder(); break;
       case 'usereco': { var rl = recos(); if (rl[i]) { applyReco(rl[i]); refreshBuilder(); MM.BuilderMap.reset(); } break; }
       case 'mapzoom': MM.BuilderMap.zoom(+el.getAttribute('data-f')); break;
       case 'mapfit': MM.BuilderMap.reset(); break;
@@ -652,6 +701,7 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     if (t.id === 'startd') mutate(function (s) { s.start = t.value || ''; });
+    if (t.id === 'recodays') { app.recoDays = Math.max(4, Math.min(45, parseInt(t.value, 10) || 14)); autoReco(); if (app.auto) persist(); refreshBuilder(); }
     if (t.id === 'passport') { app.passport = t.value; store('mm-passport', t.value); refreshBuilder(); }
     if (t.id === 'addsel' && t.value) { var v = t.value; t.value = ''; addStop(v); }
   });

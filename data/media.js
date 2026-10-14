@@ -51,8 +51,10 @@
     'pub-quiz-bangkok': '6zgic05m', 'the-mad-package-phnom-penh-to-siem-reap-2': '9t0ckngk'
   };
 
-  MM.hostelImg = function (id) { return HOSTEL[id] ? BASE + 'property/' + id + '/' + HOSTEL[id] + '.jpg' : null; };
-  MM.tourImg = function (slug) { return slug && TOUR[slug] ? BASE + 'tour/' + slug + '/' + TOUR[slug] + '.jpg' : null; };
+  // PHOTO_BASE (config.js) points at your own copies, made by scripts/mirror-photos.mjs: <base>/hostel/<id>.jpg, /tour/<slug>.jpg, /gallery/<id>-<n>.jpg
+  var own = function () { return (r.MM_CONFIG && r.MM_CONFIG.PHOTO_BASE || '').replace(/\/$/, ''); };
+  MM.hostelImg = function (id) { return HOSTEL[id] ? (own() ? own() + '/hostel/' + id + '.jpg' : BASE + 'property/' + id + '/' + HOSTEL[id] + '.jpg') : null; };
+  MM.tourImg = function (slug) { return slug && TOUR[slug] ? (own() ? own() + '/tour/' + slug + '.jpg' : BASE + 'tour/' + slug + '/' + TOUR[slug] + '.jpg') : null; };
   MM.actImg = function (a) { return MM.tourImg(a.slug); };
 
   if (typeof module !== 'undefined') module.exports = { HOSTEL: HOSTEL, TOUR: TOUR };
