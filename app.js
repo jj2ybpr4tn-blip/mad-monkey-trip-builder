@@ -9,7 +9,7 @@
   var root = document.getElementById('app'), modalRoot = document.getElementById('modal-root'), toastRoot = document.getElementById('toast-root');
   var P = MM.PLACES;
 
-  var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, region: 'auto', open: {}, meta: { ref: '', from: '' } };
+  var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, focus: [], open: {}, meta: { ref: '', from: '' } };
   var plan = null;
 
   /* ---------- utils ---------- */
@@ -225,12 +225,11 @@
     var y = window.scrollY; plan = MM.plan(app.state);
     var panel = $('#bpanel'); if (!panel) return;
     panel.innerHTML = panelHTML(plan);
-    var regs = [['auto', 'Fit route'], ['all', 'All Asia'], ['mainland', 'Mainland'], ['thailand', 'Thailand'], ['laos', 'Laos'], ['vietnam', 'Vietnam'], ['cambodia', 'Cambodia'], ['indonesia', 'Bali + Lombok'], ['philippines', 'Philippines']];
-    $('#regions').innerHTML = regs.map(function (r) { return '<button type="button" data-region="' + r[0] + '" aria-pressed="' + (app.region === r[0]) + '">' + r[1] + '</button>'; }).join('');
+    $('#regions').innerHTML = '<button type="button" data-focus="" aria-pressed="' + !app.focus.length + '">Everywhere</button>' + Object.keys(MM.COUNTRIES).map(function (c) { return '<button type="button" data-focus="' + c + '" aria-pressed="' + (app.focus.indexOf(c) > -1) + '">' + MM.COUNTRIES[c].n + '</button>'; }).join('');
     var t = plan.totals;
     $('#mstats').innerHTML = t.days ? '<span class="chip"><b>' + t.days + '</b> days</span><span class="chip"><b>' + t.stops + '</b> stops</span><span class="chip"><b>' + plan.countries.length + '</b> ' + (plan.countries.length === 1 ? 'country' : 'countries') + '</span><span class="chip"><b>' + plan.km.toLocaleString('en-GB') + '</b> km</span>' : '';
     $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">Send to the crew</button>' : '<div><b>Tap the map</b><span>to add your first stop</span></div>';
-    MM.BuilderMap.update(plan, app.state, app.region);
+    MM.BuilderMap.update(plan, app.state, app.focus);
     if (!(opts && opts.instant)) window.scrollTo(0, y);
   }
 
@@ -264,7 +263,7 @@
     }
 
     /* add bar */
-    var groups = {}; MM.PLACE_ORDER.forEach(function (id) { (groups[P[id].c] = groups[P[id].c] || []).push(id); });
+    var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
     h += '<div class="addbar"><div class="addbar__row"><div class="sel-wrap"><select class="select" id="addsel" aria-label="Add a stop"><option value="">+ Add a stop…</option>' +
       Object.keys(groups).map(function (c) { return '<optgroup label="' + MM.COUNTRIES[c].n + '">' + groups[c].map(function (id) { return '<option value="' + id + '">' + esc(P[id].n) + (P[id].partner ? ' (partner)' : '') + (P[id].opens ? ' (opens ' + P[id].opens.slice(8) + '/' + P[id].opens.slice(5, 7) + ')' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></div></div>' +
       nextBar(pl.segs[pl.segs.length - 1].last, 'Where guests go next') + '</div>';
@@ -490,7 +489,7 @@
     if (e.target.closest('a[data-stop]')) { e.stopPropagation(); return; }
     var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
     var cur = e.target.closest('[data-cur]'); if (cur) { app.cur = cur.getAttribute('data-cur'); $$('[data-cur]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === cur)); }); store('mm-cur', app.cur); if (app.view === 'build') refreshBuilder(); else route(); return; }
-    var rg = e.target.closest('[data-region]'); if (rg) { app.region = rg.getAttribute('data-region'); $$('[data-region]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === rg)); }); MM.BuilderMap.update(plan, app.state, app.region); return; }
+    var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } refreshBuilder(); return; }
     var el = e.target.closest('[data-act]'); if (!el) return;
     var act = el.getAttribute('data-act'), i = +el.getAttribute('data-i'), S = app.state;
     switch (act) {
@@ -504,10 +503,10 @@
       case 'qnext': quizAdvance(); break;
       case 'qback': app.quiz.step = Math.max(0, app.quiz.step - 1); renderQuiz(); break;
       case 'qedit': app.quiz.step = 0; go('quiz'); break;
-      case 'openres': { var r = app.results[i]; app.state = Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(r.state))); app.region = 'auto'; persist(); track('open_result', { id: r.cand.tpl.id }); go('build', MM.encodeState(app.state)); break; }
+      case 'openres': { var r = app.results[i]; app.state = Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(r.state))); app.focus = []; persist(); track('open_result', { id: r.cand.tpl.id }); go('build', MM.encodeState(app.state)); break; }
       /* home / starters */
-      case 'addblock': { app.state = MM.defaultState(); app.state.items.push({ kind: 'allin', trip: el.getAttribute('data-id') }); app.region = 'auto'; persist(); track('addblock', { id: el.getAttribute('data-id') }); go('build', MM.encodeState(app.state)); break; }
-      case 'customise': { var tpl = MM.tripById(el.getAttribute('data-id')); app.state = MM.defaultState(); tpl.stops.forEach(function (st) { app.state.items.push({ kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }); }); app.state.pref = tpl.pref || 'cheap'; app.region = 'auto'; persist(); track('customise', { id: tpl.id }); go('build', MM.encodeState(app.state)); break; }
+      case 'addblock': { app.state = MM.defaultState(); app.state.items.push({ kind: 'allin', trip: el.getAttribute('data-id') }); app.focus = []; persist(); track('addblock', { id: el.getAttribute('data-id') }); go('build', MM.encodeState(app.state)); break; }
+      case 'customise': { var tpl = MM.tripById(el.getAttribute('data-id')); app.state = MM.defaultState(); tpl.stops.forEach(function (st) { app.state.items.push({ kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }); }); app.state.pref = tpl.pref || 'cheap'; app.focus = []; persist(); track('customise', { id: tpl.id }); go('build', MM.encodeState(app.state)); break; }
       case 'customiseblock': { var blk = S.items[i], tp = MM.ALL_IN.filter(function (x) { return x.id === blk.trip; })[0]; var ns = tp.stops.map(function (st) { return { kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }; }); mutate(function (s2) { s2.items.splice.apply(s2.items, [i, 1].concat(ns)); }); toast('Now it\'s yours: edit anything'); break; }
       case 'swapallin': { var id2 = el.getAttribute('data-id'), tr = MM.ALL_IN.filter(function (x) { return x.id === id2; })[0], inTrip = {}; tr.stops.forEach(function (st) { inTrip[st.p] = 1; }); mutate(function (s2) { var extras = s2.items.filter(function (it) { return it.kind === 'stop' && !inTrip[it.p]; }); s2.items = [{ kind: 'allin', trip: id2 }].concat(extras); }); track('swap_allin', { id: id2 }); break; }
       /* builder */
@@ -520,7 +519,7 @@
       case 'leg': mutate(function (s2) { s2.legPick = s2.legPick || {}; s2.legPick[i] = el.getAttribute('data-k'); }); break;
       case 'pref': mutate(function (s2) { s2.pref = el.getAttribute('data-v'); s2.legPick = {}; }); break;
       case 'crew': mutate(function (s2) { s2.crew = Math.max(0, Math.min(8, (s2.crew || 0) + (+el.getAttribute('data-d')))); }); break;
-      case 'reset': if (confirm('Clear this trip and start over?')) { app.state = MM.defaultState(); app.open = {}; app.region = 'auto'; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); } break;
+      case 'reset': if (confirm('Clear this trip and start over?')) { app.state = MM.defaultState(); app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); } break;
       case 'lead': openLead(); break;
       case 'share': openShare(); break;
       case 'story': openStory(); break;

@@ -66,12 +66,12 @@
   var LBL = { pai: { a: 'end' }, 'koh-sdach': { a: 'end' }, 'koh-rong': { a: 'end' }, kampot: { a: 'end', dy: 16 }, dumaguete: { a: 'end' }, 'nacpan-beach': { a: 'end' }, 'uluwatu': { a: 'end' },
     'nusa-lembongan': { a: 'start', dy: -4 }, 'kuta-lombok': { a: 'start', dy: 12 }, 'gili-trawangan': { a: 'start', dy: -6 }, 'phnom-penh': { a: 'start', dy: 14 }, 'siem-reap': { a: 'end' }, saigon: { a: 'start', dy: 6 },
     'vang-vieng': { a: 'end', dy: 8 }, 'luang-prabang': { a: 'end', dy: -2 }, siquijor: { a: 'start', dy: 12 }, panglao: { a: 'start', dy: 6 }, 'hoi-an': { a: 'start' }, manila: { a: 'start' } };
-  var COUNTRY_LBL = [['THAILAND', 15.6, 100.6], ['LAOS', 19.9, 103.3], ['VIETNAM', 18.6, 106.2], ['CAMBODIA', 12.9, 104.9], ['INDONESIA', -6.9, 112.2], ['PHILIPPINES', 12.3, 122.4]];
+  var COUNTRY_LBL = [['THAILAND', 15.6, 100.6, 'TH'], ['LAOS', 19.9, 103.3, 'LA'], ['VIETNAM', 18.6, 106.2, 'VN'], ['CAMBODIA', 12.9, 104.9, 'KH'], ['INDONESIA', -6.9, 112.2, 'ID'], ['PHILIPPINES', 12.3, 122.4, 'PH']];
 
   function landMarkup(opts) {
     var m = M(), paths = m.paths, out = '<rect class="m-sea" x="-2000" y="-2000" width="6000" height="6000"/>';
     if (!opts || opts.other !== false) out += '<path class="m-other" vector-effect="non-scaling-stroke" fill-rule="evenodd" d="' + paths.other + '"/>';
-    ['TH', 'LA', 'VN', 'KH', 'ID', 'PH'].forEach(function (c) { out += '<path class="m-land" vector-effect="non-scaling-stroke" fill-rule="evenodd" d="' + paths[c] + '"/>'; });
+    ['TH', 'LA', 'VN', 'KH', 'ID', 'PH'].forEach(function (c) { out += '<path class="m-land" data-c="' + c + '" vector-effect="non-scaling-stroke" fill-rule="evenodd" d="' + paths[c] + '"/>'; });
     return out;
   }
 
@@ -110,7 +110,7 @@
      BUILDER MAP — interactive
      ============================================================ */
   var BM = MM.BuilderMap = (function () {
-    var box, svg, gLand, gRoute, gPins, tip, vb, vbTarget, anim, scale = 1, handlers = {}, drawn = {}, regionKey = 'auto', lastPlan = null, lastState = null, selMap = {}, showLabelsAll = false;
+    var box, svg, gLand, gRoute, gPins, tip, vb, vbTarget, anim, scale = 1, handlers = {}, drawn = {}, focus = [], lastPlan = null, lastState = null, selMap = {}, showLabelsAll = false;
 
     function el(name, attrs, parent) { var e = document.createElementNS(NS, name); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
     function size() { var b = box.getBoundingClientRect(); return { w: Math.max(200, b.width), h: Math.max(200, b.height) }; }
@@ -121,7 +121,7 @@
       gLand = el('g', {}, svg); gLand.innerHTML = landMarkup();
       var cl = el('g', { 'class': 'm-ctry' }, svg);
       gRoute = el('g', {}, svg); gPins = el('g', {}, svg);
-      COUNTRY_LBL.forEach(function (c) { var q = proj(c[1], c[2]); var t = el('text', { 'class': 'm-lbl', x: q[0], y: q[1], 'data-k': 'c' }, cl); t.textContent = c[0]; });
+      COUNTRY_LBL.forEach(function (c) { var q = proj(c[1], c[2]); var t = el('text', { 'class': 'm-lbl', x: q[0], y: q[1], 'data-c': c[3] }, cl); t.textContent = c[0]; });
       Object.keys(MM.PLACES).forEach(function (id) {
         var p = MM.PLACES[id], q = pp(id), l = LBL[id] || {};
         var g = el('g', { 'class': 'm-pin' + (p.partner ? ' partner' : ''), 'data-p': id, tabindex: 0, role: 'button', 'aria-label': 'Add ' + p.n + ' to your trip' }, gPins);
@@ -165,14 +165,16 @@
       var cs = gRoute.querySelectorAll('[data-w]'); for (var k = 0; k < cs.length; k++) cs[k].setAttribute('stroke-width', (+cs[k].getAttribute('data-w') * u).toFixed(2));
       var ms = gRoute.querySelectorAll('.m-mode'); for (var m2 = 0; m2 < ms.length; m2++) { var mp = ms[m2].getAttribute('data-pos').split(','); ms[m2].setAttribute('transform', 'translate(' + mp[0] + ' ' + mp[1] + ') scale(' + u.toFixed(4) + ')'); }
     }
+    function inFocus(c) { return !focus.length || focus.indexOf(c) > -1; }
     function targetView(plan) {
-      var s = size(), aspect = s.w / s.h, key = regionKey;
-      if (key === 'auto') {
-        var ps = plan && plan.places && plan.places.length ? plan.places : null;
-        if (!ps) return viewBoxFor(bboxPx(MM.REGIONS.all.b), aspect, 0.02);
-        return viewBoxFor(routePx(ps, 330), aspect, 0.28);
+      var s = size(), aspect = s.w / s.h;
+      if (focus.length) {
+        var ps = Object.keys(MM.PLACES).filter(function (id) { return focus.indexOf(MM.PLACES[id].c) > -1; });
+        return viewBoxFor(routePx(ps, 120), aspect, 0.16);
       }
-      return viewBoxFor(bboxPx(MM.REGIONS[key].b), aspect, 0.04);
+      var rp = plan && plan.places && plan.places.length ? plan.places : null;
+      if (!rp) return viewBoxFor(bboxPx(MM.REGIONS.all.b), aspect, 0.02);
+      return viewBoxFor(routePx(rp, 330), aspect, 0.28);
     }
     function refit(instant) {
       if (!svg) return; var t = targetView(lastPlan);
@@ -186,22 +188,26 @@
       })(performance.now());
     }
 
-    function update(plan, state, region) {
+    function update(plan, state, foc) {
       if (!svg) return; lastPlan = plan; lastState = state;
-      var prevRegion = regionKey; regionKey = region || 'auto';
+      var prevKey = focus.join(','); focus = foc || [];
       // pins: numbers + selected
       selMap = {}; var seq = [];
       plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (st) { seq.push(st.p); }); else seq.push(s.p); });
       seq = seq.filter(function (p, i) { return i === 0 || p !== seq[i - 1]; });
       seq.forEach(function (p, i) { if (!selMap[p]) selMap[p] = i + 1; });
-      var labelsAll = regionKey !== 'all' && regionKey !== 'auto' || (regionKey === 'auto' && plan.places.length && viewSpanSmall(plan));
+      var labelsAll = focus.length === 1 || (!focus.length && plan.places.length && viewSpanSmall(plan));
       Array.prototype.forEach.call(gPins.children, function (g) {
         var id = g.getAttribute('data-p'), n = selMap[id];
-        g.setAttribute('class', 'm-pin' + (MM.PLACES[id].partner ? ' partner' : '') + (n ? ' sel' : ''));
+        var inF = inFocus(MM.PLACES[id].c);
+        g.setAttribute('class', 'm-pin' + (MM.PLACES[id].partner ? ' partner' : '') + (n ? ' sel' : '') + (!inF && n ? ' off' : ''));
+        g.style.display = (!inF && !n) ? 'none' : '';
         g.querySelector('.n').textContent = n || '';
-        g.querySelector('.nm').style.display = (n || labelsAll) ? '' : 'none';
+        g.querySelector('.nm').style.display = (n || (labelsAll && inF)) ? '' : 'none';
         g.setAttribute('aria-label', (n ? 'Stop ' + n + ': ' : 'Add ') + MM.PLACES[id].n + (n ? '' : ' to your trip'));
       });
+      Array.prototype.forEach.call(svg.querySelectorAll('.m-land'), function (p) { p.classList.toggle('dim', !inFocus(p.getAttribute('data-c'))); });
+      Array.prototype.forEach.call(svg.querySelectorAll('.m-lbl'), function (t) { t.style.display = inFocus(t.getAttribute('data-c')) ? '' : 'none'; });
       // route
       var now = {}; gRoute.innerHTML = '';
       var path = [], idx = 0;
@@ -214,13 +220,14 @@
         var a = path[i - 1].p, b = path[i].p; if (a === b) continue;
         var A = pp(a), B = pp(b), c = arc(A, B), key = a + '>' + b, blk = path[i].block && path[i - 1].block;
         var isNew = !drawn[key]; now[key] = 1;
-        var cs = el('path', { 'class': 'm-case', d: c.d, 'data-w': 10 }, gRoute);
-        var rp = el('path', { 'class': 'm-route' + (isNew ? ' m-draw' : ''), d: c.d, 'data-w': 4.6, style: blk ? 'stroke:#ff01aa' : '' }, gRoute);
+        var sg = el('g', { 'class': 'm-seg' + (inFocus(MM.PLACES[a].c) && inFocus(MM.PLACES[b].c) ? '' : ' m-faded') }, gRoute);
+        var cs = el('path', { 'class': 'm-case', d: c.d, 'data-w': 10 }, sg);
+        var rp = el('path', { 'class': 'm-route' + (isNew ? ' m-draw' : ''), d: c.d, 'data-w': 4.6, style: blk ? 'stroke:#ff01aa' : '' }, sg);
         if (isNew) { rp.style.setProperty('--len', c.len * 1.4); rp.style.strokeDasharray = c.len * 1.4; }
         var leg = legByFrom[key];
         if (leg || blk) {
           var main = leg ? leg.chosen.main : 'bus', label = leg ? MM.util.hoursLabel(leg.h) : 'ALL IN';
-          var g = el('g', { 'class': 'm-mode', 'data-pos': c.mid[0].toFixed(1) + ',' + c.mid[1].toFixed(1) }, gRoute);
+          var g = el('g', { 'class': 'm-mode', 'data-pos': c.mid[0].toFixed(1) + ',' + c.mid[1].toFixed(1) }, sg);
           var w = Math.max(46, 34 + label.length * 8);
           el('rect', { x: -w / 2, y: -12, width: w, height: 24, rx: 12 }, g);
           var ic = el('path', { d: ICON[main] || ICON.bus, transform: 'translate(' + (-w / 2 + 6) + ' -8) scale(.66)' }, g);
@@ -231,7 +238,7 @@
       drawn = now;
       applyScale();
       // view
-      if (!vb) refit(true); else if (prevRegion !== regionKey || regionKey === 'auto') refit(false);
+      if (!vb) refit(true); else if (prevKey !== focus.join(',') || !focus.length) refit(false);
     }
     function viewSpanSmall(plan) { var px = routePx(plan.places, 150); return (px.x1 - px.x0) < 520; }
 
