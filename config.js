@@ -42,5 +42,5 @@ window.MM_CONFIG = {
 (function (c) {
   if (!c.API_BASE) return; var b = c.API_BASE.replace(/\/$/, '');
   c.LEAD_ENDPOINT = c.LEAD_ENDPOINT || b + '/leads'; c.STATUS_ENDPOINT = c.STATUS_ENDPOINT || b + '/status'; c.GROUP_ENDPOINT = c.GROUP_ENDPOINT || b;
-  c.EVENT_ENDPOINT = c.EVENT_ENDPOINT || b + '/event'; c.LIVE_ENDPOINT = c.LIVE_ENDPOINT || b + '/live'; c.FARES_ENDPOINT = c.FARES_ENDPOINT || b + '/fares'; c.REVIEWS_ENDPOINT = c.REVIEWS_ENDPOINT || b + '/reviews'; c.FLOW_ENDPOINT = c.FLOW_ENDPOINT || b + '/flow';
+  c.EVENT_ENDPOINT = c.EVENT_ENDPOINT || b + '/event'; c.LIVE_ENDPOINT = c.LIVE_ENDPOINT || b + '/live'; c.FARES_ENDPOINT = c.FARES_ENDPOINT || b + '/fares'; c.SHARE_ENDPOINT = c.SHARE_ENDPOINT || b + '/share'; c.REVIEWS_ENDPOINT = c.REVIEWS_ENDPOINT || b + '/reviews'; c.FLOW_ENDPOINT = c.FLOW_ENDPOINT || b + '/flow';
 })(window.MM_CONFIG);

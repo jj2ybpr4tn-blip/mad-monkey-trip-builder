@@ -662,3 +662,10 @@ main{flex:1;display:flex;flex-direction:column}
 @media (max-width:640px){.rvs{grid-template-columns:1fr}}
 .backg{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);background:var(--cyan);border:var(--bw) solid var(--black);padding:var(--s-3);font-weight:700;font-size:14px;margin-bottom:var(--s-4)}
 .backg span{flex:1 1 200px}
+
+/* ---- share: link preview + meet-up check ---- */
+.ogprev{display:flex;flex-direction:column;gap:6px;margin:var(--s-3) 0}
+.ogprev canvas{width:100%;height:auto;border:var(--bw) solid var(--black);box-shadow:5px 5px 0 var(--black);max-width:100%}
+.ogprev span{font-size:12px;font-weight:700;color:var(--ink-dim)}
+.meetup{margin-top:var(--s-5);border-top:var(--bw) dashed var(--black);padding-top:var(--s-4);display:flex;flex-direction:column;gap:var(--s-2)}
+.meetup p{font-size:14px}

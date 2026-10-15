@@ -27,3 +27,22 @@ Every operation is **per member** on purpose: two mates voting at the same insta
 - The organiser is whoever created it on their device (an id kept in `localStorage`). This is a friendly-trust model, not security. Don't put anything private in a group.
 - The Squad Leader perk (3 mates = 50% off, 6 = free) only applies to **ALL IN** trips and to the leader's own ticket; the app shows it but never grants it. Your booking engine does.
 - CORS for the site's origin is required. Add your own rate limiting and expiry (e.g. delete after 90 days).
+
+
+## Plan together, Route A/B and meet-ups (added Oct 2026)
+
+Group shape now also carries:
+
+```
+alt: '<encodeState>' | ''                 Route B, put up for a vote by the organiser
+members[].wants: ['p:<place>', 'a:<actId>']   stops suggested + activities hearted ("Sam wants Pai")
+members[].votes.route: 'a' | 'b'          vote between Route A (trip) and Route B (alt)
+members[].trip: '<encodeState>'           a mate's own route, for "where you cross"
+```
+
+Endpoints:
+
+- `PATCH /groups/:id/members/:mid` accepts `wants` (max 24, `p:`/`a:` keys only), `trip`, and `votes.route`.
+- `PATCH /groups/:id` with `{ org, trip?, alt?, clearRouteVotes? }`. Organiser only: `org` must equal the organiser id returned when the group was created. `GET` never returns that id.
+
+The organiser is also added as a member when they create a group, so they can vote and suggest too.
