@@ -32,7 +32,7 @@ window.MM_CONFIG = {
   GROUP_ENDPOINT: '',
 
   // Serve photos from your own copies (run scripts/mirror-photos.mjs first). e.g. '/assets/photos' or a CDN URL. Blank = hot-link madmonkeyhostels.com.
-  PHOTO_BASE: '',
+  PHOTO_BASE: 'assets/photos',
 
   // Optional privacy link shown under the lead form.
   PRIVACY_URL: ''
