@@ -21,6 +21,62 @@
     ctx.beginPath(); for (var i = 0; i < n * 2; i++) { var rad = i % 2 ? ri : ro, ang = Math.PI * i / n - Math.PI / 2; ctx[i ? 'lineTo' : 'moveTo'](cx + rad * Math.cos(ang), cy + rad * Math.sin(ang)); } ctx.closePath();
   }
 
+  // the route on a cropped map, black land / bone countries / lime line + numbered pins. k scales strokes for smaller cards.
+  function drawRouteMap(ctx, plan, places, bx, by, bw, bh, F, k) {
+    ctx.save(); ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    ctx.fillStyle = BLACK; ctx.fillRect(bx, by, bw, bh);
+    var px = MM.routePx(places.length ? places : ['hanoi'], 170), vb = MM.viewBoxFor(px, bw / bh, 0.28), sc = bw / vb.w;
+    ctx.save(); ctx.translate(bx, by); ctx.scale(sc, sc); ctx.translate(-vb.x, -vb.y);
+    var P = MM.MAP.paths;
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#1b1b1b'; ctx.fill(new Path2D(P.other), 'evenodd');
+    ['TH', 'LA', 'VN', 'KH', 'ID', 'PH'].forEach(function (c) { var p2 = new Path2D(P[c]); ctx.fillStyle = BONE; ctx.fill(p2, 'evenodd'); ctx.lineWidth = 1.6 / sc; ctx.strokeStyle = BLACK; ctx.stroke(p2); });
+    ctx.restore();
+    var T = function (id) { var q = MM.proj(MM.PLACES[id].ll[0], MM.PLACES[id].ll[1]); return [bx + (q[0] - vb.x) * sc, by + (q[1] - vb.y) * sc]; };
+    var seq = []; plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (st) { seq.push(st.p); }); else seq.push(s.p); });
+    seq = seq.filter(function (p, i) { return i === 0 || p !== seq[i - 1]; });
+    [[BLACK, 22 * k], [LIME, 10 * k]].forEach(function (st) {
+      ctx.strokeStyle = st[0]; ctx.lineWidth = st[1]; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+      for (var i = 1; i < seq.length; i++) { var a = T(seq[i - 1]), b = T(seq[i]), c = arcPts(a, b); ctx.moveTo(a[0], a[1]); ctx.quadraticCurveTo(c[0], c[1], b[0], b[1]); }
+      ctx.stroke();
+    });
+    var done = {};
+    seq.forEach(function (id, i) {
+      if (done[id]) return; done[id] = 1; var q = T(id);
+      ctx.beginPath(); ctx.arc(q[0], q[1], 24 * k, 0, Math.PI * 2); ctx.fillStyle = LIME; ctx.fill(); ctx.lineWidth = 6 * k; ctx.strokeStyle = BLACK; ctx.stroke();
+      ctx.fillStyle = BLACK; ctx.font = '900 ' + Math.round(24 * k) + 'px ' + F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), q[0], q[1] + 1);
+    });
+    ctx.restore(); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.lineWidth = 8 * k; ctx.strokeStyle = LIME; ctx.strokeRect(bx, by, bw, bh);
+  }
+
+  // 1200×630 link-preview card (WhatsApp, iMessage, Instagram DMs, Facebook): map left, the trip right
+  MM.drawCard = function (canvas, plan, state, cur) {
+    var CW = 1200, CH = 630; canvas.width = CW; canvas.height = CH; var ctx = canvas.getContext('2d');
+    return Promise.all([fonts(), loadImg('assets/logo/mad-monkey-white.png')]).then(function (res) {
+      var logo = res[1], F = 'Montserrat, system-ui, sans-serif', places = plan.places.slice();
+      ctx.fillStyle = BLACK; ctx.fillRect(0, 0, CW, CH);
+      drawRouteMap(ctx, plan, places, 0, 0, 560, CH, F, 0.62);
+      var x = 610, w = CW - x - 50;
+      ctx.fillStyle = LIME; ctx.font = '700 22px ' + F; if ('letterSpacing' in ctx) ctx.letterSpacing = '5px'; ctx.fillText('MY MONKEY ROUTE', x, 78); if ('letterSpacing' in ctx) ctx.letterSpacing = '-1px';
+      var names = places.map(function (p) { return MM.PLACES[p].n.toUpperCase(); }); if (names.length > 5) names = names.slice(0, 4).concat(['+' + (names.length - 4) + ' MORE']);
+      var size = 64; ctx.font = '900 ' + size + 'px ' + F;
+      function widest() { return Math.max.apply(0, names.map(function (n) { return ctx.measureText(n).width; })); }
+      while ((widest() > w || size * 0.95 * names.length > 300) && size > 30) { size -= 2; ctx.font = '900 ' + size + 'px ' + F; }
+      var y = 78 + 20 + size * 0.9;
+      names.forEach(function (n, i) { ctx.fillStyle = i === names.length - 1 && names.length > 1 ? LIME : PAPER; ctx.fillText(n, x, y); y += size * 0.95; });
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+      var t = plan.totals, sy = Math.max(y + 30, 450);
+      [[String(t.days), 'DAYS'], [String(plan.countries.length), plan.countries.length === 1 ? 'COUNTRY' : 'COUNTRIES'], ['~' + MM.money(t.total, cur), 'EST. EACH']].forEach(function (s, i) {
+        var cx = x + i * (w / 3); ctx.fillStyle = i === 2 ? LIME : PAPER; ctx.font = '900 ' + (i === 2 ? 42 : 48) + 'px ' + F; ctx.fillText(s[0], cx, sy);
+        ctx.fillStyle = '#b3afa4'; ctx.font = '700 16px ' + F; if ('letterSpacing' in ctx) ctx.letterSpacing = '3px'; ctx.fillText(s[1], cx, sy + 28); if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+      });
+      ctx.fillStyle = PINK; ctx.fillRect(x, CH - 92, 300, 46); ctx.fillStyle = BLACK; ctx.font = '900 20px ' + F; if ('letterSpacing' in ctx) ctx.letterSpacing = '2px'; ctx.fillText('OPEN + EDIT THE TRIP', x + 18, CH - 62); if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+      if (logo) { var lw = 130, lh = lw * logo.height / logo.width; ctx.drawImage(logo, CW - 44 - lw, CH - 40 - lh, lw, lh); }
+      return canvas;
+    });
+  };
+
   MM.drawStory = function (canvas, plan, state, cur) {
     canvas.width = W; canvas.height = H; var ctx = canvas.getContext('2d');
     var firstP = plan.places[0];
@@ -58,34 +114,7 @@
         by += 336;
       }
       var bh = Math.min(900, H - footerH - by);
-      ctx.save(); ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
-      ctx.fillStyle = BLACK; ctx.fillRect(bx, by, bw, bh);
-      var px = MM.routePx(places.length ? places : ['hanoi'], 170), vb = MM.viewBoxFor(px, bw / bh, 0.28), sc = bw / vb.w;
-      ctx.save(); ctx.translate(bx, by); ctx.scale(sc, sc); ctx.translate(-vb.x, -vb.y);
-      var P = MM.MAP.paths;
-      ctx.lineJoin = 'round';
-      ctx.fillStyle = '#1b1b1b'; ctx.fill(new Path2D(P.other), 'evenodd');
-      ['TH', 'LA', 'VN', 'KH', 'ID', 'PH'].forEach(function (c) { var p2 = new Path2D(P[c]); ctx.fillStyle = BONE; ctx.fill(p2, 'evenodd'); ctx.lineWidth = 1.6 / sc; ctx.strokeStyle = BLACK; ctx.stroke(p2); });
-      ctx.restore();
-      var T = function (id) { var q = MM.proj(MM.PLACES[id].ll[0], MM.PLACES[id].ll[1]); return [bx + (q[0] - vb.x) * sc, by + (q[1] - vb.y) * sc]; };
-      // route
-      var seq = []; plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (st) { seq.push(st.p); }); else seq.push(s.p); });
-      seq = seq.filter(function (p, i) { return i === 0 || p !== seq[i - 1]; });
-      [[BLACK, 22], [LIME, 10]].forEach(function (st) {
-        ctx.strokeStyle = st[0]; ctx.lineWidth = st[1]; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
-        for (var i = 1; i < seq.length; i++) { var a = T(seq[i - 1]), b = T(seq[i]), c = arcPts(a, b); if (i === 1) ctx.moveTo(a[0], a[1]); else ctx.moveTo(a[0], a[1]); ctx.quadraticCurveTo(c[0], c[1], b[0], b[1]); }
-        ctx.stroke();
-      });
-      // pins
-      var done = {};
-      seq.forEach(function (id, i) {
-        if (done[id]) return; done[id] = 1; var q = T(id);
-        ctx.beginPath(); ctx.arc(q[0], q[1], 24, 0, Math.PI * 2); ctx.fillStyle = LIME; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = BLACK; ctx.stroke();
-        ctx.fillStyle = BLACK; ctx.font = '900 24px ' + F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), q[0], q[1] + 1);
-      });
-      ctx.restore(); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-      ctx.lineWidth = 8; ctx.strokeStyle = LIME; ctx.strokeRect(bx, by, bw, bh);
-
+      drawRouteMap(ctx, plan, places, bx, by, bw, bh, F, 1);
       // starburst device on the map corner
       var cx = bx + bw - 110, cy = by + 20;
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(-8 * Math.PI / 180); star(ctx, 0, 0, 150, 118, 16); ctx.fillStyle = LIME; ctx.fill();

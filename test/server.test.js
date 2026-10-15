@@ -10,7 +10,7 @@ const adm = { Authorization: 'Bearer ' + TOKEN };
 const lead = (extra) => ({ type: 'review_request', contact: { name: 'Sam', email: 'sam@example.com', whatsapp: '+447000000000', partySize: 2, consent: true }, trip: { state: 'i=s.hanoi.3~s.hoi-an.3&d=2026-11-18', route: 'Hanoi → Hoi An', days: 7, start: '2026-11-18', stops: ['hanoi', 'hoi-an'], estTotalUsd: 300 }, hold: { requested: true }, itinerary: 'x', ...(extra || {}) });
 
 const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'server.mjs')], { env: { ...process.env, PORT, DATA_DIR: DIR, ADMIN_TOKEN: TOKEN, HOLD_HOURS: '48' }, stdio: 'ignore' });
-const done = (code) => { srv.kill(); fs.rmSync(DIR, { recursive: true, force: true }); console.log('\n' + pass + '/' + (pass + fail) + ' server checks passed'); process.exit(code); };
+const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fail) + ' server checks passed'); setTimeout(() => { try { fs.rmSync(DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* temp dir, the OS cleans it */ } process.exit(code); }, 300); };
 
 (async () => {
   for (let i = 0; i < 40; i++) { try { await fetch(B + '/api/live'); break; } catch { await new Promise((r) => setTimeout(r, 150)); } }
@@ -63,6 +63,27 @@ const done = (code) => { srv.kill(); fs.rmSync(DIR, { recursive: true, force: tr
   await patch(m1, { votes: { 'bad key!': 'y', x: 'z', good: 'm' } }); ok('groups: invalid vote keys/values rejected', (await j('/api/groups/' + g.id)).b.members[0].votes.good === 'm' && !(await j('/api/groups/' + g.id)).b.members[0].votes['bad key!'] && !(await j('/api/groups/' + g.id)).b.members[0].votes.x);
   /* dated fares: off without keys, and inputs are policed */
   ok('fares: 503 when no provider keys are set', (await j('/api/fares?from=HAN&to=DAD&date=2099-01-01')).s === 503);
+  /* groups: plan together, Route A/B, own routes, organiser key */
+  const gp = (body, h) => j('/api/groups/' + g.id, { method: 'PATCH', headers: { 'content-type': 'application/json', ...(h || {}) }, body: JSON.stringify(body) });
+  ok('groups: the organiser key is never sent out', !(await j('/api/groups/' + g.id)).b.organiser.id && g.organiser.id);
+  ok('groups: strangers cannot change the trip', (await gp({ org: 'nope', trip: 'i=s.pai.3' })).s === 403);
+  ok('groups: organiser can add Route B', (await gp({ org: g.organiser.id, alt: 'i=s.bangkok.3' })).s === 200 && (await j('/api/groups/' + g.id)).b.alt === 'i=s.bangkok.3');
+  await patch(m1, { wants: ['p:pai', 'a:x-hoi-an-y', 'bad idea', 'p:pai'], votes: { route: 'b' }, trip: 'i=s.hoi-an.3&d=2027-01-10' });
+  const g2 = (await j('/api/groups/' + g.id)).b, s1 = g2.members.find((x) => x.id === m1.id);
+  ok('groups: ideas kept, junk + duplicates dropped; route vote + own route saved', JSON.stringify(s1.wants) === '["p:pai","a:x-hoi-an-y"]' && s1.votes.route === 'b' && s1.trip === 'i=s.hoi-an.3&d=2027-01-10');
+  await gp({ org: g.organiser.id, trip: 'i=s.bangkok.3', alt: '', clearRouteVotes: true });
+  const g3 = (await j('/api/groups/' + g.id)).b;
+  ok('groups: picking Route B swaps the trip and clears route votes', g3.trip === 'i=s.bangkok.3' && !g3.alt && !g3.members.find((x) => x.id === m1.id).votes.route);
+  /* short links + link previews */
+  const px = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64');
+  const sh = await post('/api/share', { state: 'i=s.hanoi.3~s.hoi-an.4&d=2027-01-10', img: px });
+  ok('share: short code issued', sh.s === 200 && /^[a-z0-9]{7}$/.test(sh.b.code));
+  ok('share: same trip gets the same code', (await post('/api/share', { state: 'i=s.hanoi.3~s.hoi-an.4&d=2027-01-10' })).b.code === sh.b.code);
+  ok('share: rejects junk trips', (await post('/api/share', { state: '<script>' })).s === 400 && (await post('/api/share', { state: 'i=' })).s === 400);
+  const tp = await fetch(B + '/t/' + sh.b.code).then((r) => r.text());
+  ok('share: /t/ page has route title, price and image for previews', /og:title" content="Hanoi → Hoi An · 8 days/.test(tp) && /og:image" content="http[^"]+\/t\/[a-z0-9]{7}\.jpg/.test(tp) && /location\.replace\("\/#\/build\/i=s\.hanoi/.test(tp));
+  ok('share: preview image served', (await fetch(B + '/t/' + sh.b.code + '.jpg')).headers.get('content-type') === 'image/jpeg');
+  ok('share: code resolves back to the trip', (await j('/api/share/' + sh.b.code)).b.state === 'i=s.hanoi.3~s.hoi-an.4&d=2027-01-10');
   /* events + funnel + limits */
   await post('/api/event', { n: 'door', p: { door: 'quiz' }, s: 'abc' }); await post('/api/event', { n: 'view', s: 'abc' });
   const fu = (await j('/api/admin/funnel', { headers: adm })).b; ok('funnel counts events, sessions and doors', fu.byName.door === 1 && fu.sessions.view === 1 && fu.doors.quiz === 1);

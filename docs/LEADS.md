@@ -33,7 +33,7 @@ The guest lands on `#/trip/<ref>` after sending. With `STATUS_ENDPOINT` set, it 
   "ref": "exeter",              // ?ref= (ambassador / campaign), "" if none
   "fromHostel": "hanoi",        // ?from= (QR placement), "" if none
   "contact": {
-    "name": "Sam", "email": "sam@example.com", "whatsapp": "+44…", "from": "Manchester",
+    "name": "Sam", "via": "whatsapp", "email": "", "whatsapp": "+447700900123", "from": "Manchester",
     "partySize": 2, "dates": "fixed | flex | open", "notes": "…", "consent": true
   },
   "trip": {
@@ -70,3 +70,8 @@ Quick local receiver for testing (logs each lead, allows CORS):
 node scripts/test-receiver.mjs
 # then set LEAD_ENDPOINT: 'http://localhost:9000' in config.js
 ```
+
+
+## How to contact the guest
+
+The guest picks **one** way to be contacted: WhatsApp or email. Only that field is filled in and `contact.via` says which (`"whatsapp"` or `"email"`). Reply on that channel. The server accepts a request with either a valid email or a WhatsApp number (8–15 digits); it refuses one with neither.

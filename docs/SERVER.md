@@ -53,3 +53,14 @@ AMADEUS_CLIENT_ID=... AMADEUS_CLIENT_SECRET=... AMADEUS_ENV=production npm run s
 - No keys, no answer, or a crew-entered fare in `/admin`: the typical fare stays (crew fares always win).
 - `AMADEUS_ENV` defaults to `test`, which returns sample data, not real prices.
 - Amadeus does not carry every Southeast Asian low-cost airline, so real fares can be higher than the cheapest seat on a budget carrier's own site. Check coverage on your key before promising "lowest".
+
+
+## Short links and link previews
+
+When the server is running, **Share** turns a trip into a short link like `/t/abc1234`. Sent on WhatsApp, iMessage, Instagram DMs or Facebook, the link shows a preview card: the route on a map, the days, countries and price. Tapping it opens the trip in the builder.
+
+- The guest's browser draws the 1200×630 card and uploads it with the trip (`POST /api/share`). The same trip always gets the same code.
+- `/t/<code>` serves the preview tags and forwards to the trip. `/t/<code>.jpg` is the card.
+- Preview images need an absolute address. Behind a proxy that sets `X-Forwarded-Host` this works on its own; otherwise set `PUBLIC_URL`, e.g. `https://trips.madmonkeyhostels.com`.
+- Shared trips live in `DATA_DIR/shares.json` and `DATA_DIR/og/`. They hold routes only, no personal details.
+- On the static GitHub Pages demo there's no server, so Share falls back to the long link with no preview.

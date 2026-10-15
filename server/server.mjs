@@ -8,7 +8,8 @@
      • serves the static site, with the API switched on (config.js gets API_BASE=/api)
      • POST /api/leads       review requests from guests -> stored, bed-hold sheet computed, crew notified
      • GET  /api/status      what the guest's trip-status page shows
-     • /api/groups…          group mode (votes, "I'm in")
+     • /api/groups…          group mode (votes, ideas, Route A/B, own routes for meet-ups)
+     • POST /api/share       short link + preview image for a trip  →  /t/<code> (rich previews on WhatsApp etc.)
      • GET  /api/live        spots left + price overrides the crew maintains
      • GET  /api/fares       ?from=BKK&to=CNX&date=YYYY-MM-DD  lowest + highest real fare for that day (needs AMADEUS_CLIENT_ID/SECRET)
      • GET  /api/reviews     approved guest quotes per hostel
@@ -23,6 +24,7 @@
      NOTIFY_WEBHOOK  optional Slack / Discord-style webhook that gets a message per new request
      AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET   optional, switches on date-specific flight prices
      AMADEUS_ENV     'production' for real fares (default 'test' returns sample data)
+     PUBLIC_URL      optional, e.g. https://trips.madmonkeyhostels.com (used for absolute preview-image links)
      ALLOWED_ORIGIN  optional, only if the site is hosted somewhere other than this server (adds CORS)
      DATA_DIR        default server/data
 
@@ -62,7 +64,8 @@ function store(name, init) {
   stores.push(s); return s;
 }
 const leads = store('leads', []), groups = store('groups', {}), events = store('events', []), live = store('live', { updated: null, notice: '', spots: {}, legs: {}, acts: {} }),
-  reviews = store('reviews', []), flowRows = store('flow', { rows: [] });
+  reviews = store('reviews', []), flowRows = store('flow', { rows: [] }), shares = store('shares', {});
+const OG_DIR = path.join(DATA, 'og'); fs.mkdirSync(OG_DIR, { recursive: true });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stores.forEach((s) => s.flush()); process.exit(0); });
 
 /* ---------- admin token ---------- */
@@ -215,6 +218,23 @@ async function api(req, res, url) {
   if (p === '/reviews' && m === 'GET') { const out = {}; reviews.get().forEach((r) => { if (r.approved) (out[r.hostel] = out[r.hostel] || []).push({ q: r.q, by: r.by, from: r.from }); }); return J(200, out); }
   if (p === '/flow' && m === 'GET') return J(200, { rows: mmFlows() });
 
+  /* ---- short links + link previews ---- */
+  if (p === '/share' && m === 'POST') {
+    if (limited('share:' + ip, 40, 3600000)) return J(429, {});
+    const b = await readBody(req, 900000);
+    if (typeof b.state !== 'string' || !b.state || b.state.length > 6000 || !/^[A-Za-z0-9=&~.+_,:-]+$/.test(b.state)) return J(400, { error: 'trip is missing' });
+    let st; try { st = MM.decodeState(b.state); } catch { return J(400, { error: 'bad trip' }); }
+    if (!st.items || !st.items.length) return J(400, { error: 'empty trip' });
+    const all = shares.get(), hash = crypto.createHash('sha1').update(b.state).digest('hex').slice(0, 16);
+    let code = Object.keys(all).find((k) => all[k].hash === hash);
+    if (!code) { do { code = rid(7); } while (all[code]); all[code] = { hash, state: b.state, created: now(), views: 0 }; }
+    const img = typeof b.img === 'string' && b.img.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/);
+    if (img) { const buf = Buffer.from(img[2], 'base64'); if (buf.length < 800000) { fs.writeFileSync(path.join(OG_DIR, code + '.' + (img[1] === 'png' ? 'png' : 'jpg')), buf); all[code].img = img[1] === 'png' ? 'png' : 'jpg'; } }
+    shares.save(); return J(200, { code, path: '/t/' + code });
+  }
+  let shm = p.match(/^\/share\/([a-z0-9]{7})$/);
+  if (shm && m === 'GET') { const sh = shares.get()[shm[1]]; return sh ? J(200, { state: sh.state }) : J(404, {}); }
+
   /* ---- groups ---- */
   if (p === '/groups' && m === 'POST') {
     if (limited('grp:' + ip, 20, 3600000)) return J(429, {});
@@ -315,6 +335,8 @@ async function api(req, res, url) {
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
 const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js']);
 function serveStatic(req, res, url) {
+  const tm = url.pathname.match(/^\/t\/([a-z0-9]{7})(\.(jpg|png))?$/);
+  if (tm) return sharePage(req, res, tm[1], tm[3]);
   let rel = decodeURIComponent(url.pathname); if (rel === '/') rel = '/index.html';
   if (rel === '/admin' || rel === '/admin/') { res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); return fs.createReadStream(path.join(__dirname, 'admin.html')).pipe(res); }
   rel = rel.replace(/^\/+/, ''); const top = rel.split('/')[0];
@@ -330,6 +352,40 @@ function serveStatic(req, res, url) {
     res.writeHead(200, { ...headers, 'Cache-Control': 'no-cache' }); return res.end(src);
   }
   res.writeHead(200, headers); fs.createReadStream(file).pipe(res);
+}
+
+/* ---------- /t/<code>: the page link-preview bots read (title, description, map image), then on to the trip ---------- */
+const escH = (x) => String(x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+function publicBase(req) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '');
+  const proto = (req.headers['x-forwarded-proto'] || '').split(',')[0] || 'http', host = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost').split(',')[0];
+  return proto + '://' + host.replace(/[^a-zA-Z0-9.:-]/g, '');
+}
+function sharePage(req, res, code, ext) {
+  const sh = shares.get()[code];
+  if (!sh) { res.writeHead(302, { Location: '/' }); return res.end(); }
+  if (ext) {
+    const f = path.join(OG_DIR, code + '.' + (sh.img || 'jpg'));
+    if (!sh.img || !fs.existsSync(f)) { res.writeHead(302, { Location: '/assets/logo/mad-monkey-block.png' }); return res.end(); }
+    res.writeHead(200, { 'Content-Type': sh.img === 'png' ? 'image/png' : 'image/jpeg', 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' }); return fs.createReadStream(f).pipe(res);
+  }
+  let title = 'A Mad Monkey trip', desc = 'Built with the Mad Monkey Trip Builder.';
+  try {
+    const pl = MM.plan(MM.decodeState(sh.state)), t = pl.totals;
+    title = MM.routeLine(pl) + ' · ' + t.days + ' days';
+    desc = t.days + ' days · ' + pl.countries.length + (pl.countries.length === 1 ? ' country' : ' countries') + ' · about $' + Math.round(t.total).toLocaleString('en-GB') + ' each. Every bus, boat and bed between Mad Monkey hostels. Open it, change it, make it yours.';
+  } catch { /* keep the defaults */ }
+  sh.views = (sh.views || 0) + 1; shares.save();
+  const base = publicBase(req), target = '/#/build/' + sh.state, img = base + '/t/' + code + '.' + (sh.img || 'jpg');
+  const html = '<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escH(title) + ' · Mad Monkey</title><meta name="description" content="' + escH(desc) + '">' +
+    '<meta property="og:type" content="website"><meta property="og:site_name" content="Mad Monkey Trip Builder"><meta property="og:title" content="' + escH(title) + '"><meta property="og:description" content="' + escH(desc) + '">' +
+    '<meta property="og:url" content="' + escH(base + '/t/' + code) + '"><meta property="og:image" content="' + escH(img) + '"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">' +
+    '<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="' + escH(img) + '">' +
+    '<meta http-equiv="refresh" content="0;url=' + escH(target) + '"><link rel="icon" href="/assets/logo/favicon.png">' +
+    '<style>body{margin:0;background:#0a0a0a;color:#fff;font-family:Montserrat,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#ccff01}</style></head>' +
+    '<body><p>Opening the trip… <a href="' + escH(target) + '">Tap here if nothing happens</a></p><script>location.replace(' + JSON.stringify(target).replace(/</g, '\\u003c') + ')</script></body></html>';
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); res.end(html);
 }
 
 http.createServer(async (req, res) => {

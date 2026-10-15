@@ -665,11 +665,41 @@
   }
 
   function openShare() {
-    var link = shareLink(), text = MM.planText(plan, app.state, app.cur) + '\n\n' + link;
+    var link = shareLink(), text = function (l) { return MM.planText(plan, app.state, app.cur) + '\n\n' + l; };
     openModal('<div class="modal__hd"><div><div class="over">Share</div><h2 class="disp">Send it to the group chat.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
       '<p style="font-weight:500">This link opens your exact trip, ready to edit. Perfect for getting your mates to say yes.</p>' +
+      (C.SHARE_ENDPOINT ? '<div class="ogprev" id="ogprev" aria-hidden="true"><canvas id="ogc" width="1200" height="630"></canvas><span>This is what your mates see in the chat</span></div>' : '') +
       '<div class="sharebox"><input class="input" id="sharelink" readonly value="' + esc(link) + '" aria-label="Share link"><button class="btn btn--sm" data-act="copylink" type="button">Copy</button></div>' +
-      '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><a class="btn btn--sm btn--pink" href="https://wa.me/?text=' + encodeURIComponent(text) + '" target="_blank" rel="noopener">Share on WhatsApp</a><button class="btn btn--sm btn--paper" data-act="story" type="button">Make a story card</button></div></div>');
+      '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><a class="btn btn--sm btn--pink" id="sharewa" href="https://wa.me/?text=' + encodeURIComponent(text(link)) + '" target="_blank" rel="noopener">Share on WhatsApp</a><button class="btn btn--sm btn--paper" data-act="story" type="button">Make a story card</button><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan it with mates</button></div>' +
+      '<div class="meetup"><span class="over">Travelling separately from a mate?</span><p>Paste their trip link and see where and when you cross.</p><div class="sharebox"><input class="input" id="meetin" placeholder="Paste your mate\'s trip link" aria-label="Your mate\'s trip link"><button class="btn btn--sm" data-act="meetgo" type="button">Check</button></div><div id="meetout" aria-live="polite"></div></div></div>', function (m) {
+        if (!C.SHARE_ENDPOINT) return;
+        var cv = $('#ogc', m);
+        MM.drawCard(cv, plan, app.state, app.cur).then(function () {
+          var img = ''; try { img = cv.toDataURL('image/jpeg', 0.84); } catch (e) { /* tainted canvas: share without an image */ }
+          return fetch(C.SHARE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: MM.encodeState(app.state), img: img }) });
+        }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (d) {
+          var short = (C.SITE_URL ? C.SITE_URL.replace(/\/$/, '') : location.origin) + d.path, inp = $('#sharelink', m), wa = $('#sharewa', m);
+          if (inp) inp.value = short; if (wa) wa.href = 'https://wa.me/?text=' + encodeURIComponent(text(short));
+          track('share_short');
+        }).catch(function () { /* the long link still works */ });
+      });
+  }
+  // meet-up: compare this trip with a mate's link (long #/build/ link or a short /t/ link)
+  function meetCheck() {
+    var raw = ($('#meetin') || {}).value || '', out = $('#meetout'); if (!out) return;
+    var say = function (h) { out.innerHTML = h; };
+    var mBuild = raw.match(/#\/build\/([^\s]+)/), mShort = raw.match(/\/t\/([a-z0-9]{7})/);
+    var got = mBuild ? Promise.resolve(decodeURIComponent(mBuild[1])) : mShort && C.SHARE_ENDPOINT ? fetch(C.SHARE_ENDPOINT + '/' + mShort[1]).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (d) { return d.state; }) : Promise.reject(0);
+    got.then(function (enc) {
+      var theirs = MM.decodeState(enc); if (!theirs.items || !theirs.items.length) throw 0;
+      var o = MM.overlap(app.state, theirs), tp = MM.plan(theirs);
+      var h = '<p class="fine">Their trip: ' + esc(MM.routeLine(tp)) + (theirs.start ? '' : ' (no start date yet)') + '</p>';
+      if (o.ranges.length) h += '<ul class="meets">' + o.ranges.map(function (r) { return '<li class="hit">You\'re both in <b>' + esc(P[r.p].n) + '</b> ' + esc(r.label) + '. Same hostel?</li>'; }).join('') + '</ul>';
+      else if (o.near && o.near.length) h += '<ul class="meets">' + o.near.map(function (n) { return '<li>You just miss each other in <b>' + esc(P[n.p].n) + '</b> (you ' + esc(n.a) + ', them ' + esc(n.b) + '). Shift ' + plural(n.gap, 'day') + ' and you\'d meet.</li>'; }).join('') + '</ul>';
+      else if (!o.dated && o.shared.length) h += '<ul class="meets"><li>You both go to <b>' + esc(o.shared.map(function (p) { return P[p].n; }).join(', ')) + '</b>. ' + (app.state.start ? 'Ask them to add a start date' : 'Add your start date') + ' to see if you overlap.</li></ul>';
+      else h += '<ul class="meets"><li class="miss">Your trips don\'t cross this time.</li></ul>';
+      say(h); track('meetup_check', { hit: o.ranges.length > 0 });
+    }).catch(function () { say('<p class="fine">That doesn\'t look like a Mad Monkey trip link. Ask your mate to tap Share in their builder and send you the link.</p>'); });
   }
   function openStory() {
     openModal('<div class="modal__hd"><div><div class="over">Story card</div><h2 class="disp">Post the route.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd"><div class="story"><canvas id="storyc" width="1080" height="1920" aria-label="Your route as a story image"></canvas><div style="display:flex;flex-direction:column;gap:var(--s-3)"><p style="font-weight:500">1080 × 1920, made for Instagram + TikTok stories. Tag <b>@madmonkeyhostels</b> and say where you\'re headed.</p><button class="btn btn--pink" data-act="dlstory" type="button">Download PNG</button></div></div></div>', function (m) {
@@ -747,7 +777,8 @@
       case 'story': openStory(); break;
       case 'print': app.open.days = true; refreshBuilder(); setTimeout(function () { window.print(); }, 150); break;
       case 'copytext': copy(MM.planText(plan, app.state, app.cur) + '\n\n' + shareLink()).then(function (ok) { toast(ok ? 'Copied. Paste it in the chat' : 'Couldn\'t copy: select and copy manually'); }); break;
-      case 'copylink': copy(shareLink()).then(function (ok) { toast(ok ? 'Link copied' : 'Couldn\'t copy'); }); break;
+      case 'meetgo': meetCheck(); break;
+      case 'copylink': copy(($('#sharelink') || {}).value || shareLink()).then(function (ok) { toast(ok ? 'Link copied' : 'Couldn\'t copy'); }); break;
       case 'copylead': copy(app._lastLead ? JSON.stringify(app._lastLead, null, 2) : '').then(function (ok) { toast(ok ? 'Lead card copied' : 'Couldn\'t copy'); }); break;
       case 'dlstory': { var cv = $('#storyc'); cv.toBlob(function (b) { var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'my-mad-monkey-route.png'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000); track('story_dl'); }, 'image/png'); break; }
     }
