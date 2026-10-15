@@ -726,6 +726,60 @@
   }
   MM.generate = generate;
 
+  /* ============================================================
+     DON'T MISS — catch the good stuff a guest has skipped
+     1. a hostel their chosen transport literally passes through
+     2. a hostel that is a small detour between two stops
+     3. the standout activity at a stop they're already visiting
+     Returns [{k, kind:'place'|'act', ...}] best first; the UI shows a few and lets them dismiss.
+     ============================================================ */
+  function missed(state, off) {
+    off = off || {};
+    var pl = plan(state), out = [], inTrip = {};
+    pl.places.forEach(function (p) { inTrip[p] = 1; });
+    if (!pl.places.length) return out;
+    pl.legs.forEach(function (l) {
+      var A = P()[l.from], B = P()[l.to], seen = {};
+      // 1. you go straight through it
+      l.chosen.route.nodes.slice(1, -1).forEach(function (n) {
+        var X = P()[n]; if (!X || X.partner || inTrip[n] || seen[n]) return; seen[n] = 1;
+        out.push({ k: 'via:' + n, kind: 'place', p: n, after: l.index, rank: 0, extraH: 0,
+          why: 'Your ' + l.chosen.modeLabel.toLowerCase() + ' from ' + A.n + ' to ' + B.n + ' goes right through ' + X.n + '.', pitch: X.hook });
+      });
+      // 2. a short detour
+      var dAB = hav(A.ll, B.ll);
+      Object.keys(P()).forEach(function (n) {
+        var X = P()[n]; if (X.partner || inTrip[n] || seen[n] || n === l.from || n === l.to) return;
+        if (hav(A.ll, X.ll) + hav(X.ll, B.ll) > dAB * 1.35 + 60) return;
+        var r1 = route(l.from, n, state.pref || 'balanced'), r2 = route(n, l.to, state.pref || 'balanced'); if (!r1 || !r2) return;
+        var extra = round1(r1.h + r2.h - l.h); if (extra > 5) return;
+        seen[n] = 1;
+        out.push({ k: 'near:' + n, kind: 'place', p: n, after: l.index, rank: 1 + Math.max(0, extra) / 10, extraH: Math.max(0, extra),
+          why: X.n + ' is on your way from ' + A.n + ' to ' + B.n + (extra > 0.5 ? ', about ' + Math.round(extra) + ' extra hour' + (Math.round(extra) === 1 ? '' : 's') + ' of travel.' : ', barely any extra travel.'), pitch: X.hook });
+      });
+    });
+    // 3. the standout at a stop you're already at
+    pl.segs.forEach(function (s, i) {
+      if (s.kind !== 'stop') return;
+      var dm = MM.dontMiss(s.p); if (!dm) return;
+      var picked = s.acts.some(function (a) { return a.id === dm.act.id || (dm.act.multi && a.multi && a.n.split(' ')[0] === dm.act.n.split(' ')[0]); });
+      if (picked) return;
+      out.push({ k: 'act:' + s.p, kind: 'act', seg: i, p: s.p, act: dm.act.id, rank: 0.5, extraD: dm.act.multi ? dm.act.multi.n : 0,
+        why: 'You are in ' + P()[s.p].n + ' and have not added this yet.', pitch: dm.pitch });
+    });
+    // price each suggestion: what it adds to days and total
+    var base = pl.totals;
+    out.forEach(function (x) {
+      var st = JSON.parse(JSON.stringify(state));
+      if (x.kind === 'place') st.items.splice(x.after + 1, 0, { kind: 'stop', p: x.p, n: P()[x.p].min, acts: [] });
+      else st.items[x.seg].acts = st.items[x.seg].acts.concat([x.act]);
+      st.legPick = {};
+      var t = plan(st).totals; x.dDays = t.days - base.days; x.dCost = t.total - base.total;
+    });
+    return out.filter(function (x) { return !off[x.k]; }).sort(function (a, b) { return a.rank - b.rank; });
+  }
+  MM.missed = missed;
+
 
   /* ============================================================
      GUESTS GO NEXT — ranked from Mad Monkey's own products

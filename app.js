@@ -9,7 +9,7 @@
   var root = document.getElementById('app'), modalRoot = document.getElementById('modal-root'), toastRoot = document.getElementById('toast-root');
   var P = MM.PLACES;
 
-  var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, focus: [], open: {}, meta: { ref: '', from: '' } };
+  var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, focus: [], open: {}, nmOff: {}, meta: { ref: '', from: '' } };
   var plan = null;
   app.views = {}; app.passport = 'gb'; app.recoDays = 14; app.auto = false; app.pv = []; app.pm = []; app.pbudget = null;
 
@@ -248,6 +248,7 @@
     var y = window.scrollY; plan = MM.plan(app.state); if (app.fareHook) app.fareHook(plan);
     var panel = $('#bpanel'); if (!panel) return;
     panel.innerHTML = panelHTML(plan);
+    missToast();
     $('#regions').innerHTML = '<button type="button" data-focus="" aria-pressed="' + !app.focus.length + '">Everywhere</button>' + Object.keys(MM.COUNTRIES).map(function (c) { return '<button type="button" data-focus="' + c + '" aria-pressed="' + (app.focus.indexOf(c) > -1) + '">' + MM.COUNTRIES[c].n + '</button>'; }).join('');
     var t = plan.totals;
     $('#mstats').innerHTML = t.days ? '<span class="chip"><b>' + t.days + '</b> days</span><span class="chip"><b>' + t.stops + '</b> stops</span><span class="chip"><b>' + plan.countries.length + '</b> ' + (plan.countries.length === 1 ? 'country' : 'countries') + '</span><span class="chip"><b>' + plan.km.toLocaleString('en-GB') + '</b> km</span>' : '';
@@ -292,6 +293,7 @@
     }
 
     h += timelineHTML(pl);
+    h += missHTML();
     /* add bar */
     var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
     h += '<div class="addbar"><div class="addbar__row"><div class="sel-wrap"><select class="select" id="addsel" aria-label="Add a stop"><option value="">+ Add a stop…</option>' +
@@ -363,6 +365,29 @@
         (on ? '<span class="pill pill--sm">In your trip</span>' : '<button class="btn btn--sm" data-act="usereco" data-i="' + i + '" type="button">Use this</button>') + '</div>';
     }).join('');
     return h + '<p class="fine">Same engine as the quiz: it scores every hostel for your vibe, must-dos, month and budget, then routes the real buses, boats and flights. Change anything and it re-plans, until you edit a stop by hand.</p></div>';
+  }
+
+  /* ---------- don't miss: good stuff the guest has skipped ---------- */
+  function missList() { try { return MM.missed(app.state, app.nmOff); } catch (e) { return []; } }
+  function missHTML() {
+    var list = missList(); app._miss = list; if (!list.length) return '';
+    var show = list.slice(0, app.open.missall ? 8 : 3);
+    return '<section class="miss" aria-label="Don\'t miss"><div class="miss__hd"><span class="miss__tag">Don\'t miss</span><span class="miss__sub">The crew spotted ' + (list.length === 1 ? 'something' : list.length + ' things') + ' you went past</span></div>' +
+      show.map(function (x) {
+        var isP = x.kind === 'place', a = isP ? null : MM.ACTS[x.act], img = isP ? MM.hostelImg(x.p) : (MM.actImg(a) || MM.hostelImg(x.p));
+        var title = isP ? P[x.p].n : a.n, cost = (x.dDays > 0 ? '+' + x.dDays + (x.dDays === 1 ? ' day' : ' days') + ' · ' : '') + (x.dCost > 0 ? '+' + money(x.dCost) : a && a.usd == null ? 'Pay on the day' : 'No extra cost');
+        return '<div class="miss__row" data-c="' + P[x.p].c + '">' + photo(img) + '<div class="miss__bd"><b>' + esc(title) + '</b><p class="miss__why">' + esc(x.why) + '</p><p class="miss__pitch">' + esc(x.pitch) + '</p>' +
+          '<div class="miss__ft"><span class="miss__cost">' + cost + '</span><button class="btn btn--sm btn--pink" type="button" data-act="' + (isP ? 'nmadd' : 'nmact') + '" data-k="' + esc(x.k) + '">' + (isP ? 'Add ' + esc(P[x.p].n) : 'Add it') + '</button>' +
+          '<button class="miss__no" type="button" data-act="nmoff" data-k="' + esc(x.k) + '">Not for me</button></div></div></div>';
+      }).join('') +
+      (list.length > 3 ? '<button class="miss__more" type="button" data-act="toggle" data-k="missall">' + (app.open.missall ? 'Show fewer' : 'Show ' + (list.length - 3) + ' more') + '</button>' : '') + '</section>';
+  }
+  // after an edit, flag anything newly skipped once, so it doesn't go unnoticed
+  function missToast() {
+    var now = {}; (app._miss || []).forEach(function (x) { now[x.k] = x; });
+    var prev = app._missSeen; app._missSeen = now; if (!prev) return;
+    var fresh = Object.keys(now).filter(function (k) { return !prev[k] && now[k].kind === 'place'; })[0];
+    if (fresh) { var w = now[fresh].why.replace(/\.$/, ''); toast('Heads up: ' + w.charAt(0).toLowerCase() + w.slice(1) + '. Take a look below.'); }
   }
 
   function nextBar(fromId, title) {
@@ -675,6 +700,14 @@
       case 'swapallin': { var id2 = el.getAttribute('data-id'), tr = MM.ALL_IN.filter(function (x) { return x.id === id2; })[0], inTrip = {}; tr.stops.forEach(function (st) { inTrip[st.p] = 1; }); mutate(function (s2) { var extras = s2.items.filter(function (it) { return it.kind === 'stop' && !inTrip[it.p]; }); s2.items = [{ kind: 'allin', trip: id2 }].concat(extras); }); track('swap_allin', { id: id2 }); break; }
       /* builder */
       case 'addplace': addStop(el.getAttribute('data-p')); break;
+      case 'nmadd': case 'nmact': {
+        var nk = el.getAttribute('data-k'), nx = (app._miss || []).filter(function (x) { return x.k === nk; })[0]; if (!nx) break;
+        if (nx.kind === 'place') mutate(function (s2) { s2.items.splice(nx.after + 1, 0, stopFor(nx.p, P[nx.p].min)); s2.legPick = {}; });
+        else mutate(function (s2) { var it = s2.items[nx.seg]; if (it && it.acts.indexOf(nx.act) < 0) it.acts.push(nx.act); });
+        track('miss_add', { k: nk }); toast(nx.kind === 'place' ? P[nx.p].n + ' added to your trip' : 'Added to ' + P[nx.p].n);
+        break;
+      }
+      case 'nmoff': { app.nmOff[el.getAttribute('data-k')] = 1; store('mm-nmoff', app.nmOff); track('miss_no', { k: el.getAttribute('data-k') }); refreshBuilder(); break; }
       case 'nights': mutate(function (s2) { var it = s2.items[i]; it.n = Math.max(1, Math.min(30, it.n + (+el.getAttribute('data-d')))); }); break;
       case 'move': { var d = +el.getAttribute('data-d'), j = i + d; if (j >= 0 && j < S.items.length) mutate(function (s2) { var tmp = s2.items[i]; s2.items[i] = s2.items[j]; s2.items[j] = tmp; s2.legPick = {}; }); break; }
       case 'remove': mutate(function (s2) { s2.items.splice(i, 1); s2.legPick = {}; }); break;
@@ -740,6 +773,7 @@
   /* ---------- boot ---------- */
   (function boot() {
     var q = new URLSearchParams(location.search); app.meta.ref = (q.get('ref') || q.get('r') || '').slice(0, 40); app.meta.from = P[q.get('from')] ? q.get('from') : '';
+    app.nmOff = store('mm-nmoff') || {};
     var pp2 = store('mm-passport'); if (pp2) app.passport = pp2;
     var sc = store('mm-cur'); if (sc === 'GBP' || sc === 'USD') app.cur = sc;
     $$('[data-cur]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-cur') === app.cur)); });

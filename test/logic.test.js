@@ -219,6 +219,19 @@ profiles.forEach(function (pp) {
   MM.FARES = {};
 })();
 
+/* ---------- don't miss ---------- */
+(function () {
+  var mk = function (ps) { return { items: ps.map(function (p) { return { kind: 'stop', p: p, n: 3, acts: [] }; }), start: '', pref: 'balanced', legPick: {}, fund: 18, crew: 0, budget: 0 }; };
+  var m = MM.missed(mk(['siem-reap', 'kampot']));
+  ok("don't miss: a hostel the bus drives through is flagged first", m[0] && m[0].k === 'via:phnom-penh' && m[0].after === 0 && m[0].dDays > 0);
+  ok("don't miss: the standout activity at a stop is suggested", m.some(function (x) { return x.k === 'act:siem-reap' && x.dCost > 0; }));
+  ok("don't miss: dismissed items stay hidden", !MM.missed(mk(['siem-reap', 'kampot']), { 'via:phnom-penh': 1 }).some(function (x) { return x.k === 'via:phnom-penh'; }));
+  ok("don't miss: Bali to the Gilis suggests Nusa Lembongan on the way", MM.missed(mk(['uluwatu', 'gili-trawangan'])).some(function (x) { return x.k === 'near:nusa-lembongan'; }));
+  var withIt = mk(['siem-reap']); withIt.items[0].acts = [MM.dontMiss('siem-reap').act.id];
+  ok("don't miss: nothing nagging once you've added it", !MM.missed(withIt).some(function (x) { return x.k === 'act:siem-reap'; }));
+  ok('every hostel has a working standout', Object.keys(MM.DONT_MISS).every(function (p) { return MM.dontMiss(p); }));
+})();
+
 /* ---------- text output ---------- */
 var txt = MM.planText(tt, st([]), 'USD');
 ok('plain-text itinerary mentions every stop and the total', /Hanoi/.test(txt) && /Hoi An/.test(txt) && /est\./.test(txt));

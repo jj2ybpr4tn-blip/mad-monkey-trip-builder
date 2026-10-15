@@ -240,6 +240,40 @@
     { date: '2026-12-23', n: 'Ha Giang Loop Christmas special', at: ['hanoi'] }
   ];
 
+  /* ---------------- don't miss ----------------
+     One standout per hostel: the thing guests regret skipping. Used by the "you skipped this" nudges.
+     Matched against the end of the activity id. Judgement, not booking data. */
+  MM.DONT_MISS = {
+    'hanoi': ['ha-giang-loop-tour-3d2n-easy-rider', 'The Ha Giang Loop. Ask anyone who has done Vietnam what the best bit was.'],
+    'hoi-an': ['sunset-river-cruise', 'The old town on the water as the lanterns come on.'],
+    'luang-prabang': ['kuang-si-waterfall', 'Kuang Si. Turquoise pools you can swim in, 45 minutes out of town.'],
+    'vang-vieng': ['vang-vieng-tipsy-tubing', 'Tubing is the reason Vang Vieng is famous. $7.'],
+    'bangkok': ['old-town-tour-markets-temples-canals', 'Temples, markets and canals in one go, with people who know the shortcuts.'],
+    'chiang-mai': ['elephant-sanctuary-bamboo-rafting', 'An ethical elephant sanctuary, then bamboo rafting home.'],
+    'pai': ['sunset-at-pai-canyon-two-huts', 'Sunset at Pai Canyon. Everyone in town ends up here.'],
+    'phuket': ['phi-phi-islands-day-trip', 'Phi Phi. The islands from every Thailand poster.'],
+    'phnom-penh': ['s21-and-killing-fields-tour', 'S21 and the Killing Fields. Hard, important, unforgettable.'],
+    'siem-reap': ['sunrise-angkor-wat-temple-tour', 'Sunrise at Angkor Wat. Set the alarm, it is worth it.'],
+    'kampot': ['bokor-hill-station-day-trip', 'Bokor Mountain: abandoned casino, jungle roads, views to the sea.'],
+    'koh-rong': ['beach-fire-show-bbq', 'Beach BBQ and fire show. The best night on the island.'],
+    'koh-sdach': ['island-hopping-sunset-cruise', 'Island hopping into sunset across the archipelago.'],
+    'uluwatu': ['mt-batur-sunrise-trekking', 'Climb Mt Batur in the dark, watch the sun come up over Bali.'],
+    'nusa-lembongan': ['island-hopping-penida', 'Nusa Penida: Kelingking Beach and manta rays in one day.'],
+    'gili-trawangan': ['snorkeling-adventure', 'Snorkel with turtles. They are everywhere off the Gilis.'],
+    'kuta-lombok': ['mt-rinjani-summit-trek-2-days-1-night', 'Rinjani: two days, a crater lake and the best view in Indonesia.'],
+    'manila': ['intramuros-binondo-food-walk', 'Old Manila and the oldest Chinatown in the world, by the mouthful.'],
+    'nacpan-beach': ['tour-m-island-hopping', 'El Nido island hopping: lagoons, limestone and white sand.'],
+    'panglao': ['dolphin-watching-and-island-hopping-tour-balicasag-and-virgin-island', 'Dolphins at dawn, then Balicasag and Virgin Island.'],
+    'dumaguete': ['apo-island-turtle-snorkel-day', 'Apo Island: swim with sea turtles on one of the best reefs in Asia.'],
+    'siquijor': ['scooter-loop-cliff-jumps-falls', 'Scooter loop of the island with cliff jumps and waterfalls.'],
+    'siargao': ['tri-island-tour', 'Naked, Daku and Guyam islands. The Siargao day out.']
+  };
+  MM.dontMiss = function (placeId) {
+    var d = MM.DONT_MISS[placeId]; if (!d) return null;
+    var a = MM.actsAt(placeId).filter(function (x) { return x.id === d[0] || x.id.slice(-d[0].length) === d[0]; })[0];
+    return a ? { act: a, pitch: d[1] } : null;
+  };
+
   /* ---------------- helpers ---------------- */
   MM.actsAt = function (placeId) { return (MM.ACT_BY_PLACE[placeId] || []).map(function (i) { return MM.ACTS[i]; }); };
   MM.actUrl = function (a) { return a.slug ? 'https://madmonkeyhostels.com/tours-events/' + a.slug : null; };
