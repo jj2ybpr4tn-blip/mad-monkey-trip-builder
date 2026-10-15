@@ -596,14 +596,35 @@
   }
   function closeModal() { modalRoot.innerHTML = ''; }
 
+  /* ---------- contact: guest picks ONE way for the crew to reach them ---------- */
+  function contactPick(q) {
+    var via = q.via === 'email' || (!q.via && q.email && !q.whatsapp) ? 'email' : 'whatsapp';
+    return '<div class="field full cpick" data-via="' + via + '"><span class="lbl">How should the crew reach you?</span>' +
+      '<div class="seg" role="radiogroup" aria-label="Contact method"><button type="button" role="radio" data-via="whatsapp" aria-checked="' + (via === 'whatsapp') + '" aria-pressed="' + (via === 'whatsapp') + '">WhatsApp</button><button type="button" role="radio" data-via="email" aria-checked="' + (via === 'email') + '" aria-pressed="' + (via === 'email') + '">Email</button></div>' +
+      '<input type="hidden" name="via" value="' + via + '">' +
+      '<input class="input cpick__wa" name="whatsapp" type="tel" autocomplete="tel" placeholder="WhatsApp number with country code, e.g. +44 7700 900123" aria-label="WhatsApp number" value="' + esc(q.whatsapp || '') + '">' +
+      '<input class="input cpick__em" name="email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email" value="' + esc(q.email || '') + '"></div>';
+  }
+  // returns { via, email, whatsapp } with only the chosen one filled, or { err }
+  function readContact(v) {
+    if (v.via === 'email') return /^\S+@\S+\.\S+$/.test(v.email || '') ? { via: 'email', email: v.email, whatsapp: '' } : { err: 'That email doesn\'t look right.' };
+    var digits = (v.whatsapp || '').replace(/[^\d]/g, '');
+    return digits.length >= 8 && digits.length <= 15 ? { via: 'whatsapp', email: '', whatsapp: (/^\s*\+/.test(v.whatsapp) ? '+' : '') + digits } : { err: 'Pop in your WhatsApp number with the country code, e.g. +44.' };
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.cpick [data-via]'); if (!b) return;
+    var box = b.closest('.cpick'), via = b.getAttribute('data-via'); box.setAttribute('data-via', via); box.querySelector('[name=via]').value = via;
+    box.querySelectorAll('.seg [data-via]').forEach(function (x) { var on = x === b; x.setAttribute('aria-pressed', on); x.setAttribute('aria-checked', on); });
+    var inp = box.querySelector(via === 'email' ? '.cpick__em' : '.cpick__wa'); if (inp) inp.focus();
+  });
+
   function openLead() {
     if (!plan || !plan.totals.days) { toast('Add a stop first'); return; }
     var q = store('mm-lead') || {};
     openModal('<div class="modal__hd"><div><div class="over">Almost there</div><h2 class="disp">Send it to the crew.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div>' +
       '<div class="modal__bd"><p style="font-weight:500">A real person from the crew gets your whole plan: stops, dates, transport choices and what you\'re keen to do. They\'ll pick it up from here.</p>' +
       '<form id="leadf" novalidate><div class="form2"><div class="field"><label for="lf-name">First name</label><input class="input" id="lf-name" name="name" autocomplete="given-name" required value="' + esc(q.name || '') + '"></div>' +
-      '<div class="field"><label for="lf-email">Email</label><input class="input" id="lf-email" name="email" type="email" autocomplete="email" required value="' + esc(q.email || '') + '"></div>' +
-      '<div class="field"><label for="lf-wa">WhatsApp (best way to reach you)</label><input class="input" id="lf-wa" name="whatsapp" type="tel" autocomplete="tel" placeholder="+44 …" value="' + esc(q.whatsapp || '') + '"></div>' +
+      contactPick(q) +
       '<div class="field"><label for="lf-from">Where are you now?</label><input class="input" id="lf-from" name="from" placeholder="city or country" value="' + esc(q.from || '') + '"></div>' +
       '<div class="field"><label for="lf-size">Travelling as</label><select class="select" id="lf-size" name="size"><option value="1">Just me</option><option value="2">2 of us</option><option value="3">3 of us</option><option value="4">4 of us</option><option value="6">5–6 of us</option><option value="8">7+ of us</option></select></div>' +
       '<div class="field"><label for="lf-flex">Dates</label><select class="select" id="lf-flex" name="flex"><option value="fixed">These dates, locked</option><option value="flex">Flexible by a week or so</option><option value="open">Still deciding</option></select></div>' +
@@ -620,10 +641,10 @@
     var err = $('#leaderr'), show = function (m) { err.style.display = 'grid'; $('span', err).textContent = m; };
     if (v.website) return;                                               // honeypot
     if (!v.name) return show('Pop your first name in.');
-    if (!/^\S+@\S+\.\S+$/.test(v.email || '')) return show('That email doesn\'t look right.');
+    var ct = readContact(v); if (ct.err) return show(ct.err);
     if (!v.consent) return show('Tick the box so we\'re allowed to reply.');
-    store('mm-lead', { name: v.name, email: v.email, whatsapp: v.whatsapp, from: v.from });
-    var payload = MM.leadPayload(app.state, plan, { name: v.name, email: v.email, whatsapp: v.whatsapp || '', from: v.from || '', partySize: +v.size || 1, dates: v.flex, notes: v.notes || '', consent: true },
+    store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
+    var payload = MM.leadPayload(app.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: +v.size || 1, dates: v.flex, notes: v.notes || '', consent: true },
       { ref: app.meta.ref, fromHostel: app.meta.from, link: shareLink() });
     track('lead', { stops: plan.places.length, days: plan.totals.days });
     var btn = $('button[type=submit]', f); btn.disabled = true; btn.textContent = 'Sending…';
@@ -767,7 +788,7 @@
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modalRoot.firstChild) closeModal(); });
 
-  app.util = { esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
+  app.util = { contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
   window.addEventListener('hashchange', route);
 
   /* ---------- boot ---------- */

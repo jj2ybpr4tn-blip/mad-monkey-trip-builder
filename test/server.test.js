@@ -22,7 +22,12 @@ const done = (code) => { srv.kill(); fs.rmSync(DIR, { recursive: true, force: tr
   const l = await post('/api/leads', lead());
   ok('accepts a lead, issues an MM- reference + hold', l.s === 200 && /^MM-[A-Z0-9]{6}$/.test(l.b.ref) && l.b.hold && l.b.hold.until);
   ok('refuses a lead without consent', (await post('/api/leads', lead({ contact: { name: 'x', email: 'x@x.io' } }))).s === 400);
-  ok('refuses a bad email', (await post('/api/leads', lead({ contact: { name: 'x', email: 'nope', consent: true } }))).s === 400);
+  ok('refuses a bad email with no WhatsApp', (await post('/api/leads', lead({ contact: { name: 'x', email: 'nope', consent: true } }))).s === 400);
+  { const r = await post('/api/leads', lead({ contact: { name: 'Wa', via: 'whatsapp', whatsapp: '+44 7700 900123', consent: true } }));
+    ok('accepts WhatsApp only, no email', r.s === 200 && r.b.ref); }
+  { const r = await post('/api/leads', lead({ contact: { name: 'Em', via: 'email', email: 'em@example.com', consent: true } }));
+    ok('accepts email only, no WhatsApp', r.s === 200 && r.b.ref); }
+  ok('refuses a lead with neither', (await post('/api/leads', lead({ contact: { name: 'x', consent: true } }))).s === 400);
   const ref = l.b.ref;
   ok('public status is readable by reference', (await j('/api/status?ref=' + ref)).b.status === 'submitted');
   ok('unknown reference is 404', (await j('/api/status?ref=MM-AAAAAA')).s === 404);
