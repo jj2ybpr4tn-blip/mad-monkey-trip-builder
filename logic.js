@@ -331,6 +331,18 @@
       beds += billable * P()[s.p].bed;
       s.acts.forEach(function (a) { if (a.usd == null) payDay++; else acts += a.usd; if (a.est) estAny = true; });
     });
+    // dated flights: once the guest has dates and a live fare feed has answered, price each flight at the lowest fare found for its day
+    out.days.forEach(function (d) { if (d.travel && d.date && !d.travel.date) d.travel.date = d.date.toISOString().slice(0, 10); });
+    if (MM.FARES) out.legs.forEach(function (l) {
+      if (!l.date) return;
+      var delta = 0, lo = 0, hi = 0, got = 0, fl = 0;
+      l.chosen.route.steps.forEach(function (s) {
+        if (s.e.m !== 'flight') return; fl++;
+        var f = !s.e.live && MM.FARES[s.from + '|' + s.to + '|' + l.date];
+        if (f && f.min != null) { got++; delta += f.min - s.e.u; lo += f.min; hi += f.max; }
+      });
+      if (got) { l.u = Math.max(0, Math.round(l.u + delta)); l.chosen.u = l.u; l.chosen.fare = l.fare = { min: Math.round(lo), max: Math.round(hi), n: got, of: fl, date: l.date }; }
+    });
     out.legs.forEach(function (l) { transport += l.u; });
     var diyDays = 0, blockDays = 0;
     segs.forEach(function (s) { if (s.kind === 'allin') blockDays += s.trip.days - 1; });

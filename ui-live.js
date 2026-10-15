@@ -31,6 +31,28 @@
     if (C.FLOW_ENDPOINT) jobs.push(get(C.FLOW_ENDPOINT).then(function (f) { if (MM.setFlow) MM.setFlow(f.rows || []); }).catch(function () {}));
     if (jobs.length) Promise.all(jobs).then(function () { if (A.rerender) A.rerender(); });
   }
+
+  /* ---------- dated flight fares ----------
+     With no dates the builder shows typical fares. Once the guest sets a start date, each flight
+     is looked up for its own day and priced at the lowest fare found. No feed or no answer: the
+     typical fare stays, quietly. */
+  MM.FARES = MM.FARES || {};
+  var asked = {}, farePending = 0, fareOff = !C.FARES_ENDPOINT, fareTimer = null;
+  A.fareHook = function (plan) {
+    if (fareOff || !plan || !plan.legs) return;
+    plan.legs.forEach(function (l) {
+      if (!l.date) return;
+      l.chosen.route.steps.forEach(function (s) {
+        if (s.e.m !== 'flight' || s.e.live) return;
+        var k = s.from + '|' + s.to + '|' + l.date; if (asked[k] || fareOff) return; asked[k] = 1; farePending++;
+        get(C.FARES_ENDPOINT + '?from=' + s.from + '&to=' + s.to + '&date=' + l.date).then(function (f) {
+          if (f && f.ok) MM.FARES[k] = f;
+        }).catch(function (e) { if (/503/.test(e.message)) fareOff = true; else delete asked[k]; }).then(function () {
+          farePending--; clearTimeout(fareTimer); fareTimer = setTimeout(function () { if (!farePending && Object.keys(MM.FARES).length && A.rerender) A.rerender(); }, 250);
+        });
+      });
+    });
+  };
   A.liveBoot = boot;
   boot();
 })();

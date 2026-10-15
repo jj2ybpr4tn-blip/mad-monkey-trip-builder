@@ -56,6 +56,8 @@ const done = (code) => { srv.kill(); fs.rmSync(DIR, { recursive: true, force: tr
   await Promise.all([1, 2, 3, 4, 5, 6].flatMap((i) => [patch(m1, { votes: { ['s' + i]: 'y' } }), patch(m2, { votes: { ['t' + i]: 'n' }, in: true })]));
   const gg = (await j('/api/groups/' + g.id)).b; ok('groups: 12 simultaneous votes all land', gg.members.find((x) => x.id === m1.id).votes && Object.keys(gg.members[0].votes).length === 6 && Object.keys(gg.members[1].votes).length === 6 && gg.members[1].in === true);
   await patch(m1, { votes: { 'bad key!': 'y', x: 'z', good: 'm' } }); ok('groups: invalid vote keys/values rejected', (await j('/api/groups/' + g.id)).b.members[0].votes.good === 'm' && !(await j('/api/groups/' + g.id)).b.members[0].votes['bad key!'] && !(await j('/api/groups/' + g.id)).b.members[0].votes.x);
+  /* dated fares: off without keys, and inputs are policed */
+  ok('fares: 503 when no provider keys are set', (await j('/api/fares?from=HAN&to=DAD&date=2099-01-01')).s === 503);
   /* events + funnel + limits */
   await post('/api/event', { n: 'door', p: { door: 'quiz' }, s: 'abc' }); await post('/api/event', { n: 'view', s: 'abc' });
   const fu = (await j('/api/admin/funnel', { headers: adm })).b; ok('funnel counts events, sessions and doors', fu.byName.door === 1 && fu.sessions.view === 1 && fu.doors.quiz === 1);
