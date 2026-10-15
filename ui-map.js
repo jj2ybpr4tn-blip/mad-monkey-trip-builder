@@ -203,7 +203,7 @@
       var lb = svg.querySelectorAll('.m-lbl'); for (var j = 0; j < lb.length; j++) lb[j].setAttribute('font-size', (15 * u).toFixed(2));
       var cs = gRoute.querySelectorAll('[data-w]'); for (var k = 0; k < cs.length; k++) cs[k].setAttribute('stroke-width', (+cs[k].getAttribute('data-w') * u).toFixed(2));
       var ms = gRoute.querySelectorAll('.m-mode'); for (var m2 = 0; m2 < ms.length; m2++) { var mp = ms[m2].getAttribute('data-pos').split(','); ms[m2].setAttribute('transform', 'translate(' + mp[0] + ' ' + mp[1] + ') scale(' + u.toFixed(4) + ')'); }
-      cluster();
+      cluster(); declutter();
     }
     // merge hostels that would overlap on screen into one numbered bubble; selected stops never merge
     function cluster() {
@@ -222,6 +222,19 @@
         n++;
       });
       for (; n < clPool.length; n++) clPool[n].style.display = 'none';
+    }
+    // hide any stop label that would sit on another label or pin (the numbered pin always stays)
+    function declutter() {
+      var order = Object.keys(st).filter(function (id) { return st[id].vis && st[id].el.style.display !== 'none'; }).sort(function (x, y) { return (+st[x].el.querySelector('.n').textContent || 99) - (+st[y].el.querySelector('.n').textContent || 99); });
+      var kept = [], pins = order.map(function (id) { var c = st[id].el.querySelector('circle'); return { id: id, r: c ? c.getBoundingClientRect() : null }; });
+      function hit(a, b) { return a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2; }
+      order.forEach(function (id) {
+        var nm = st[id].el.querySelector('.nm'); if (!nm) return; nm.style.visibility = '';
+        if (nm.style.display === 'none') return;
+        var r = nm.getBoundingClientRect(); if (!r.width) return;
+        var clash = kept.some(function (k) { return hit(r, k); }) || pins.some(function (p) { return p.id !== id && p.r && hit(r, p.r); });
+        if (clash) nm.style.visibility = 'hidden'; else kept.push(r);
+      });
     }
     function focusOn(ids) { manual = true; animateTo(viewBoxFor(routePx(ids, 130), aspect(), 0.35)); }
     function animateTo(t) {

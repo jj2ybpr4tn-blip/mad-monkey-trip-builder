@@ -582,3 +582,11 @@ main{flex:1;display:flex;flex-direction:column}
   a{text-decoration:none;color:#000}
 }
 .quote--sm{margin:0 var(--s-3) var(--s-3);font-size:13px;padding:8px 12px}.quote--sm cite{font-size:10.5px;margin-top:3px}
+
+/* ---- polish pass: timeline + next-stop chips ---- */
+.tl{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.tl__seg{flex-shrink:0;min-width:max-content;padding:6px 12px}
+.tl__seg b{overflow:visible;text-overflow:clip}
+.nextbar .over{flex:0 0 100%;margin:0 0 2px}
+.nextchip{border-radius:18px;flex-direction:column;align-items:flex-start;gap:2px;padding:7px 14px}
+.nextchip .whytag{text-align:left}
