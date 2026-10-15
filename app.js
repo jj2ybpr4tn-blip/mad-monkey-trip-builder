@@ -267,6 +267,8 @@
   function panelHTML(pl) {
     var s = app.state, t = pl.totals, items = s.items, h = '';
     if (items.length) h += '<div class="print-head"><img src="assets/logo/mad-monkey-black.png" alt="Mad Monkey"><h1>' + esc(MM.routeLine(pl)) + '</h1><p>' + t.days + ' days · ' + plural(pl.countries.length, 'country', 'countries') + ' · about ' + money(t.total) + ' per person (estimate)' + (s.start ? ' · starting ' + U.fmtDate(U.parseDate(s.start)) : '') + '</p><p class="print-link">Open this trip: ' + esc(shareLink()) + '</p></div>';
+    var backG = store('mm-back-group');
+    if (backG && items.length) h += '<div class="backg"><span>Building your own route for the group?</span><a class="btn btn--sm btn--pink" href="#/group/' + esc(backG) + '" data-act="backg">Back to the group</a><button class="ideas__x" data-act="backgx" type="button">Dismiss</button></div>';
     /* summary */
     h += '<div class="bsum"><div class="bsum__top"><div><div class="over lime">Your trip</div><h2 class="disp" style="margin-top:6px">' + (items.length ? plural(t.days, 'day') + ' · ' + plural(pl.countries.length, 'country', 'countries') : 'Start anywhere') + '</h2>' +
       '<div class="bsum__route">' + (items.length ? esc(MM.routeLine(pl)) : 'Tap a hostel on the map, or pick a starter below.') + '</div></div>' +
@@ -721,6 +723,8 @@
       case 'swapallin': { var id2 = el.getAttribute('data-id'), tr = MM.ALL_IN.filter(function (x) { return x.id === id2; })[0], inTrip = {}; tr.stops.forEach(function (st) { inTrip[st.p] = 1; }); mutate(function (s2) { var extras = s2.items.filter(function (it) { return it.kind === 'stop' && !inTrip[it.p]; }); s2.items = [{ kind: 'allin', trip: id2 }].concat(extras); }); track('swap_allin', { id: id2 }); break; }
       /* builder */
       case 'addplace': addStop(el.getAttribute('data-p')); break;
+      case 'backg': store('mm-back-group', null); break;
+      case 'backgx': store('mm-back-group', null); refreshBuilder(); break;
       case 'nmadd': case 'nmact': {
         var nk = el.getAttribute('data-k'), nx = (app._miss || []).filter(function (x) { return x.k === nk; })[0]; if (!nx) break;
         if (nx.kind === 'place') mutate(function (s2) { s2.items.splice(nx.after + 1, 0, stopFor(nx.p, P[nx.p].min)); s2.legPick = {}; });

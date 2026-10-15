@@ -4,7 +4,8 @@
      • local   — localStorage + storage events. Works across tabs on ONE browser, so you can
                  see it live in demo, but real friends need the remote adapter.
      • remote  — set MM_CONFIG.GROUP_ENDPOINT. Contract in docs/GROUP.md.
-   Group shape: { id, trip:'<encodeState string>', organiser:{id,name}, created, members:[{id,name,in:bool,votes:{ 'i:place': 'y'|'m'|'n' }}] }
+   Group shape: { id, trip:'<encodeState>', alt:'<encodeState>'|'' (Route B), organiser:{id,name}, created,
+                  members:[{ id, name, in:bool, votes:{ 'i:place': 'y'|'m'|'n', route:'a'|'b' }, wants:['p:<place>'|'a:<actId>'], trip:'<their own route>' }] }
    ============================================================ */
 (function (r) {
   var MM = r.MM = r.MM || {};
@@ -36,9 +37,24 @@
     update: function (id, memberId, patch) {
       if (cfg()) return http('PATCH', '/groups/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(memberId), patch).then(function () { return G.get(id); });
       var g = localGet(id); if (!g) return Promise.reject(new Error('not found'));
-      g.members.forEach(function (m) { if (m.id === memberId) { if (patch.in != null) m.in = !!patch.in; if (patch.votes) for (var k in patch.votes) m.votes[k] = patch.votes[k]; } });
+      g.members.forEach(function (m) { if (m.id === memberId) { if (patch.in != null) m.in = !!patch.in; if (patch.votes) for (var k in patch.votes) m.votes[k] = patch.votes[k]; if (patch.wants) m.wants = patch.wants.slice(0, 24); if (patch.trip != null) m.trip = patch.trip; } });
       localSet(g); return Promise.resolve(g);
     },
+    // organiser-only: change the shared trip or the Route B option. orgKey is the organiser id saved on create.
+    setGroup: function (id, orgKey, patch) {
+      if (cfg()) return http('PATCH', '/groups/' + encodeURIComponent(id), Object.assign({ org: orgKey }, patch)).then(function () { return G.get(id); });
+      var g = localGet(id); if (!g) return Promise.reject(new Error('not found'));
+      if (patch.trip != null) g.trip = patch.trip; if (patch.alt != null) g.alt = patch.alt;
+      if (patch.clearRouteVotes) g.members.forEach(function (m) { delete m.votes.route; });
+      localSet(g); return Promise.resolve(g);
+    },
+    // ideas from the crew: [{ k:'p:pai'|'a:<actId>', who:[names] }], most wanted first
+    ideas: function (g) {
+      var by = {};
+      g.members.forEach(function (m) { (m.wants || []).forEach(function (k) { (by[k] = by[k] || []).push(m.name); }); });
+      return Object.keys(by).map(function (k) { return { k: k, who: by[k] }; }).sort(function (a, b) { return b.who.length - a.who.length; });
+    },
+    routeVotes: function (g) { var t = { a: 0, b: 0 }; g.members.forEach(function (m) { var v = m.votes.route; if (v === 'a' || v === 'b') t[v]++; }); return t; },
     // live updates: storage events for local, 5s polling for remote
     watch: function (id, cb) {
       var stop = false, t;
