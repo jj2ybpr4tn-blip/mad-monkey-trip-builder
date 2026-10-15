@@ -226,7 +226,16 @@ async function api(req, res, url) {
   let gm = p.match(/^\/groups\/([a-z0-9]+)(?:\/members(?:\/([a-z0-9]+))?)?$/);
   if (gm) {
     const g = groups.get()[gm[1]]; if (!g) return J(404, { error: 'not found' });
-    if (m === 'GET' && !/members/.test(p)) return J(200, g);
+    if (m === 'GET' && !/members/.test(p)) return J(200, { ...g, organiser: { name: g.organiser.name } });   // the organiser id is their key: never hand it out
+    if (m === 'PATCH' && !/members/.test(p)) {
+      const b = await readBody(req, 16384);
+      if (!b.org || b.org !== g.organiser.id) return J(403, { error: 'only the organiser can change the trip' });
+      const okState = (x) => typeof x === 'string' && x.length <= 6000;
+      if (b.trip != null) { if (!okState(b.trip) || !b.trip) return J(400, {}); g.trip = b.trip; }
+      if (b.alt != null) { if (!okState(b.alt)) return J(400, {}); g.alt = b.alt; }
+      if (b.clearRouteVotes) g.members.forEach((x) => { delete x.votes.route; });
+      groups.save(); return J(200, { ok: true });
+    }
     if (m === 'POST' && /\/members$/.test(p)) {
       if (g.members.length >= 30) return J(400, { error: 'group is full' });
       const b = await readBody(req, 2048), mem = { id: rid(8), name: clip(b.name, 40).trim() || 'Mate', in: false, votes: {} };
@@ -234,9 +243,14 @@ async function api(req, res, url) {
     }
     if (m === 'PATCH' && gm[2]) {
       const mem = g.members.find((x) => x.id === gm[2]); if (!mem) return J(404, {});
-      const b = await readBody(req, 4096);
+      const b = await readBody(req, 8192);
       if (b.in != null) mem.in = !!b.in;
-      if (b.votes && typeof b.votes === 'object') for (const [k, v] of Object.entries(b.votes)) if (/^[a-z0-9:_-]{1,60}$/i.test(k) && ['y', 'm', 'n'].includes(v)) mem.votes[k] = v;
+      if (b.votes && typeof b.votes === 'object') for (const [k, v] of Object.entries(b.votes)) {
+        if (k === 'route') { if (['a', 'b'].includes(v)) mem.votes.route = v; continue; }
+        if (/^[a-z0-9:_-]{1,60}$/i.test(k) && ['y', 'm', 'n'].includes(v)) mem.votes[k] = v;
+      }
+      if (Array.isArray(b.wants)) mem.wants = [...new Set(b.wants.filter((x) => typeof x === 'string' && /^[pa]:[a-z0-9-]{1,100}$/.test(x)))].slice(0, 24);
+      if (b.trip != null && typeof b.trip === 'string' && b.trip.length <= 6000) mem.trip = b.trip;
       groups.save(); return J(200, { ok: true });
     }
     return J(405, {});

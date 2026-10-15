@@ -6,6 +6,13 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8000"],
       "port": 8000
+    },
+    {
+      "name": "crew-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/server.mjs"],
+      "env": { "PORT": "8010", "DATA_DIR": "/tmp/mm-crew-test" },
+      "port": 8010
     }
   ]
 }

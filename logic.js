@@ -780,6 +780,41 @@
   }
   MM.missed = missed;
 
+  /* ============================================================
+     MEET-UPS — where two trips cross
+     With both start dates: the nights both people sleep in the same town, grouped into ranges.
+     Without dates: just the towns both trips include (with a nudge to add dates).
+     ============================================================ */
+  function nightsAt(state) {
+    var pl = plan(state), out = [];
+    pl.days.forEach(function (d) { if (d.date && d.loc && d.kind !== 'depart') out.push({ iso: d.date.toISOString().slice(0, 10), p: d.loc, date: d.date }); });
+    return { pl: pl, nights: out };
+  }
+  function overlap(a, b) {
+    var A = nightsAt(a), B = nightsAt(b), res = { dated: false, ranges: [], shared: [] };
+    A.pl.places.forEach(function (p) { if (B.pl.places.indexOf(p) > -1) res.shared.push(p); });
+    if (!a.start || !b.start) return res;
+    res.dated = true;
+    var bAt = {}; B.nights.forEach(function (n) { bAt[n.iso] = n.p; });
+    A.nights.forEach(function (n) {
+      if (bAt[n.iso] !== n.p) return;
+      var last = res.ranges[res.ranges.length - 1];
+      if (last && last.p === n.p && (n.date - last.to) === 86400000) { last.to = n.date; last.nights++; }
+      else res.ranges.push({ p: n.p, from: n.date, to: n.date, nights: 1 });
+    });
+    res.ranges.forEach(function (r) { r.label = fmtDate(r.from) + (r.nights > 1 ? ' – ' + fmtDate(r.to) : ''); });
+    // near misses: same town within 3 days of each other, for a "shift a day and you'd meet" nudge
+    res.near = [];
+    if (!res.ranges.length) A.nights.forEach(function (n) {
+      B.nights.forEach(function (m) {
+        var gap = Math.abs(n.date - m.date) / 86400000;
+        if (n.p === m.p && gap >= 1 && gap <= 3 && !res.near.some(function (x) { return x.p === n.p; })) res.near.push({ p: n.p, gap: Math.round(gap), a: fmtDate(n.date), b: fmtDate(m.date) });
+      });
+    });
+    return res;
+  }
+  MM.overlap = overlap;
+
 
   /* ============================================================
      GUESTS GO NEXT — ranked from Mad Monkey's own products
