@@ -590,3 +590,12 @@ main{flex:1;display:flex;flex-direction:column}
 .nextbar .over{flex:0 0 100%;margin:0 0 2px}
 .nextchip{border-radius:18px;flex-direction:column;align-items:flex-start;gap:2px;padding:7px 14px}
 .nextchip .whytag{text-align:left}
+
+/* ---- colour pass: builder ---- */
+/* season strip: prime = lime, wet = pink, fine = neutral (was a muddy olive) */
+.seas .s2 u{background:var(--ink-dim-on-black)}
+/* each stop wears its country colour, matching the timeline strip */
+.stopc[data-c=TH] .stopc__num{background:var(--c-TH)} .stopc[data-c=LA] .stopc__num{background:var(--c-LA)} .stopc[data-c=VN] .stopc__num{background:var(--c-VN)}
+.stopc[data-c=KH] .stopc__num{background:var(--c-KH)} .stopc[data-c=ID] .stopc__num{background:var(--c-ID)} .stopc[data-c=PH] .stopc__num{background:var(--c-PH);color:var(--paper)}
+.stopc[data-c=TH]{box-shadow:6px 6px 0 var(--c-TH)} .stopc[data-c=LA]{box-shadow:6px 6px 0 var(--c-LA)} .stopc[data-c=VN]{box-shadow:6px 6px 0 var(--c-VN)}
+.stopc[data-c=KH]{box-shadow:6px 6px 0 var(--c-KH)} .stopc[data-c=ID]{box-shadow:6px 6px 0 var(--c-ID)} .stopc[data-c=PH]{box-shadow:6px 6px 0 var(--c-PH)}
