@@ -134,7 +134,7 @@
       footer();
   }
   function footer() {
-    return '<footer class="foot"><div class="wrap"><p>Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares, activities are listed prices (or marked est.). The crew confirms live rates before you pay anything. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
+    return '<footer class="foot"><div class="wrap"><p>Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (or marked est.). The crew confirms live rates before you pay anything. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
   }
 
   /* ============================================================
@@ -245,7 +245,7 @@
 
   function refreshBuilder(opts) {
     if (app.view !== 'build') return;
-    var y = window.scrollY; plan = MM.plan(app.state);
+    var y = window.scrollY; plan = MM.plan(app.state); if (app.fareHook) app.fareHook(plan);
     var panel = $('#bpanel'); if (!panel) return;
     panel.innerHTML = panelHTML(plan);
     $('#regions').innerHTML = '<button type="button" data-focus="" aria-pressed="' + !app.focus.length + '">Everywhere</button>' + Object.keys(MM.COUNTRIES).map(function (c) { return '<button type="button" data-focus="' + c + '" aria-pressed="' + (app.focus.indexOf(c) > -1) + '">' + MM.COUNTRIES[c].n + '</button>'; }).join('');
@@ -322,7 +322,7 @@
     /* CTA */
     h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.</div>' +
       '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
-      '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares, activities are listed prices (est. where marked). The crew confirms live rates, dates and availability before you pay anything.</p></div>';
+      '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability before you pay anything.</p></div>';
     return h;
   }
 
@@ -489,7 +489,7 @@
     var h = '<div class="legc" id="leg' + leg.index + '"><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
     leg.options.forEach(function (o) {
       h += '<button class="legopt" type="button" data-act="leg" data-i="' + leg.index + '" data-k="' + o.key + '" aria-pressed="' + (o.key === leg.key) + '">' + legIcon(leg, o) +
-        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span></div><div class="tm">~' + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
+        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.fare ? '<i class="live-pill">fare for your date</i>' : o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span>' + (o.fare && o.fare.max > o.fare.min ? '<span class="nt">Fares that day: ' + money(o.fare.min) + ' to ' + money(o.fare.max) + '. We have used the lowest.</span>' : '') + '</div><div class="tm">' + (o.fare ? '' : '~') + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
     });
     h += '</div><button class="why" data-act="toggle" data-k="why' + leg.index + '" aria-expanded="' + whyOpen + '" type="button">Why this leg? <b>' + (whyOpen ? '−' : '+') + '</b></button>';
     if (whyOpen) h += '<div class="why__bd"><p><b>' + ex.verdict + '</b></p>' + (ex.lines.length ? ex.lines.map(function (l) { return '<p>' + l + '</p>'; }).join('') : '<p>This is the only sensible way to do it.</p>') + '</div>';
@@ -540,7 +540,7 @@
       var title = d.title, extra = '';
       if (d.kind === 'block') { var rr = routeLineFor(d.blockTrip, d._bk); title = 'ALL IN ' + d.blockTrip.n + (rr ? ' · ' + rr[1] : ''); if (rr && (d._bk === 1 || routeLineFor(d.blockTrip, d._bk - 1) !== rr)) extra = '<div class="note">' + esc(rr[2]) + '</div>'; }
       var travel = '';
-      if (d.travel && (d.kind === 'stay' || d.kind === 'move')) { var l = d.travel, c = l.chosen; travel = '<div class="trv">' + MM.modeIcon(c.main) + esc(P[l.from].n) + ' → ' + esc(P[l.to].n) + ' · ' + esc(c.modeLabel) + ' · ' + hours(c.h) + ' · ~' + money(c.u) + '</div>'; }
+      if (d.travel && (d.kind === 'stay' || d.kind === 'move')) { var l = d.travel, c = l.chosen; travel = '<div class="trv">' + MM.modeIcon(c.main) + esc(P[l.from].n) + ' → ' + esc(P[l.to].n) + ' · ' + esc(c.modeLabel) + ' · ' + hours(c.h) + ' · ' + (c.fare ? 'from ' : '~') + money(c.u) + '</div>'; }
       var acts = (d.acts || []).map(function (x) { var a = MM.ACTS[x.id]; return '<li><b>' + x.part + '</b><span>' + esc(a.n) + (a.usd != null ? ' <span class="dim">(' + (a.est ? '~' : '') + money(a.usd) + ')</span>' : '') + '</span></li>'; }).join('');
       var ev = (d.notes || []).map(function (n) { return '<span class="ev">' + esc(n) + '</span>'; }).join('');
       var epic = d.epic ? '<div class="note">' + esc(d.epic.note || 'Multi-day experience, everything included in the tour price.') + '</div>' : '';

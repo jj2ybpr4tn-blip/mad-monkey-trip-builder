@@ -204,6 +204,21 @@ profiles.forEach(function (pp) {
   }).then(function (g) { ok('group: 3 mates joined, 2 are in', g.members.length === 3 && G.ins(g) === 2); ok('group: votes tally y/m/n', JSON.stringify(G.tally(g, '0:hanoi')) === JSON.stringify({ y: 2, m: 0, n: 1 })); }));
 })();
 
+/* ---------- dated flight fares ---------- */
+(function () {
+  var s0 = { items: [{ kind: 'stop', p: 'hanoi', n: 3, acts: [] }, { kind: 'stop', p: 'hoi-an', n: 3, acts: [] }], start: '2027-01-10', pref: 'fast', legPick: {}, fund: 18, crew: 0, budget: 0 };
+  MM.FARES = {};
+  var base = MM.plan(s0), leg = base.legs[0], fl = leg.chosen.route.steps.filter(function (s) { return s.e.m === 'flight'; });
+  ok('dated trip: leg gets an ISO date', /^2027-01-1\d$/.test(leg.date) && fl.length === 1, leg.date);
+  var f = fl[0], key = f.from + '|' + f.to + '|' + leg.date;
+  MM.FARES[key] = { ok: true, min: f.e.u - 20, max: f.e.u + 60 };
+  var cheap = MM.plan(s0);
+  ok('lowest real fare replaces the typical one in leg + total', cheap.legs[0].u === base.legs[0].u - 20 && cheap.totals.transport === base.totals.transport - 20 && cheap.legs[0].fare.min === f.e.u - 20 && cheap.legs[0].fare.max === f.e.u + 60);
+  var und = MM.plan(Object.assign({}, s0, { start: '' }));
+  ok('no dates: typical fares only', !und.legs[0].fare && und.legs[0].u === base.legs[0].u);
+  MM.FARES = {};
+})();
+
 /* ---------- text output ---------- */
 var txt = MM.planText(tt, st([]), 'USD');
 ok('plain-text itinerary mentions every stop and the total', /Hanoi/.test(txt) && /Hoi An/.test(txt) && /est\./.test(txt));

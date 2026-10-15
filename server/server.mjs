@@ -10,6 +10,7 @@
      • GET  /api/status      what the guest's trip-status page shows
      • /api/groups…          group mode (votes, "I'm in")
      • GET  /api/live        spots left + price overrides the crew maintains
+     • GET  /api/fares       ?from=BKK&to=CNX&date=YYYY-MM-DD  lowest + highest real fare for that day (needs AMADEUS_CLIENT_ID/SECRET)
      • GET  /api/reviews     approved guest quotes per hostel
      • GET  /api/flow        "where guests go next" from real data
      • POST /api/event       anonymous funnel events
@@ -20,6 +21,8 @@
      ADMIN_TOKEN     crew password. If unset, one is generated and saved to server/data/admin-token.txt
      HOLD_HOURS      default 48
      NOTIFY_WEBHOOK  optional Slack / Discord-style webhook that gets a message per new request
+     AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET   optional, switches on date-specific flight prices
+     AMADEUS_ENV     'production' for real fares (default 'test' returns sample data)
      ALLOWED_ORIGIN  optional, only if the site is hosted somewhere other than this server (adds CORS)
      DATA_DIR        default server/data
 
@@ -94,6 +97,37 @@ setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some
 const ipOf = (req) => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
 async function notify(text) { if (!NOTIFY) return; try { await fetch(NOTIFY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text }) }); } catch { /* notifications are best-effort */ } }
 
+
+/* ---------- dated flight fares (optional) ---------- */
+const AMA = { id: process.env.AMADEUS_CLIENT_ID || '', secret: process.env.AMADEUS_CLIENT_SECRET || '', host: process.env.AMADEUS_ENV === 'production' ? 'api.amadeus.com' : 'test.api.amadeus.com' };
+const FARES_ON = !!(AMA.id && AMA.secret);
+const flightPairs = new Set(MM.EDGES.filter((e) => e.m === 'flight').flatMap((e) => [e.a + '>' + e.b, e.b + '>' + e.a]));
+const fareCache = new Map(), FARE_TTL = 6 * 3600e3; let amaTok = null, upstream = [];
+async function amaToken() {
+  if (amaTok && amaTok.exp > Date.now() + 60e3) return amaTok.v;
+  const r = await fetch('https://' + AMA.host + '/v1/security/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'client_credentials', client_id: AMA.id, client_secret: AMA.secret }) });
+  if (!r.ok) throw new Error('token ' + r.status);
+  const j = await r.json(); amaTok = { v: j.access_token, exp: Date.now() + (j.expires_in || 1500) * 1000 }; return amaTok.v;
+}
+async function lookupFare(from, to, date) {
+  const key = from + '|' + to + '|' + date, hit = fareCache.get(key);
+  if (hit && Date.now() - hit.t < FARE_TTL) return hit.v;
+  const now = Date.now(); upstream = upstream.filter((t) => now - t < 3600e3);
+  if (upstream.length >= 400) throw new Error('quota');            // hard cap on paid/queried calls per hour
+  upstream.push(now);
+  const q = new URLSearchParams({ originLocationCode: from, destinationLocationCode: to, departureDate: date, adults: '1', currencyCode: 'USD', max: '40' });
+  const r = await fetch('https://' + AMA.host + '/v2/shopping/flight-offers?' + q, { headers: { Authorization: 'Bearer ' + await amaToken() } });
+  let v;
+  if (r.status === 400 || r.status === 404) v = { ok: false, reason: 'none' };
+  else if (!r.ok) throw new Error('upstream ' + r.status);
+  else {
+    const j = await r.json(), prices = (j.data || []).map((o) => parseFloat(o.price && o.price.grandTotal)).filter((x) => x > 0).sort((a, b) => a - b);
+    v = prices.length ? { ok: true, min: Math.round(prices[0]), max: Math.round(prices[prices.length - 1]), median: Math.round(prices[Math.floor(prices.length / 2)]), n: prices.length, currency: 'USD', from, to, date, test: AMA.host.startsWith('test.') } : { ok: false, reason: 'none' };
+  }
+  fareCache.set(key, { t: Date.now(), v }); if (fareCache.size > 5000) fareCache.delete(fareCache.keys().next().value);
+  return v;
+}
+
 /* ---------- bed-hold sheet: what the crew needs to hold, by hostel and date ---------- */
 function holdSheet(tripState) {
   try {
@@ -167,6 +201,15 @@ async function api(req, res, url) {
     events.save(); return J(204, {});
   }
   if (p === '/live' && m === 'GET') return J(200, live.get());
+  if (p === '/fares' && m === 'GET') {
+    if (!FARES_ON) return J(503, { ok: false, reason: 'not-configured' });
+    if (limited('fares:' + ip, 90, 60000)) return J(429, { ok: false, reason: 'slow-down' });
+    const from = (url.searchParams.get('from') || '').toUpperCase(), to = (url.searchParams.get('to') || '').toUpperCase(), date = url.searchParams.get('date') || '';
+    const dt = /^\d{4}-\d{2}-\d{2}$/.test(date) ? Date.parse(date + 'T00:00:00Z') : NaN, today = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+    if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to) || !flightPairs.has(from + '>' + to)) return J(400, { ok: false, reason: 'unknown-route' });
+    if (!(dt >= today && dt <= today + 330 * 86400e3)) return J(400, { ok: false, reason: 'bad-date' });
+    try { return J(200, await lookupFare(from, to, date)); } catch (e) { return J(502, { ok: false, reason: 'upstream' }); }
+  }
   if (p === '/reviews' && m === 'GET') { const out = {}; reviews.get().forEach((r) => { if (r.approved) (out[r.hostel] = out[r.hostel] || []).push({ q: r.q, by: r.by, from: r.from }); }); return J(200, out); }
   if (p === '/flow' && m === 'GET') return J(200, { rows: mmFlows() });
 

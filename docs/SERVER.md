@@ -38,3 +38,18 @@ Holds expire on their own. An unapproved hold lapses after `HOLD_HOURS` and the 
 ## Tests
 
 `npm test` runs the logic tests and `test/server.test.js`, which boots this server on a temp port and checks the API (auth, validation, holds, status flow, live data, groups under concurrent writes, rate limits).
+
+## Date-specific flight prices (optional)
+
+Without dates the builder shows typical fares. Once a guest sets a start date, each flight in the trip is looked up for its own day and priced at the **lowest fare found**, with the range shown on the leg card ("Fares that day: $31 to $96. We have used the lowest.").
+
+Switch it on by giving the server a fare-provider account (Amadeus Self-Service):
+
+```bash
+AMADEUS_CLIENT_ID=... AMADEUS_CLIENT_SECRET=... AMADEUS_ENV=production npm run server
+```
+
+- `GET /api/fares?from=HAN&to=DAD&date=2027-01-13` only answers for flight pairs in `data/legs.js`, dates up to 330 days out; results are cached 6 hours; at most 400 upstream lookups an hour.
+- No keys, no answer, or a crew-entered fare in `/admin`: the typical fare stays (crew fares always win).
+- `AMADEUS_ENV` defaults to `test`, which returns sample data, not real prices.
+- Amadeus does not carry every Southeast Asian low-cost airline, so real fares can be higher than the cheapest seat on a budget carrier's own site. Check coverage on your key before promising "lowest".
