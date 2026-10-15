@@ -170,13 +170,15 @@ async function api(req, res, url) {
     if (limited('lead:' + ip, 12, 3600000)) return J(429, { error: 'slow down' });
     const b = await readBody(req);
     const c = b.contact || {}, t = b.trip || {};
-    if (!/^\S+@\S+\.\S+$/.test(c.email || '') || !clip(c.name, 80).trim() || !c.consent) return J(400, { error: 'name, email and consent are required' });
+    const okEmail = /^\S+@\S+\.\S+$/.test(c.email || ''), waDigits = String(c.whatsapp || '').replace(/[^\d]/g, ''), okWa = waDigits.length >= 8 && waDigits.length <= 15;
+    if (!(okEmail || okWa) || !clip(c.name, 80).trim() || !c.consent) return J(400, { error: 'name, consent and an email or WhatsApp number are required' });
+    const via = c.via === 'email' && okEmail ? 'email' : c.via === 'whatsapp' && okWa ? 'whatsapp' : okWa ? 'whatsapp' : 'email';
     if (typeof t.state !== 'string' || t.state.length > 6000) return J(400, { error: 'trip is missing' });
     const ref = (() => { let r; do { r = 'MM-' + rid(6, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'); } while (leads.get().some((l) => l.ref === r)); return r; })();
     const wantHold = !!(b.hold && b.hold.requested) && !!t.start;
     const rec = {
       ref, createdAt: now(), status: 'submitted', type: b.type || 'lead',
-      contact: { name: clip(c.name, 80), email: clip(c.email, 120), whatsapp: clip(c.whatsapp, 40), from: clip(c.from, 80), partySize: Math.max(1, Math.min(30, +c.partySize || 1)), dates: clip(c.dates, 10), notes: clip(c.notes, 1500) },
+      contact: { name: clip(c.name, 80), via, email: okEmail ? clip(c.email, 120) : '', whatsapp: okWa ? clip(c.whatsapp, 40) : '', from: clip(c.from, 80), partySize: Math.max(1, Math.min(30, +c.partySize || 1)), dates: clip(c.dates, 10), notes: clip(c.notes, 1500) },
       trip: { link: clip(t.link, 1500), state: t.state, route: clip(t.route, 400), days: +t.days || 0, nights: +t.nights || 0, countries: (t.countries || []).slice(0, 8), stops: (t.stops || []).slice(0, 40).map((x) => clip(x, 40)), start: clip(t.start, 10),
         estTotalUsd: +t.estTotalUsd || 0, breakdownUsd: t.breakdownUsd || {}, allInBlocks: (t.allInBlocks || []).slice(0, 5), allInMatch: clip(t.allInMatch, 40), crewMates: +t.crewMates || 0, urgency: clip(t.urgency, 12) },
       attribution: { ref: clip(b.ref, 40), fromHostel: clip(b.fromHostel, 40), source: clip(b.source, 40) },
@@ -185,7 +187,7 @@ async function api(req, res, url) {
       sheet: holdSheet(t.state), publicNote: '', payLink: '', notes: [], history: [{ at: now(), event: 'submitted' }]
     };
     leads.get().unshift(rec); leads.save();
-    notify(`New trip for review ${ref}: ${rec.contact.name} · ${rec.trip.route} · ${rec.trip.days} days · ~$${rec.trip.estTotalUsd}${wantHold ? ' · BED HOLD requested' : ''}${rec.trip.start ? ' · starts ' + rec.trip.start : ''}`);
+    notify(`New trip for review ${ref}: ${rec.contact.name} (${rec.contact.via === 'email' ? 'email ' + rec.contact.email : 'WhatsApp ' + rec.contact.whatsapp}) · ${rec.trip.route} · ${rec.trip.days} days · ~$${rec.trip.estTotalUsd}${wantHold ? ' · BED HOLD requested' : ''}${rec.trip.start ? ' · starts ' + rec.trip.start : ''}`);
     return J(200, { ref, status: 'submitted', hold: rec.hold.requested ? { until: rec.hold.until } : null });
   }
   if (p === '/status' && m === 'GET') {

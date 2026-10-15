@@ -31,8 +31,7 @@
     u.openModal('<div class="modal__hd"><div><div class="over">Checked by a human</div><h2 class="disp">Hold my beds.<br>Get it checked.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
       '<p style="font-weight:500">Nobody books this for you by robot. A <b>real Mad Monkey crew member</b> checks your whole trip before you pay a penny.</p>' + stepsHTML('submitted') +
       '<form id="leadf" novalidate><div class="form2"><div class="field"><label for="lf-name">First name</label><input class="input" id="lf-name" name="name" autocomplete="given-name" required value="' + esc(q.name || '') + '"></div>' +
-      '<div class="field"><label for="lf-email">Email</label><input class="input" id="lf-email" name="email" type="email" autocomplete="email" required value="' + esc(q.email || '') + '"></div>' +
-      '<div class="field"><label for="lf-wa">WhatsApp (best way to reach you)</label><input class="input" id="lf-wa" name="whatsapp" type="tel" autocomplete="tel" placeholder="+44 …" value="' + esc(q.whatsapp || '') + '"></div>' +
+      u.contactPick(q) +
       '<div class="field"><label for="lf-from">Where are you now?</label><input class="input" id="lf-from" name="from" placeholder="city or country" value="' + esc(q.from || '') + '"></div>' +
       '<div class="field"><label for="lf-size">Travelling as</label><select class="select" id="lf-size" name="size"><option value="1">Just me</option><option value="2">2 of us</option><option value="3">3 of us</option><option value="4">4 of us</option><option value="6">5–6 of us</option><option value="8">7+ of us</option></select></div>' +
       '<div class="field"><label for="lf-flex">Dates</label><select class="select" id="lf-flex" name="flex"><option value="fixed">These dates, locked</option><option value="flex">Flexible by a week or so</option><option value="open">Still deciding</option></select></div>' +
@@ -51,18 +50,18 @@
     var err = $('#leaderr'), show = function (m) { err.style.display = 'grid'; $('span', err).textContent = m; };
     if (v.website) return;
     if (!v.name) return show('Pop your first name in.');
-    if (!/^\S+@\S+\.\S+$/.test(v.email || '')) return show('That email doesn\'t look right.');
+    var ct = u.readContact(v); if (ct.err) return show(ct.err);
     if (!v.consent) return show('Tick the box so we\'re allowed to reply.');
-    u.store('mm-lead', { name: v.name, email: v.email, whatsapp: v.whatsapp, from: v.from });
+    u.store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
     var plan = u.getPlan(), wantHold = !!v.hold && !!A.state.start;
-    var payload = MM.leadPayload(A.state, plan, { name: v.name, email: v.email, whatsapp: v.whatsapp || '', from: v.from || '', partySize: +v.size || 1, dates: v.flex, notes: v.notes || '', consent: true },
+    var payload = MM.leadPayload(A.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: +v.size || 1, dates: v.flex, notes: v.notes || '', consent: true },
       { ref: A.meta.ref, fromHostel: A.meta.from, link: u.shareLink() });
     payload.type = 'review_request'; payload.status = 'submitted'; payload.hold = { requested: wantHold, hours: hold() };
     u.track('review_request', { stops: plan.places.length, days: plan.totals.days, hold: wantHold });
     var btn = $('button[type=submit]', f); btn.disabled = true; btn.textContent = 'Sending…';
     function done(mode, data) {
       var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
-        hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: mode === 'demo', name: v.name, email: v.email };
+        hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: mode === 'demo', name: v.name, email: ct.email, whatsapp: ct.whatsapp, via: ct.via };
       var list = subs().filter(function (s) { return s.ref !== r; }); list.unshift(rec); u.store('mm-subs', list.slice(0, 20)); A._lastLead = payload; success(rec, payload);
     }
     if (!C.LEAD_ENDPOINT) return setTimeout(function () { done('demo'); }, 400);

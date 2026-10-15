@@ -621,3 +621,10 @@ main{flex:1;display:flex;flex-direction:column}
 .miss__more{align-self:flex-start;background:none;border:0;color:var(--lime);font-weight:900;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:0}
 @media (max-width:480px){.miss__row{grid-template-columns:72px 1fr}.miss__row .photo{width:72px;height:72px}}
 @media print{.miss{display:none!important}}
+
+/* ---- contact picker: one way to reach the guest ---- */
+.cpick{display:flex;flex-direction:column;gap:var(--s-2)}
+.cpick .lbl{font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.cpick .seg{align-self:flex-start}
+.cpick .seg button{padding:9px 18px;font-size:13px}
+.cpick[data-via=whatsapp] .cpick__em,.cpick[data-via=email] .cpick__wa{display:none}
