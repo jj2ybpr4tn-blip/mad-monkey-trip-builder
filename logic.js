@@ -40,11 +40,28 @@
   }
   MM.util = { parseDate: parseDate, isoDate: isoDate, addDays: addDays, fmtDate: fmtDate, hoursLabel: hoursLabel, hav: hav, DOWN: DOWN, MONTHN: MONTHN };
 
-  /* ---------------- currency ---------------- */
-  MM.FX = { USD: 1, GBP: 1 / 1.27 };            // indicative; the booking engine has the real rate
+  /* ---------------- currency ----------------
+     Rates are indicative (the booking engine has the real one). The app refreshes the majors from a free
+     public feed when it can (ui-live.js) and falls back to these. Local currencies are for "roughly how much is that". */
+  MM.CURRENCIES = { USD: { sym: '$', n: 'US dollar' }, GBP: { sym: '£', n: 'British pound' }, EUR: { sym: '€', n: 'Euro' }, AUD: { sym: 'A$', n: 'Australian dollar' }, CAD: { sym: 'C$', n: 'Canadian dollar' } };
+  MM.FX = { USD: 1, GBP: 0.79, EUR: 0.92, AUD: 1.52, CAD: 1.37 };                      // units per 1 USD
+  MM.LOCAL = { TH: { code: 'THB', sym: '฿', per: 34, live: true }, LA: { code: 'LAK', sym: '₭', per: 21500 }, VN: { code: 'VND', sym: '₫', per: 25500 },
+    KH: { code: 'KHR', sym: '៛', per: 4050 }, ID: { code: 'IDR', sym: 'Rp', per: 16300, live: true }, PH: { code: 'PHP', sym: '₱', per: 57, live: true } };
+  MM.setRates = function (r) {
+    if (!r) return; Object.keys(r).forEach(function (k) {
+      var v = +r[k]; if (!(v > 0)) return;
+      if (MM.CURRENCIES[k]) MM.FX[k] = v;
+      Object.keys(MM.LOCAL).forEach(function (c) { if (MM.LOCAL[c].code === k) MM.LOCAL[c].per = v; });
+    });
+  };
   MM.money = function (usd, cur) {
-    var v = usd * (MM.FX[cur || 'USD'] || 1), sym = cur === 'GBP' ? '£' : '$';
-    return sym + Math.round(v).toLocaleString('en-GB');
+    cur = MM.CURRENCIES[cur] ? cur : 'USD'; var v = usd * MM.FX[cur];
+    return MM.CURRENCIES[cur].sym + Math.round(v).toLocaleString('en-GB');
+  };
+  // "about ฿1,200": a USD amount in a country's own money, rounded sensibly
+  MM.localMoney = function (usd, country) {
+    var L = MM.LOCAL[country]; if (!L) return ''; var v = usd * L.per, step = v >= 1e6 ? 50000 : v >= 1e5 ? 5000 : v >= 1e4 ? 500 : v >= 1e3 ? 50 : 5;
+    return L.sym + (Math.round(v / step) * step).toLocaleString('en-GB');
   };
 
   /* ============================================================

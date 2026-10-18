@@ -1,6 +1,7 @@
 /* Trip Builder logic tests. Run: npm test  (node test/logic.test.js) */
-['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery'].forEach(function (f) { require('../data/' + f + '.js'); });
+['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery', 'rules', 'guide'].forEach(function (f) { require('../data/' + f + '.js'); });
 var MM = require('../logic.js');
+require('../extras.js');
 
 var pass = 0, fail = 0, pending = [];
 function ok(name, cond, extra) { if (cond) { pass++; console.log('PASS  ' + name); } else { fail++; console.log('FAIL  ' + name + (extra ? '  -> ' + extra : '')); } }
@@ -230,6 +231,52 @@ profiles.forEach(function (pp) {
   var withIt = mk(['siem-reap']); withIt.items[0].acts = [MM.dontMiss('siem-reap').act.id];
   ok("don't miss: nothing nagging once you've added it", !MM.missed(withIt).some(function (x) { return x.k === 'act:siem-reap'; }));
   ok('every hostel has a working standout', Object.keys(MM.DONT_MISS).every(function (p) { return MM.dontMiss(p); }));
+})();
+
+/* ---------- extras: calendar, visa, doctor, themes, packing, currency ---------- */
+(function () {
+  var iso = function (d) { return d.toISOString().slice(0, 10); };
+  var dated = function (items, start) { return st(items.map(function (x) { return stop(x[0], x[1]); }), { start: start }); };
+  ok('full moons match known 2026 dates (Thai time)', MM.fullMoons(2026).map(iso).join() === '2026-01-03,2026-02-02,2026-03-03,2026-04-02,2026-05-02,2026-05-31,2026-06-30,2026-07-29,2026-08-28,2026-09-26,2026-10-26,2026-11-24,2026-12-24');
+  ok('Easter 2027 and 2028', iso(MM.easter(2027)) === '2027-03-28' && iso(MM.easter(2028)) === '2028-04-16');
+
+  var tet = MM.eventsFor(MM.plan(dated([['hanoi', 3], ['hoi-an', 4]], '2027-02-03')));
+  ok('Tet is caught on a Vietnam trip over Tet', tet.length === 1 && tet[0].ev.id === 'tet' && tet[0].sev === 3 && tet[0].conf === false);
+  ok('Tet comes with a shift that really misses it', tet[0].shift && tet[0].shift.days === 9 && iso(tet[0].shift.newStart) === '2027-02-12');
+  ok('same trip in July has no events', MM.eventsFor(MM.plan(dated([['hanoi', 3], ['hoi-an', 4]], '2027-07-03'))).length === 0);
+  ok('Nyepi only hits Bali stops', MM.eventsFor(MM.plan(dated([['uluwatu', 4]], '2027-03-07'))).some(function (e) { return e.ev.id === 'nyepi'; }) && !MM.eventsFor(MM.plan(dated([['gili-trawangan', 4]], '2027-03-07'))).some(function (e) { return e.ev.id === 'nyepi'; }));
+  ok('Songkran every year, Thailand only', MM.eventsFor(MM.plan(dated([['bangkok', 4]], '2028-04-11'))).some(function (e) { return e.ev.id === 'songkran'; }) && !MM.eventsFor(MM.plan(dated([['hanoi', 4]], '2028-04-11'))).some(function (e) { return e.ev.id === 'songkran'; }));
+  ok('Holy Week lands on the Philippines in 2027', MM.eventsFor(MM.plan(dated([['panglao', 4]], '2027-03-24'))).some(function (e) { return e.ev.id === 'holyweek'; }));
+  ok('Christmas peak crosses the new year', MM.eventsFor(MM.plan(dated([['hanoi', 4]], '2026-12-30'))).some(function (e) { return e.ev.id === 'xmas'; }));
+  ok('upcoming events lists lunar + fixed ones', MM.upcomingEvents({ countries: ['TH'], from: new Date(Date.UTC(2026, 9, 19)), months: 12 }).some(function (e) { return e.ev.id === 'loy'; }));
+
+  var longTH = MM.visaCheck(MM.plan(dated([['bangkok', 10], ['chiang-mai', 10], ['pai', 8], ['phuket', 8]], '2027-03-01')), 'gb');
+  ok('visa: 37 days in Thailand is over the 30-day limit', longTH.length === 1 && longTH[0].status === 'over' && longTH[0].allowed === 30 && /Extend/.test(longTH[0].msg), JSON.stringify(longTH[0] && longTH[0].status));
+  ok('visa: a short trip is fine', MM.visaCheck(MM.plan(dated([['bangkok', 4]], '2027-03-01')), 'gb')[0].status === 'ok');
+  ok('visa: asks for a passport when none picked', MM.visaCheck(MM.plan(dated([['bangkok', 4]], '2027-03-01')), null)[0].status === 'pick');
+  ok('visa: Vietnam gives US passports 90 days, UK 45', MM.visaCheck(MM.plan(dated([['hanoi', 50]], '2027-03-01')), 'us')[0].status === 'ok' && MM.visaCheck(MM.plan(dated([['hanoi', 50]], '2027-03-01')), 'gb')[0].status === 'over');
+  ok('visa: two countries get two checks', MM.visaCheck(MM.plan(dated([['hanoi', 4], ['luang-prabang', 4]], '2027-05-01')), 'gb').length === 2);
+
+  var d1 = MM.doctor(dated([['hanoi', 3], ['hoi-an', 4]], '2027-02-03'), { passport: 'gb' });
+  ok('doctor: a Tet clash is a serious finding that caps the score', d1.bad === 1 && d1.score <= 69 && d1.label === 'Needs a tweak' && d1.findings[0].sev === 'bad');
+  ok('doctor: the Tet fix is a date shift', d1.findings[0].fix && d1.findings[0].fix.t === 'shift' && d1.findings[0].fix.d === 9);
+  var fixed = MM.doctor(MM.applyFix(dated([['hanoi', 3], ['hoi-an', 4]], '2027-02-03'), d1.findings[0].fix), { passport: 'gb' });
+  ok('doctor: applying the fix clears it', fixed.bad === 0 && fixed.findings.every(function (f) { return f.sev !== 'bad'; }));
+  var rush = MM.doctor(dated([['hanoi', 2], ['hoi-an', 1], ['saigon', 1], ['siem-reap', 2]], '2027-05-01'));
+  ok('doctor: one-night stands and a rushed plan are flagged with a night-adding fix', rush.findings.some(function (f) { return /^one-/.test(f.id) && f.fix && f.fix.t === 'nights' && f.fix.dDays === 1; }) && rush.findings.some(function (f) { return f.id === 'rush'; }));
+  var stack = MM.doctor(st([stop('bangkok', 2), stop('chiang-mai', 1), stop('luang-prabang', 1)], { pref: 'cheap' }));
+  ok('doctor: back-to-back overnight journeys are a serious finding', stack.findings.some(function (f) { return f.id === 'ovn-stack' && f.sev === 'bad'; }) || stack.stats.overnights < 2, JSON.stringify(stack.stats));
+  MM.THEMES.forEach(function (t) { var x = MM.themeTrip(t.id), d = MM.doctor(x.state); ok('theme "' + t.n + '" is a clean, balanced trip', x.days >= 10 && x.days <= 18 && d.bad === 0 && d.warns === 0, d.findings.map(function (f) { return f.title; }).join('; ')); });
+  var sp = MM.surprise(function () { return 0.3; });
+  ok('surprise me returns a real, planned trip', sp && sp.state.items.length >= 3 && MM.plan(sp.state).totals.days > 8);
+  var pk = MM.packing(MM.plan(dated([['hanoi', 3]], '2027-07-01'))), flat = JSON.stringify(pk);
+  ok('packing list has the basics + plug type for the country', pk.length >= 4 && /Vietnam A\/C/.test(flat) && /Passport/.test(flat));
+  ok('packing list adds mountain + water gear when the trip needs it', /For the mountains/.test(JSON.stringify(MM.packing(MM.plan(st([stop('hanoi', 4, [MM.dontMiss('hanoi').act.id])], {}))))));
+
+  ok('guide covers every country and every hostel', Object.keys(MM.COUNTRIES).every(function (c) { return MM.GUIDE.countries[c] && MM.GUIDE.topics.every(function (t) { return MM.GUIDE.countries[c][t.k] && MM.GUIDE.countries[c][t.k].length >= 2; }); }) && Object.keys(MM.PLACES).filter(function (p) { return !MM.PLACES[p].partner; }).every(function (p) { return MM.GUIDE.places[p] && MM.GUIDE.places[p].length >= 2; }));
+  ok('currencies: EUR, AUD, CAD formatted with their symbols', MM.money(100, 'EUR') === '€92' && MM.money(100, 'AUD') === 'A$152' && MM.money(100, 'CAD') === 'C$137' && MM.money(100, 'GBP') === '£79' && MM.money(100, 'XXX') === '$100');
+  ok('local money: $10 in Thailand and Vietnam', MM.localMoney(10, 'TH') === '฿340' && MM.localMoney(10, 'VN') === '₫255,000');
+  MM.setRates({ THB: 40 }); ok('live rates override the local fallback', MM.localMoney(10, 'TH') === '฿400'); MM.setRates({ THB: 34 });
 })();
 
 /* ---------- text output ---------- */
