@@ -9,6 +9,7 @@
      • POST /api/leads       review requests from guests -> stored, bed-hold sheet computed, crew notified
      • GET  /api/status      what the guest's trip-status page shows
      • /api/groups…          group mode (votes, ideas, Route A/B, own routes for meet-ups)
+     • POST /api/waitlist    "tell me when it launches" signups for ALL IN trips that aren't live yet
      • POST /api/share       short link + preview image for a trip  →  /t/<code> (rich previews on WhatsApp etc.)
      • GET  /api/live        spots left + price overrides the crew maintains
      • GET  /api/fares       ?from=BKK&to=CNX&date=YYYY-MM-DD  lowest + highest real fare for that day (needs AMADEUS_CLIENT_ID/SECRET)
@@ -64,8 +65,8 @@ function store(name, init) {
   };
   stores.push(s); return s;
 }
-const leads = store('leads', []), groups = store('groups', {}), events = store('events', []), live = store('live', { updated: null, notice: '', spots: {}, legs: {}, acts: {} }),
-  reviews = store('reviews', []), flowRows = store('flow', { rows: [] }), shares = store('shares', {});
+const leads = store('leads', []), groups = store('groups', {}), events = store('events', []), live = store('live', { updated: null, notice: '', spots: {}, legs: {}, acts: {}, hostels: {} }),
+  reviews = store('reviews', []), flowRows = store('flow', { rows: [] }), shares = store('shares', {}), waitlist = store('waitlist', []);
 const OG_DIR = path.join(DATA, 'og'); fs.mkdirSync(OG_DIR, { recursive: true });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stores.forEach((s) => s.flush()); process.exit(0); });
 
@@ -219,6 +220,20 @@ async function api(req, res, url) {
   if (p === '/reviews' && m === 'GET') { const out = {}; reviews.get().forEach((r) => { if (r.approved) (out[r.hostel] = out[r.hostel] || []).push({ q: r.q, by: r.by, from: r.from }); }); return J(200, out); }
   if (p === '/flow' && m === 'GET') return J(200, { rows: mmFlows() });
 
+  /* ---- launch waitlist ---- */
+  if (p === '/waitlist' && m === 'POST') {
+    if (limited('wl:' + ip, 15, 3600000)) return J(429, { error: 'slow down' });
+    const b = await readBody(req, 4096), c = b.contact || {};
+    const trip = MM.ALL_IN.find((t) => t.id === b.trip && t.status === 'soon');
+    if (!trip) return J(400, { error: 'that trip isn\'t on the waitlist' });
+    const okEmail = /^\S+@\S+\.\S+$/.test(c.email || ''), waDigits = String(c.whatsapp || '').replace(/[^\d]/g, ''), okWa = waDigits.length >= 8 && waDigits.length <= 15;
+    if (!(okEmail || okWa) || !clip(c.name, 80).trim() || !c.consent) return J(400, { error: 'name, consent and an email or WhatsApp number are required' });
+    const via = c.via === 'email' && okEmail ? 'email' : okWa ? 'whatsapp' : 'email', who = (via === 'email' ? clip(c.email, 120) : clip(c.whatsapp, 40)).toLowerCase();
+    const list = waitlist.get(), dup = list.find((x) => x.trip === trip.id && x.who === who);
+    if (!dup) { list.push({ id: rid(8), trip: trip.id, name: clip(c.name, 80), via, who, email: okEmail ? clip(c.email, 120) : '', whatsapp: okWa ? clip(c.whatsapp, 40) : '', source: clip(b.source, 20), at: now() }); waitlist.save(); notify(`New launch waitlist signup: ${clip(c.name, 40)} wants ALL IN ${trip.n} (${via})`); }
+    return J(200, { ok: true });
+  }
+
   /* ---- short links + link previews ---- */
   if (p === '/share' && m === 'POST') {
     if (limited('share:' + ip, 40, 3600000)) return J(429, {});
@@ -291,6 +306,7 @@ async function api(req, res, url) {
         if (b.status === 'declined' && l.hold && l.hold.status === 'active') { l.hold.status = 'released'; l.history.push({ at: now(), event: 'hold released' }); }
         if (b.status === 'approved' && l.hold && l.hold.status === 'active') { l.hold.status = 'converted'; l.history.push({ at: now(), event: 'hold converted to booking' }); }
       }
+      if (typeof b.assignee === 'string') { const a = clip(b.assignee, 40).trim(); if (a !== (l.assignee || '')) { l.history.push({ at: now(), event: a ? 'assigned to ' + a : 'unassigned' }); l.assignee = a; } }
       if (typeof b.publicNote === 'string') l.publicNote = clip(b.publicNote, 1500);
       if (typeof b.payLink === 'string') l.payLink = /^https:\/\//.test(b.payLink) ? clip(b.payLink, 600) : '';
       if (typeof b.note === 'string' && b.note.trim()) l.notes.push({ at: now(), text: clip(b.note, 1500) });
@@ -298,12 +314,17 @@ async function api(req, res, url) {
       if (b.extendHoldHours && l.hold && l.hold.requested) { const h = Math.max(1, Math.min(168, +b.extendHoldHours)); l.hold.until = new Date(Math.max(Date.now(), Date.parse(l.hold.until)) + h * 3600000).toISOString(); l.hold.status = 'active'; l.history.push({ at: now(), event: `hold extended ${h}h` }); }
       leads.save(); return J(200, l);
     }
+    if (ap === '/waitlist' && m === 'GET') return J(200, waitlist.get());
+    let wm = ap.match(/^\/waitlist\/([a-z0-9]+)$/);
+    if (wm && m === 'DELETE') { waitlist.set(waitlist.get().filter((x) => x.id !== wm[1])); waitlist.save(); return J(200, { ok: true }); }
     if (ap === '/live' && m === 'GET') return J(200, live.get());
     if (ap === '/live' && m === 'PUT') {
-      const b = await readBody(req, 65536), L = { updated: now(), notice: clip(b.notice, 300), spots: {}, legs: {}, acts: {} };
+      const b = await readBody(req, 65536), L = { updated: now(), notice: clip(b.notice, 300), spots: {}, legs: {}, acts: {}, hostels: {} };
       for (const [k, v] of Object.entries(b.spots || {})) if (MM.ALL_IN.some((t) => t.id === k)) L.spots[k] = { left: v.left === '' || v.left == null ? null : Math.max(0, +v.left | 0), next: clip(v.next, 10) };
       for (const [k, v] of Object.entries(b.legs || {})) if (/^[a-zA-Z-]+\|[a-zA-Z-]+\|[a-z]+$/.test(k) && v) { const o = {}; if (v.u != null && +v.u >= 0) o.u = +v.u; if (v.h != null && +v.h >= 0) o.h = +v.h; if (Object.keys(o).length) L.legs[k] = o; }
       for (const [k, v] of Object.entries(b.acts || {})) if (MM.ACTS[k] && +v >= 0) L.acts[k] = +v;
+      L.hostels = {};
+      for (const [k, v] of Object.entries(b.hostels || {})) if (MM.PLACES[k] && v && typeof v === 'object') { const o = { addr: clip(v.addr, 200), checkin: clip(v.checkin, 40), phone: clip(v.phone, 40), directions: clip(v.directions, 500) }; if (o.addr || o.checkin || o.phone || o.directions) L.hostels[k] = o; }
       live.set(L); live.save(); return J(200, L);
     }
     if (ap === '/reviews' && m === 'GET') return J(200, reviews.get());
@@ -334,7 +355,7 @@ async function api(req, res, url) {
 
 /* ============================================================ static ============================================================ */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js']);
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js']);
 function serveStatic(req, res, url) {
   const tm = url.pathname.match(/^\/t\/([a-z0-9]{7})(\.(jpg|png))?$/);
   if (tm) return sharePage(req, res, tm[1], tm[3]);

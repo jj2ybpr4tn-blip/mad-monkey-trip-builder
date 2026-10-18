@@ -11,7 +11,7 @@
 
   // fares: patch the transport graph, then drop cached routes
   function applyLive(L) {
-    MM.LIVE = { spots: L.spots || {}, notice: L.notice || '', updated: L.updated };
+    MM.LIVE = { spots: L.spots || {}, notice: L.notice || '', updated: L.updated, hostels: L.hostels || {} };
     var n = 0;
     Object.keys(L.legs || {}).forEach(function (k) {
       var p = k.split('|'); if (p.length !== 3) return;

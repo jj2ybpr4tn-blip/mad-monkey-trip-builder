@@ -53,7 +53,7 @@
      ============================================================ */
   function parseHash() {
     var h = location.hash.replace(/^#\/?/, ''), seg = h.split('/'), view = seg[0] || 'home';
-    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
+    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
   }
   function go(view, rest) { location.hash = '#/' + (view === 'home' ? '' : view) + (rest ? '/' + rest : ''); }
   function route() {
@@ -91,7 +91,7 @@
       '<div class="tcard__meta"><span class="pill pill--paper pill--sm">' + t.days + ' days</span><span class="pill pill--paper pill--sm">Max ' + t.max + '</span><span class="pill pill--paper pill--sm">$' + MM.DEPOSIT + ' holds your spot</span></div>' +
       '<p style="font-size:13.5px;font-weight:500;margin-top:4px">' + esc(t.pitch) + '</p>' +
       (soon ? '' : '<div class="tcard__next">Next departure: ' + U.fmtDate(nd) + (t.until ? ' · runs until ' + t.until : '') + '</div>') +
-      '<div class="tcard__foot"><button class="btn btn--sm" data-act="addblock" data-id="' + t.id + '" type="button">Build on this</button><button class="btn btn--sm btn--paper" data-act="customise" data-id="' + t.id + '" type="button">Customise</button></div></div></article>';
+      '<div class="tcard__foot">' + (soon ? '<button class="btn btn--sm btn--pink" data-act="waitlist" data-id="' + t.id + '" type="button">Tell me when it launches</button>' : '') + '<button class="btn btn--sm' + (soon ? ' btn--paper' : '') + '" data-act="addblock" data-id="' + t.id + '" type="button">Build on this</button><button class="btn btn--sm btn--paper" data-act="customise" data-id="' + t.id + '" type="button">Customise</button></div></div></article>';
   }
   function renderHome() {
     var g = MM.gap, ticker = '23 hostels · 6 countries · 150+ things to do · every bus, boat + flight in between · $99 holds an ALL IN spot · real prices · real people · ';
@@ -328,7 +328,7 @@
     h += entryHTML(pl);
     /* CTA */
     h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.</div>' +
-      '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
+      '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="openpack" type="button">Trip pack</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
       '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability before you pay anything.</p></div>';
     return h;
   }
@@ -454,6 +454,10 @@
   }
   function icsEscape(t) { return String(t).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;'); }
   function icsDate(d) { return U.isoDate(d).replace(/-/g, ''); }
+  function downloadICS(pl, state) {
+    var ics = buildICS(pl, state); if (!ics) { toast('Pick a start date first so the days land in your calendar'); return; }
+    var bl = new Blob([ics], { type: 'text/calendar' }), al = document.createElement('a'); al.href = URL.createObjectURL(bl); al.download = 'my-mad-monkey-trip.ics'; al.click(); setTimeout(function () { URL.revokeObjectURL(al.href); }, 2000); track('ics');
+  }
   function buildICS(pl, state) {
     var sd = U.parseDate(state.start); if (!sd) return null;
     var ev = [], cur = null, stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
@@ -727,7 +731,7 @@
       case 'suggest': app.open.suggest = !app.open.suggest; refreshBuilder(); break;
       case 'tweak': { var before = MM.plan(app.state).totals.total, ns2 = MM.tweak(app.state, el.getAttribute('data-v')), after = MM.plan(ns2).totals; app.state = Object.assign(MM.defaultState(), ns2); persist(); refreshBuilder();
         toast(el.getAttribute('data-v') === 'cheaper' ? (before - after.total > 1 ? 'Cheaper route: saves about ' + money(before - after.total) : 'That\'s already about as cheap as it gets') : 'Fastest connections picked: ' + (after.total - before > 1 ? 'about ' + money(after.total - before) + ' more' : 'no extra cost')); break; }
-      case 'ics': { var ics = buildICS(plan, app.state); if (!ics) { toast('Pick a start date first so the days land in your calendar'); break; } var bl = new Blob([ics], { type: 'text/calendar' }), al = document.createElement('a'); al.href = URL.createObjectURL(bl); al.download = 'my-mad-monkey-trip.ics'; al.click(); setTimeout(function () { URL.revokeObjectURL(al.href); }, 2000); track('ics'); break; }
+      case 'ics': downloadICS(plan, app.state); break;
       case 'gal': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
       case 'galnav': openGallery(el.getAttribute('data-p'), +el.getAttribute('data-k')); break;
       case 'group': if (app.group) app.group.start(); break;
@@ -827,7 +831,7 @@
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modalRoot.firstChild) closeModal(); });
 
-  app.util = { contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
+  app.util = { ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
   window.addEventListener('hashchange', route);
 
   /* ---------- boot ---------- */
