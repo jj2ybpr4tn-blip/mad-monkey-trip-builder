@@ -355,16 +355,26 @@ async function api(req, res, url) {
 
 /* ============================================================ static ============================================================ */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js']);
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'sitemap.xml', 'robots.txt']);
 function serveStatic(req, res, url) {
   const tm = url.pathname.match(/^\/t\/([a-z0-9]{7})(\.(jpg|png))?$/);
   if (tm) return sharePage(req, res, tm[1], tm[3]);
   let rel = decodeURIComponent(url.pathname); if (rel === '/') rel = '/index.html';
+  // pages written by scripts/build-pages.mjs: /trips/…, /routes/…, /hostels/…, /guides/… (each a folder with an index.html)
+  if (/^\/(trips|routes|hostels|guides)(\/|$)/.test(rel)) {
+    if (!rel.endsWith('/') && !path.extname(rel)) { res.writeHead(301, { Location: rel + '/' }); return res.end(); }
+    if (rel.endsWith('/')) rel += 'index.html';
+  }
   if (rel === '/admin' || rel === '/admin/') { res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); return fs.createReadStream(path.join(__dirname, 'admin.html')).pipe(res); }
   rel = rel.replace(/^\/+/, ''); const top = rel.split('/')[0];
-  const ok = (rel.indexOf('/') === -1 && PUBLIC_ROOT_FILES.has(rel)) || top === 'data' || top === 'assets';
+  const ok = (rel.indexOf('/') === -1 && PUBLIC_ROOT_FILES.has(rel)) || top === 'data' || top === 'assets' || ['trips', 'routes', 'hostels', 'guides'].includes(top);
   const file = path.resolve(ROOT, rel);
   if (!ok || !file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+  if (rel === 'index.html') {                                                  // absolute preview-image + canonical for the homepage link
+    const base = publicBase(req), tags = `<meta property="og:type" content="website"><meta property="og:url" content="${escH(base + '/')}"><meta property="og:image" content="${escH(base + '/assets/og/home.jpg')}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${escH(base + '/assets/og/home.jpg')}"><link rel="canonical" href="${escH(base + '/')}">`;
+    const html = fs.readFileSync(file, 'utf8').replace(/<!--og:start-->[\s\S]*?<!--og:end-->/, '<!--og:start-->' + tags + '<!--og:end-->');
+    res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' }); return res.end(html);
+  }
   const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
   const headers = { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': rel === 'index.html' ? 'no-cache' : 'public, max-age=300' };
   if (rel === 'config.js') {                                                  // switch the API on when served from here
