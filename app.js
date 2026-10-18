@@ -11,7 +11,7 @@
 
   var app = window.MMApp = { view: 'home', cur: 'USD', state: MM.defaultState(), quiz: { step: 0, a: { days: 14, vibes: [], must: [] } }, results: null, profile: null, focus: [], open: {}, nmOff: {}, meta: { ref: '', from: '' } };
   var plan = null;
-  app.views = {}; app.passport = 'gb'; app.recoDays = 14; app.auto = false; app.pv = []; app.pm = []; app.pbudget = null;
+  app.views = {}; app.passport = ''; app.recoDays = 14; app.auto = false; app.pv = []; app.pm = []; app.pbudget = null;
 
   /* ---------- utils ---------- */
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -100,7 +100,7 @@
         '<div class="over lime" style="margin-bottom:var(--s-4)">Mad Monkey · Trip Builder</div>' +
         '<h1 class="disp">Build the trip you <span class="hl">actually</span> want.</h1>' +
         '<p class="hero__lede"><b>23 hostels. 6 countries.</b> Every bus, boat and flight in between. Pick your stops, see what it really costs, then send it to the crew. Or jump on an ALL IN and let us sort the lot.</p>' +
-        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" type="button">Start building</button><button class="btn btn--lg btn--pink" data-go="quiz" type="button">Build it for me <span class="pill pill--sm pill--paper">60 sec</span></button></div>' +
+        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" type="button">Start building</button><button class="btn btn--lg btn--pink" data-go="quiz" type="button">Build it for me <span class="pill pill--sm pill--paper">60 sec</span></button><button class="btn btn--lg btn--paper" data-act="surprise" type="button">Surprise me</button></div>' +
       '</div><div class="hero__map" aria-hidden="true">' +
         '<div class="hm hm--d">' + MM.staticMap({ region: 'all', aspect: 0.85, pad: 0, dots: true, countryLabels: true, routes: HERO_ROUTES, animate: true, px: 560, slice: true, other: false }) + '</div>' +
         '<div class="hm hm--m">' + MM.staticMap({ region: 'mainland', aspect: 1.25, pad: 0.0, dots: true, countryLabels: true, routes: [HERO_ROUTES[0]], animate: true, px: 700, slice: true, other: false }) + '</div>' +
@@ -114,6 +114,7 @@
           '<button class="door" data-go="quiz" type="button"><span class="burst burst--pink door__burst"><span>60<br>sec</span></span><span class="door__n">02</span><h3>Build it for me</h3><p>Seven quick questions. Three routes that fit your days, your vibe and your budget.</p><span class="go">Take the quiz →</span></button>' +
           '<button class="door" data-act="scroll" data-to="trips" type="button"><span class="sticker door__sticker">$99 holds it</span><span class="door__n">03</span><h3>Jump on an ALL IN</h3><p>Pre-built crew trips. Beds, boats and activities sorted. $' + MM.DEPOSIT + ' holds your spot.</p><span class="go">See the trips →</span></button>' +
         '</div></div></section>' +
+      X('themesSection') +
 
       '<section class="sec sec--bone" id="trips"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">ALL IN trips</div><h2 class="disp">Stop planning.<br>Start going.</h2></div><p class="dim" style="max-width:30em">Up to 20 backpackers, real Mad Monkey beds every night, every transfer and activity in the price, free drinks, 24/7 crew. Flights and insurance not included. Hit <b>Build on this</b> to bolt more days on either end.</p></div>' +
         '<div class="tgrid">' + MM.ALL_IN.map(tripCard).join('') + '</div>' +
@@ -286,7 +287,7 @@
     if (!items.length) {
       h += '<div class="empty"><h3>Tap the map.<br>Start anywhere.</h3><p>Every Mad Monkey is a pin. Add a few and we\'ll work out the buses, boats and flights between them, the cost, and the days.</p><div class="row">' +
         (app.meta.from && P[app.meta.from] ? '<button class="btn btn--sm btn--pink" data-act="addplace" data-p="' + app.meta.from + '" type="button">I\'m at ' + esc(P[app.meta.from].n) + '</button>' : '') +
-        '<button class="btn btn--sm" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--paper" data-go="quiz" type="button">Take the quiz</button></div></div>';
+        '<button class="btn btn--sm" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--pink" data-act="surprise" type="button">Surprise me</button><button class="btn btn--sm btn--paper" data-go="quiz" type="button">Take the quiz</button></div></div>';
       h += '<div><div class="over" style="margin-bottom:var(--s-2)">Or start from a classic</div><div class="nextbar">' +
         MM.ALL_IN.slice(0, 5).map(function (t) { return '<button class="nextchip" data-act="addblock" data-id="' + t.id + '" type="button"><b>ALL IN ' + esc(t.n) + '</b> <small>' + t.days + 'd · ' + money(t.usd) + '</small></button>'; }).join('') +
         MM.CLASSICS.slice(0, 5).map(function (c) { return '<button class="nextchip" data-act="customise" data-id="' + c.id + '" type="button"><b>' + esc(c.n) + '</b></button>'; }).join('') + '</div></div>';
@@ -295,6 +296,7 @@
     }
 
     h += timelineHTML(pl);
+    h += X('doctor', pl);
     h += missHTML();
     /* add bar */
     var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
@@ -322,6 +324,7 @@
     h += '<div class="blk"><button class="blk__hd" data-act="toggle" data-k="days" aria-expanded="' + !!app.open.days + '" type="button"><h3>Day by day</h3><span class="pill pill--sm pill--paper">' + (app.open.days ? 'Hide' : 'Show') + ' ' + t.days + ' days</span></button>' + (app.open.days ? '<div class="blk__bd">' + daysHTML(pl) + '</div>' : '') + '</div>';
     /* costs */
     h += costsHTML(pl);
+    h += X('calendar', pl) + X('guide', pl);
     h += entryHTML(pl);
     /* CTA */
     h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.</div>' +
@@ -392,6 +395,8 @@
     if (fresh) { var w = now[fresh].why.replace(/\.$/, ''); toast('Heads up: ' + w.charAt(0).toLowerCase() + w.slice(1) + '. Take a look below.'); }
   }
 
+  // optional extras (ui-extras.js), so the builder still renders if it fails to load
+  function X(fn) { try { return window.MMX && window.MMX[fn] ? window.MMX[fn].apply(null, [].slice.call(arguments, 1)) : ''; } catch (e) { return ''; } }
   function nextBar(fromId, title) {
     var p = P[fromId]; if (!p) return '';
     var ranked = MM.nextRanked(fromId).filter(function (x) { return x.id !== fromId; }).slice(0, 5);
@@ -402,7 +407,7 @@
     }).join('') + '</div>';
   }
   function tweakRow() {
-    var h = '<div class="tweaks"><button class="btn btn--sm btn--paper" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--paper" data-act="suggest" type="button">Suggest my next stop</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="cheaper" type="button">Make it cheaper</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="faster" type="button">Make it faster</button></div>';
+    var h = '<div class="tweaks"><button class="btn btn--sm btn--paper" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--paper" data-act="surprise" type="button">Surprise me</button><button class="btn btn--sm btn--paper" data-act="suggest" type="button">Suggest my next stop</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="cheaper" type="button">Make it cheaper</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="faster" type="button">Make it faster</button></div>';
     if (app.open.suggest) {
       var sg = MM.suggestNext(app.state);
       h += '<div class="nextbar"><span class="over">Picked for your route</span>' + (sg.length ? sg.map(function (x) { return '<button class="nextchip" data-act="addplace" data-p="' + x.id + '" type="button"><b>' + esc(P[x.id].n) + '</b> <small>' + hours(x.leg.h) + ' · ~' + money(x.leg.u) + '</small><em class="whytag">' + esc(x.why.slice(0, 2).join(' · ')) + '</em></button>'; }).join('') : '<small>Nothing else fits within a day\'s travel.</small>') + '</div>';
@@ -435,7 +440,7 @@
   function entryHTML(pl) {
     var open = !!app.open.entry, pass = app.passport;
     var body = '<div class="field"><label for="passport">Your passport</label><div class="sel-wrap"><select class="select" id="passport">' + MM.PASSPORTS.map(function (x) { return '<option value="' + x.k + '"' + (x.k === pass ? ' selected' : '') + '>' + x.n + '</option>'; }).join('') + '</select></div></div>' +
-      pl.countries.map(function (c) { var e = MM.ENTRY[c]; return '<div class="entry"><span class="dotc" data-c="' + c + '"></span><div><b>' + MM.COUNTRIES[c].n + '</b><p>' + esc(e.by[pass]) + ' ' + esc(e.extra) + '</p><a href="' + e.link + '" target="_blank" rel="noopener">' + esc(e.cta) + ' ↗</a>' + (e.link2 ? ' · <a href="' + e.link2 + '" target="_blank" rel="noopener">' + esc(e.cta2) + ' ↗</a>' : '') + '</div></div>'; }).join('') +
+      pl.countries.map(function (c) { var e = MM.ENTRY[c]; return '<div class="entry"><span class="dotc" data-c="' + c + '"></span><div><b>' + MM.COUNTRIES[c].n + '</b><p>' + esc(pass ? e.by[pass] + ' ' : 'Pick your passport to see how long you can stay. ') + esc(e.extra) + '</p><a href="' + e.link + '" target="_blank" rel="noopener">' + esc(e.cta) + ' ↗</a>' + (e.link2 ? ' · <a href="' + e.link2 + '" target="_blank" rel="noopener">' + esc(e.cta2) + ' ↗</a>' : '') + '</div></div>'; }).join('') +
       '<p class="fine">Checked ' + MM.ENTRY_CHECKED + '. Entry rules change often (Thailand cut its visa-free stay to 30 days in September 2026), so always confirm on the official link before you book flights.</p>';
     return '<div class="blk"><button class="blk__hd" data-act="toggle" data-k="entry" aria-expanded="' + open + '" type="button"><h3>Entry rules</h3><span class="pill pill--sm pill--paper">' + plural(pl.countries.length, 'country', 'countries') + ' · ' + (open ? 'Hide' : 'Show') + '</span></button>' + (open ? '<div class="blk__bd">' + body + '</div>' : '') + '</div>';
   }
@@ -487,7 +492,7 @@
       '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
       '<div class="stopc__tools"><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" type="button"></button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + '" type="button">×</button></div></div></div>';
     if (chosen.length && !open) h += '<div class="stopc__picks">' + chosen.slice(0, 4).map(function (a) { return '<span class="pill pill--sm">' + esc(a.n) + '</span>'; }).join('') + (chosen.length > 4 ? '<span class="pill pill--sm pill--paper">+' + (chosen.length - 4) + ' more</span>' : '') + '</div>';
-    h += galleryStrip(p.id) + reviewLine(p.id);
+    h += galleryStrip(p.id) + reviewLine(p.id) + X('local', sg, i);
     h += '<button class="stopc__more" data-act="toggle" data-k="acts' + i + '" aria-expanded="' + open + '" type="button"><span>Things to do at ' + esc(p.n) + '</span><span class="count"><span class="pill pill--sm pill--paper">' + chosen.length + ' picked</span><b>' + (open ? '−' : '+') + '</b></span></button>';
     if (open) h += actsPanel(sg, i);
     return h + '</div>';
@@ -714,7 +719,6 @@
     if (e.target.closest('a[data-stop]')) { e.stopPropagation(); return; }
     var door = e.target.closest('.door'); if (door) track('door', { door: door.getAttribute('data-go') || door.getAttribute('data-to') || 'x' });
     var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
-    var cur = e.target.closest('[data-cur]'); if (cur) { app.cur = cur.getAttribute('data-cur'); $$('[data-cur]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === cur)); }); store('mm-cur', app.cur); if (app.view === 'build') refreshBuilder(); else route(); return; }
     var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } autoReco(); if (app.auto) persist(); refreshBuilder(); return; }
     var el = e.target.closest('[data-act]'); if (!el) return;
     var act = el.getAttribute('data-act'), i = +el.getAttribute('data-i'), S = app.state;
@@ -831,8 +835,8 @@
     var q = new URLSearchParams(location.search); app.meta.ref = (q.get('ref') || q.get('r') || '').slice(0, 40); app.meta.from = P[q.get('from')] ? q.get('from') : '';
     app.nmOff = store('mm-nmoff') || {};
     var pp2 = store('mm-passport'); if (pp2) app.passport = pp2;
-    var sc = store('mm-cur'); if (sc === 'GBP' || sc === 'USD') app.cur = sc;
-    $$('[data-cur]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-cur') === app.cur)); });
+    var sc = store('mm-cur'); if (sc && MM.CURRENCIES[sc]) app.cur = sc;
+    var csel = $('#cursel'); if (csel) { csel.value = app.cur; csel.addEventListener('change', function () { app.cur = csel.value; store('mm-cur', app.cur); track('currency', { c: app.cur }); if (app.view === 'build') refreshBuilder(); else route(); }); }
     var qa = store('mm-quiz'); if (qa) { app.quiz.a = Object.assign({ days: 14, vibes: [], must: [] }, qa); }
     if (app.meta.from && !location.hash) { app.state = MM.defaultState(); location.hash = '#/build'; return; }
     window.addEventListener('DOMContentLoaded', function () { route(); }); if (document.readyState !== 'loading') setTimeout(route, 0);
