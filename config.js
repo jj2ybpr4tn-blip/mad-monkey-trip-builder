@@ -34,6 +34,12 @@ window.MM_CONFIG = {
   // Serve photos from your own copies (run scripts/mirror-photos.mjs first). e.g. '/assets/photos' or a CDN URL. Blank = hot-link madmonkeyhostels.com.
   PHOTO_BASE: 'assets/photos',
 
+  // Optional. Where "Tell me when it launches" signups go (ALL IN trips that aren't live yet). API_BASE fills it in. Blank = demo mode.
+  WAITLIST_ENDPOINT: '',
+
+  // Optional. The Mad Monkey app: App Store / Google Play / smart link. When set, trip packs and the crew-checked page show a "Get the app" card.
+  APP_URL: '',
+
   // Optional privacy link shown under the lead form.
   PRIVACY_URL: ''
 };
@@ -42,5 +48,5 @@ window.MM_CONFIG = {
 (function (c) {
   if (!c.API_BASE) return; var b = c.API_BASE.replace(/\/$/, '');
   c.LEAD_ENDPOINT = c.LEAD_ENDPOINT || b + '/leads'; c.STATUS_ENDPOINT = c.STATUS_ENDPOINT || b + '/status'; c.GROUP_ENDPOINT = c.GROUP_ENDPOINT || b;
-  c.EVENT_ENDPOINT = c.EVENT_ENDPOINT || b + '/event'; c.LIVE_ENDPOINT = c.LIVE_ENDPOINT || b + '/live'; c.FARES_ENDPOINT = c.FARES_ENDPOINT || b + '/fares'; c.SHARE_ENDPOINT = c.SHARE_ENDPOINT || b + '/share'; c.REVIEWS_ENDPOINT = c.REVIEWS_ENDPOINT || b + '/reviews'; c.FLOW_ENDPOINT = c.FLOW_ENDPOINT || b + '/flow';
+  c.EVENT_ENDPOINT = c.EVENT_ENDPOINT || b + '/event'; c.LIVE_ENDPOINT = c.LIVE_ENDPOINT || b + '/live'; c.FARES_ENDPOINT = c.FARES_ENDPOINT || b + '/fares'; c.SHARE_ENDPOINT = c.SHARE_ENDPOINT || b + '/share'; c.WAITLIST_ENDPOINT = c.WAITLIST_ENDPOINT || b + '/waitlist'; c.REVIEWS_ENDPOINT = c.REVIEWS_ENDPOINT || b + '/reviews'; c.FLOW_ENDPOINT = c.FLOW_ENDPOINT || b + '/flow';
 })(window.MM_CONFIG);

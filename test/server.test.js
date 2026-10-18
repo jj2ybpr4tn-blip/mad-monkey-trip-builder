@@ -84,6 +84,19 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
   ok('share: /t/ page has route title, price and image for previews', /og:title" content="Hanoi → Hoi An · 8 days/.test(tp) && /og:image" content="http[^"]+\/t\/[a-z0-9]{7}\.jpg/.test(tp) && /location\.replace\("\/#\/build\/i=s\.hanoi/.test(tp));
   ok('share: preview image served', (await fetch(B + '/t/' + sh.b.code + '.jpg')).headers.get('content-type') === 'image/jpeg');
   ok('share: code resolves back to the trip', (await j('/api/share/' + sh.b.code)).b.state === 'i=s.hanoi.3~s.hoi-an.4&d=2027-01-10');
+  /* launch waitlist, assignment, hostel details */
+  const soonTrip = 'thailand', liveTrip = 'vietnam';
+  ok('waitlist: rejects a trip that is already live', (await post('/api/waitlist', { trip: liveTrip, contact: { name: 'A', whatsapp: '+447700900123', consent: true } })).s === 400);
+  ok('waitlist: rejects without consent or contact', (await post('/api/waitlist', { trip: soonTrip, contact: { name: 'A', whatsapp: '+447700900123' } })).s === 400 && (await post('/api/waitlist', { trip: soonTrip, contact: { name: 'A', consent: true } })).s === 400);
+  ok('waitlist: accepts WhatsApp only', (await post('/api/waitlist', { trip: soonTrip, contact: { name: 'Wa', via: 'whatsapp', whatsapp: '+44 7700 900123', consent: true } })).s === 200);
+  ok('waitlist: accepts email only, and ignores a duplicate', (await post('/api/waitlist', { trip: 'laos', contact: { name: 'Em', via: 'email', email: 'em@example.com', consent: true } })).s === 200 && (await post('/api/waitlist', { trip: 'laos', contact: { name: 'Em', via: 'email', email: 'EM@example.com', consent: true } })).s === 200 && (await j('/api/admin/waitlist', { headers: adm })).b.filter((x) => x.trip === 'laos').length === 1);
+  ok('waitlist: list needs admin', (await j('/api/admin/waitlist')).s === 401);
+  { const wl = (await j('/api/admin/waitlist', { headers: adm })).b; await j('/api/admin/waitlist/' + wl[0].id, { method: 'DELETE', headers: adm }); ok('waitlist: entries can be removed', (await j('/api/admin/waitlist', { headers: adm })).b.length === wl.length - 1); }
+  { const ls = (await j('/api/admin/leads', { headers: adm })).b; const ref = ls[0].ref;
+    await j('/api/admin/leads/' + ref, { method: 'PATCH', headers: { ...adm, 'content-type': 'application/json' }, body: JSON.stringify({ assignee: 'Kyle' }) });
+    const l2 = (await j('/api/admin/leads', { headers: adm })).b.find((x) => x.ref === ref); ok('assignee: saved and logged in the history', l2.assignee === 'Kyle' && l2.history.some((h) => /assigned to Kyle/.test(h.event))); }
+  { await j('/api/admin/live', { method: 'PUT', headers: { ...adm, 'content-type': 'application/json' }, body: JSON.stringify({ notice: '', spots: {}, legs: {}, acts: {}, hostels: { hanoi: { addr: '1 Test Street', checkin: 'from 2pm', phone: '+84 1', directions: 'Taxi from the station' }, narnia: { addr: 'x' } } }) });
+    const L = (await j('/api/live')).b; ok('hostel details: saved for real hostels only, public for trip packs', L.hostels.hanoi && L.hostels.hanoi.addr === '1 Test Street' && !L.hostels.narnia); }
   /* events + funnel + limits */
   await post('/api/event', { n: 'door', p: { door: 'quiz' }, s: 'abc' }); await post('/api/event', { n: 'view', s: 'abc' });
   const fu = (await j('/api/admin/funnel', { headers: adm })).b; ok('funnel counts events, sessions and doors', fu.byName.door === 1 && fu.sessions.view === 1 && fu.doors.quiz === 1);

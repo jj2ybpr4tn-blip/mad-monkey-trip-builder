@@ -31,6 +31,10 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
 .login{max-width:420px;margin:12vh auto;text-align:center}.login h1{font-size:44px;margin-bottom:12px}
 .big{font-size:34px;font-weight:900;letter-spacing:-.03em;line-height:1} .stat{display:inline-block;margin-right:28px}.stat span{display:block;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#5b574d}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--black);color:var(--lime);padding:10px 18px;font-weight:800;border-radius:999px;z-index:20}
+
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px} .tools input,.tools select{width:auto;flex:1 1 140px;padding:7px 9px;font-size:13px}
+.wait{font-weight:800;font-size:12px} .wait.ok{color:#2b6b00} .wait.warn{color:#8a5a00} .wait.bad{color:#b0005f}
+.tpl{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -52,21 +56,51 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
   }
   function fmtLeft(ms) { if (ms == null) return ''; if (ms <= 0) return 'expired'; var h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000); return h + 'h ' + m + 'm left'; }
   function shell(inner) {
-    var tabs = [['reviews', 'Reviews + holds'], ['live', 'Live prices + spots'], ['quotes', 'Guest reviews'], ['flow', 'Where guests go'], ['funnel', 'Funnel']];
+    var tabs = [['reviews', 'Reviews + holds'], ['live', 'Live prices + spots'], ['quotes', 'Guest reviews'], ['waitlist', 'Waitlist'], ['hostels', 'Hostel details'], ['flow', 'Where guests go'], ['funnel', 'Funnel']];
     app.innerHTML = '<header><div><img src="/assets/logo/mad-monkey-white.png" alt="Mad Monkey"> &nbsp;<b>Crew console</b></div><button class="btn" id="out">Sign out</button></header><nav>' + tabs.map(function (t) { return '<button data-t="' + t[0] + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</nav><main>' + inner + '</main>';
     document.getElementById('out').onclick = function () { sessionStorage.removeItem('mm-admin'); TOKEN = ''; login(); };
     Array.prototype.forEach.call(app.querySelectorAll('nav button'), function (b) { b.onclick = function () { tab = b.getAttribute('data-t'); render(); }; });
   }
 
+  var WHO = localStorage.getItem('mm-who') || '', FQ = '', FS = 'open', FM = false;
+  var OPEN = ['submitted', 'checking', 'ready'];
+  function waitMs(l) { return OPEN.indexOf(l.status) > -1 ? Date.now() - Date.parse(l.createdAt) : null; }
+  function waitHTML(l) { var ms = waitMs(l); if (ms == null) return '<span class="muted">·</span>'; var h = ms / 3600000, cls = h < 6 ? 'ok' : h < 24 ? 'warn' : 'bad'; return '<span class="wait ' + cls + '">' + (h < 1 ? Math.round(ms / 60000) + 'm' : h < 48 ? Math.round(h) + 'h' : Math.round(h / 24) + 'd') + '</span>'; }
+  function visible() {
+    var q = FQ.toLowerCase();
+    return leads.filter(function (l) {
+      if (FS === 'open' && OPEN.indexOf(l.status) < 0) return false; if (FS !== 'open' && FS !== 'all' && l.status !== FS) return false;
+      if (FM && WHO && (l.assignee || '') !== WHO) return false;
+      return !q || (l.ref + ' ' + l.contact.name + ' ' + (l.contact.email || '') + ' ' + (l.contact.whatsapp || '') + ' ' + l.trip.route + ' ' + (l.assignee || '')).toLowerCase().indexOf(q) > -1;
+    }).sort(function (a, b) { var wa = waitMs(a), wb = waitMs(b); if (wa != null && wb != null) return wb - wa; if (wa != null) return -1; if (wb != null) return 1; return Date.parse(b.createdAt) - Date.parse(a.createdAt); });
+  }
+  function csv(rows) { return rows.map(function (r) { return r.map(function (c) { c = String(c == null ? '' : c); return /[",\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\n'); }
+  function download(name, text) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); a.download = name; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500); }
+  var TPL = {
+    got: ['Got it', 'Hi {name}, it\'s {crew} from Mad Monkey. I\'ve got your trip ({route}, {days} days) and I\'m checking it now. Your ref is {ref}. I\'ll be back to you shortly.'],
+    ready: ['Ready for you', 'Hi {name}, your trip ({ref}) is checked and ready. I\'ve looked over the routes, dates and prices. Have a look at the plan and tell me if you want anything changed. {link}'],
+    dates: ['Need dates', 'Hi {name}, thanks for sending {route}. What dates are you thinking? Once I have them I can hold your beds while I check everything.'],
+    change: ['Suggest a change', 'Hi {name}, I\'ve looked at {route} and I\'d tweak one thing so it works better: [say what]. Shall I make that change?'],
+    cant: ['Can\'t do it as is', 'Hi {name}, I couldn\'t make {route} work exactly as planned ([reason]). I\'d like to suggest [alternative] instead. Is that OK?']
+  };
+  function tplText(k, l) { return TPL[k][1].replace(/\{name\}/g, l.contact.name).replace(/\{route\}/g, l.trip.route).replace(/\{days\}/g, l.trip.days).replace(/\{ref\}/g, l.ref).replace(/\{crew\}/g, WHO || 'the crew').replace(/\{link\}/g, l.trip.link || ''); }
+
   /* ---------- reviews + holds ---------- */
   function renderReviews() {
-    var open = leads.filter(function (l) { return l.status === 'submitted' || l.status === 'checking' || l.status === 'ready'; }).length, holds = leads.filter(function (l) { return l.hold && l.hold.status === 'active'; }).length;
-    var h = '<div class="card"><span class="stat"><b class="big">' + open + '</b><span>Open</span></span><span class="stat"><b class="big">' + holds + '</b><span>Beds held now</span></span><span class="stat"><b class="big">' + leads.length + '</b><span>All time</span></span></div><div class="grid"><div class="card"><h2 style="font-size:22px;margin-bottom:8px">Trips for review</h2>' +
-      (leads.length ? '<table><tr><th>Ref</th><th>Guest</th><th>Trip</th><th>Status</th><th>Hold</th></tr>' + leads.map(function (l) {
-        return '<tr class="row' + (sel === l.ref ? ' sel' : '') + '" data-ref="' + l.ref + '"><td><b>' + l.ref + '</b><div class="muted">' + new Date(l.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</div></td><td>' + esc(l.contact.name) + '<div class="muted">' + l.contact.partySize + ' pax</div></td><td>' + esc(l.trip.route) + '<div class="muted">' + l.trip.days + ' days' + (l.trip.start ? ' · ' + l.trip.start : '') + ' · ~$' + l.trip.estTotalUsd + '</div></td><td><span class="pill s-' + l.status + '">' + l.status + '</span></td><td>' + (l.hold && l.hold.requested ? '<span class="pill">' + (l.hold.status === 'active' ? fmtLeft(l.holdLeftMs) : l.hold.status) + '</span>' : '<span class="muted">no</span>') + '</td></tr>';
-      }).join('') + '</table>' : '<p class="muted">Nothing yet. Requests from "Hold my beds + get it checked" land here.</p>') + '</div><div id="detail"></div></div>';
+    var open = leads.filter(function (l) { return l.status === 'submitted' || l.status === 'checking' || l.status === 'ready'; }).length, holds = leads.filter(function (l) { return l.hold && l.hold.status === 'active' && (l.holdLeftMs == null || l.holdLeftMs > 0); }).length;
+    var h = '<div class="card"><span class="stat"><b class="big">' + open + '</b><span>Open</span></span><span class="stat"><b class="big">' + holds + '</b><span>Beds held now</span></span><span class="stat"><b class="big">' + leads.length + '</b><span>All time</span></span>' + (function () { var m = 0; leads.forEach(function (l) { var w = waitMs(l); if (w != null && w > m) m = w; }); return m ? '<span class="stat"><b class="big">' + (m < 36e5 ? Math.round(m / 6e4) + 'm' : m < 48 * 36e5 ? Math.round(m / 36e5) + 'h' : Math.round(m / 864e5) + 'd') + '</b><span>Longest wait</span></span>' : ''; })() + '</div><div class="grid"><div class="card"><h2 style="font-size:22px;margin-bottom:8px">Trips for review</h2>' +
+      '<div class="tools"><input id="fq" placeholder="Search name, ref, trip…" value="' + esc(FQ) + '"><select id="fs">' + [['open', 'Open'], ['all', 'Everything'], ['submitted', 'New'], ['checking', 'Checking'], ['ready', 'Ready'], ['approved', 'Approved'], ['declined', 'Declined']].map(function (o) { return '<option value="' + o[0] + '"' + (FS === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select><input id="who" placeholder="I\'m… (your name)" value="' + esc(WHO) + '"><label style="margin:0;display:flex;gap:6px;align-items:center;white-space:nowrap"><input id="fm" type="checkbox"' + (FM ? ' checked' : '') + ' style="width:auto"> Mine only</label><button class="btn" id="csv">Export CSV</button></div>' +
+      (visible().length ? '<table><tr><th>Ref</th><th>Guest</th><th>Trip</th><th>Status</th><th>Waiting</th><th>Crew</th><th>Hold</th></tr>' + visible().map(function (l) {
+        return '<tr class="row' + (sel === l.ref ? ' sel' : '') + '" data-ref="' + l.ref + '"><td><b>' + l.ref + '</b><div class="muted">' + new Date(l.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</div></td><td>' + esc(l.contact.name) + '<div class="muted">' + l.contact.partySize + ' pax</div></td><td>' + esc(l.trip.route) + '<div class="muted">' + l.trip.days + ' days' + (l.trip.start ? ' · ' + l.trip.start : '') + ' · ~$' + l.trip.estTotalUsd + '</div></td><td><span class="pill s-' + l.status + '">' + l.status + '</span></td><td>' + waitHTML(l) + '</td><td>' + (l.assignee ? esc(l.assignee) : '<span class="muted">·</span>') + '</td><td>' + (l.hold && l.hold.requested ? '<span class="pill">' + (l.hold.status === 'active' ? fmtLeft(l.holdLeftMs) : l.hold.status) + '</span>' : '<span class="muted">no</span>') + '</td></tr>';
+      }).join('') + '</table>' : '<p class="muted">' + (leads.length ? 'Nothing matches those filters.' : 'Nothing yet. Requests from "Hold my beds + get it checked" land here.') + '</p>') + '</div><div id="detail"></div></div>';
     shell(h);
     Array.prototype.forEach.call(app.querySelectorAll('tr.row'), function (r) { r.onclick = function () { sel = r.getAttribute('data-ref'); renderReviews(); }; });
+    var keep = function () { var q = document.getElementById('fq'); renderReviews(); var n = document.getElementById('fq'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
+    document.getElementById('fq').oninput = function (e) { FQ = e.target.value; keep(); };
+    document.getElementById('fs').onchange = function (e) { FS = e.target.value; renderReviews(); };
+    document.getElementById('fm').onchange = function (e) { FM = e.target.checked; renderReviews(); };
+    document.getElementById('who').onchange = function (e) { WHO = e.target.value.trim(); localStorage.setItem('mm-who', WHO); toast('Saved: you are ' + (WHO || 'nobody')); };
+    document.getElementById('csv').onclick = function () { download('trip-requests.csv', csv([['ref', 'created', 'status', 'assignee', 'name', 'contact by', 'email', 'whatsapp', 'party', 'route', 'days', 'start', 'est total usd', 'hold']].concat(leads.map(function (l) { return [l.ref, l.createdAt, l.status, l.assignee || '', l.contact.name, l.contact.via || '', l.contact.email || '', l.contact.whatsapp || '', l.contact.partySize, l.trip.route, l.trip.days, l.trip.start || '', l.trip.estTotalUsd, l.hold && l.hold.requested ? l.hold.status : 'none']; })))); };
     if (sel) detail(leads.filter(function (l) { return l.ref === sel; })[0]);
   }
   function detail(l) {
@@ -75,16 +109,53 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
     d.innerHTML = '<div class="card"><h2 style="font-size:24px">' + l.ref + ' · ' + esc(l.contact.name) + '</h2><p class="muted"><b>Contact by ' + (l.contact.via === 'email' || !l.contact.whatsapp ? 'email' : 'WhatsApp') + ':</b> ' + (l.contact.whatsapp ? '<a href="https://wa.me/' + l.contact.whatsapp.replace(/[^0-9]/g, '') + '" target="_blank" rel="noopener">WhatsApp ' + esc(l.contact.whatsapp) + '</a>' : '') + (l.contact.whatsapp && l.contact.email ? ' · ' : '') + (l.contact.email ? '<a href="mailto:' + esc(l.contact.email) + '">' + esc(l.contact.email) + '</a>' : '') + (l.contact.from ? ' · from ' + esc(l.contact.from) : '') + '</p>' +
       '<p><b>' + esc(l.trip.route) + '</b><br>' + l.trip.days + ' days · ~$' + l.trip.estTotalUsd + ' est. · ' + esc(l.trip.urgency) + (l.trip.allInMatch ? ' · looks like ALL IN ' + esc(l.trip.allInMatch) : '') + (l.attribution.ref ? ' · ref ' + esc(l.attribution.ref) : '') + (l.attribution.fromHostel ? ' · from ' + esc(l.attribution.fromHostel) : '') + '</p>' +
       (l.contact.notes ? '<p><b>Guest notes:</b> ' + esc(l.contact.notes) + '</p>' : '') + '<div class="acts"><a class="btn l" href="' + esc(l.trip.link) + '" target="_blank">Open their trip</a></div>' +
+      '<label>Looking after it</label><div class="row2"><input id="asg" list="crewnames" value="' + esc(l.assignee || '') + '" placeholder="crew member"><div class="acts" style="margin:0"><button class="btn" id="asgsave">Assign</button>' + (WHO ? '<button class="btn l" id="take">Take it</button>' : '') + '</div></div><datalist id="crewnames">' + Object.keys(leads.reduce(function (a, x) { if (x.assignee) a[x.assignee] = 1; if (WHO) a[WHO] = 1; return a; }, {})).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
+      '<div class="tpl"><label>Reply to the guest (' + ((l.contact.via === 'email' || !l.contact.whatsapp) ? 'they chose email' : 'they chose WhatsApp') + ')</label><select id="tpl">' + Object.keys(TPL).map(function (k) { return '<option value="' + k + '">' + TPL[k][0] + '</option>'; }).join('') + '</select><textarea id="msg">' + esc(tplText('got', l)) + '</textarea><div class="acts" style="margin:0"><button class="btn" id="cpmsg">Copy</button><a class="btn l" id="opmsg" target="_blank" rel="noopener">' + ((l.contact.via === 'email' || !l.contact.whatsapp) ? 'Open in email' : 'Open in WhatsApp') + '</a></div></div>' +
       '<div class="hold' + (l.hold && l.hold.status === 'active' ? '' : ' off') + '"><b>Bed hold:</b> ' + (l.hold && l.hold.requested ? l.hold.status + (l.hold.status === 'active' ? ' · ' + fmtLeft(l.holdLeftMs) + ' (until ' + new Date(l.hold.until).toLocaleString('en-GB') + ')' : '') : 'not requested') + '</div>' + sheet +
       '<div class="acts"><button class="btn" data-a="checking">Mark checking</button><button class="btn l" data-a="ready">Ready for guest</button><button class="btn" data-a="approved">Approved</button><button class="btn k" data-a="declined">Can\'t do it</button></div>' +
       '<label>Message to the guest (shown on their status page)</label><textarea id="pn">' + esc(l.publicNote) + '</textarea><label>Payment link (https, shown when Ready)</label><input id="pl" value="' + esc(l.payLink) + '" placeholder="https://…">' +
       '<label>Internal note</label><textarea id="in" placeholder="only the crew sees this"></textarea>' + (l.notes.length ? '<p class="muted">' + l.notes.map(function (n) { return new Date(n.at).toLocaleString('en-GB') + ': ' + esc(n.text); }).join('<br>') + '</p>' : '') +
       '<div class="acts"><button class="btn p" id="save">Save</button>' + (l.hold && l.hold.requested ? '<button class="btn" id="ext">Extend hold 24h</button><button class="btn" id="rel">Release hold</button>' : '') + '</div>' +
       '<details><summary class="muted">Itinerary + history</summary><pre>' + esc(l.itinerary) + '</pre><pre>' + esc(l.history.map(function (x) { return x.at + '  ' + x.event; }).join('\n')) + '</pre></details></div>';
+    var msg = document.getElementById('msg'), op = document.getElementById('opmsg'), byEmail = l.contact.via === 'email' || !l.contact.whatsapp;
+    function setLink() { op.href = byEmail ? 'mailto:' + encodeURIComponent(l.contact.email || '') + '?subject=' + encodeURIComponent('Your Mad Monkey trip ' + l.ref) + '&body=' + encodeURIComponent(msg.value) : 'https://wa.me/' + String(l.contact.whatsapp || '').replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent(msg.value); }
+    setLink(); msg.oninput = setLink; document.getElementById('tpl').onchange = function (e) { msg.value = tplText(e.target.value, l); setLink(); };
+    document.getElementById('cpmsg').onclick = function () { (navigator.clipboard ? navigator.clipboard.writeText(msg.value) : Promise.reject()).then(function () { toast('Copied'); }, function () { msg.select(); document.execCommand('copy'); toast('Copied'); }); };
+    document.getElementById('asgsave').onclick = function () { patch({ assignee: document.getElementById('asg').value }, 'Assigned'); };
+    if (document.getElementById('take')) document.getElementById('take').onclick = function () { patch({ assignee: WHO }, 'You\'ve got it'); };
     function patch(body, msg) { api('/leads/' + l.ref, { method: 'PATCH', body: body }).then(function () { toast(msg || 'Saved'); load(); }); }
     Array.prototype.forEach.call(d.querySelectorAll('[data-a]'), function (b) { b.onclick = function () { patch({ status: b.getAttribute('data-a'), publicNote: document.getElementById('pn').value, payLink: document.getElementById('pl').value, note: document.getElementById('in').value }, 'Status updated'); }; });
     document.getElementById('save').onclick = function () { patch({ publicNote: document.getElementById('pn').value, payLink: document.getElementById('pl').value, note: document.getElementById('in').value }); };
     if (document.getElementById('ext')) { document.getElementById('ext').onclick = function () { patch({ extendHoldHours: 24 }, 'Hold extended'); }; document.getElementById('rel').onclick = function () { patch({ releaseHold: true }, 'Hold released'); }; }
+  }
+
+  /* ---------- waitlist ---------- */
+  function renderWaitlist() {
+    api('/waitlist').then(function (W) {
+      var by = {}; W.forEach(function (x) { by[x.trip] = (by[x.trip] || 0) + 1; });
+      var soon = TRIPS.filter(function (t) { return t.status === 'soon'; });
+      shell('<div class="card">' + soon.map(function (t) { return '<span class="stat"><b class="big">' + (by[t.id] || 0) + '</b><span>ALL IN ' + esc(t.n) + '</span></span>'; }).join('') + '<span class="stat"><b class="big">' + W.length + '</b><span>Total</span></span><div class="acts"><button class="btn" id="wcsv">Export CSV</button></div></div>' +
+        '<div class="card"><h2 style="font-size:22px;margin-bottom:8px">Launch waitlist</h2><p class="muted">Guests who asked to be told when a trip opens. Message each on the channel they chose, once, on launch day.</p>' + (W.length ? '<table><tr><th>When</th><th>Trip</th><th>Name</th><th>Reach them on</th><th></th></tr>' + W.slice().reverse().map(function (x) {
+          var t = TRIPS.filter(function (y) { return y.id === x.trip; })[0];
+          return '<tr><td class="muted">' + new Date(x.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</td><td>' + esc(t ? t.n : x.trip) + '</td><td><b>' + esc(x.name) + '</b></td><td>' + (x.via === 'email' ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '<a href="https://wa.me/' + x.whatsapp.replace(/[^0-9]/g, '') + '" target="_blank" rel="noopener">WhatsApp ' + esc(x.whatsapp) + '</a>') + '</td><td><button class="btn" data-del="' + x.id + '">Remove</button></td></tr>';
+        }).join('') + '</table>' : '<p class="muted">Nobody yet. The "Tell me when it launches" button is on the Thailand and Laos trip cards.</p>') + '</div>');
+      document.getElementById('wcsv').onclick = function () { download('launch-waitlist.csv', csv([['when', 'trip', 'name', 'reach on', 'email', 'whatsapp', 'source']].concat(W.map(function (x) { return [x.at, x.trip, x.name, x.via, x.email, x.whatsapp, x.source]; })))); };
+      Array.prototype.forEach.call(app.querySelectorAll('[data-del]'), function (b) { b.onclick = function () { api('/waitlist/' + b.getAttribute('data-del'), { method: 'DELETE' }).then(function () { toast('Removed'); renderWaitlist(); }); }; });
+    });
+  }
+
+  /* ---------- hostel details (shown in the guest's trip pack) ---------- */
+  function renderHostels() {
+    api('/live').then(function (L) {
+      var H = L.hostels || {};
+      shell('<div class="card"><h2 style="font-size:22px;margin-bottom:6px">Hostel details for trip packs</h2><p class="muted">What guests see in their printable trip pack under each hostel. Fill these in once. Leave a row blank and the pack says "address on your booking confirmation".</p>' +
+        '<table><tr><th>Hostel</th><th>Address</th><th>Check-in</th><th>Phone / WhatsApp</th><th>Getting there from the main station or airport</th></tr>' + Object.keys(PLACES).map(function (id) { var v = H[id] || {};
+          return '<tr data-h="' + id + '"><td><b>' + esc(PLACES[id]) + '</b></td><td><input data-f="addr" value="' + esc(v.addr || '') + '" placeholder="street, area"></td><td><input data-f="checkin" value="' + esc(v.checkin || '') + '" placeholder="from 2pm"></td><td><input data-f="phone" value="' + esc(v.phone || '') + '"></td><td><textarea data-f="directions" style="min-height:44px">' + esc(v.directions || '') + '</textarea></td></tr>'; }).join('') + '</table><div class="acts"><button class="btn p" id="savehost">Save hostel details</button></div></div>');
+      document.getElementById('savehost').onclick = function () {
+        var hostels = {}; Array.prototype.forEach.call(app.querySelectorAll('tr[data-h]'), function (tr) { var o = {}; Array.prototype.forEach.call(tr.querySelectorAll('[data-f]'), function (i) { o[i.getAttribute('data-f')] = i.value; }); hostels[tr.getAttribute('data-h')] = o; });
+        api('/live', { method: 'PUT', body: { notice: L.notice || '', spots: L.spots || {}, legs: L.legs || {}, acts: L.acts || {}, hostels: hostels } }).then(function () { toast('Saved'); renderHostels(); });
+      };
+    });
   }
 
   /* ---------- live ---------- */
@@ -105,7 +176,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
         var legs = {}, acts = {};
         Array.prototype.forEach.call(document.querySelectorAll('#et tr[data-k]'), function (tr) { var u = tr.querySelector('[data-u]'), hh = tr.querySelector('[data-h]'), o = {}; if (u.value !== '' && +u.value !== +u.getAttribute('data-d')) o.u = +u.value; if (hh.value !== '' && +hh.value !== +hh.getAttribute('data-d')) o.h = +hh.value; if (Object.keys(o).length) legs[tr.getAttribute('data-k')] = o; });
         Array.prototype.forEach.call(document.querySelectorAll('#at tr[data-k]'), function (tr) { var i = tr.querySelector('input'); if (i.value !== '' && +i.value !== +i.getAttribute('data-d')) acts[tr.getAttribute('data-k')] = +i.value; });
-        api('/live', { method: 'PUT', body: { notice: document.getElementById('notice').value, spots: spots, legs: legs, acts: acts } }).then(function () { toast('Live data saved'); renderLive(); });
+        api('/live', { method: 'PUT', body: { notice: document.getElementById('notice').value, spots: spots, legs: legs, acts: acts, hostels: L.hostels || {} } }).then(function () { toast('Live data saved'); renderLive(); });
       };
     });
   }
@@ -144,7 +215,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
   }
 
   function load() { api('/leads').then(function (d) { leads = d; if (tab === 'reviews') renderReviews(); }); }
-  function render() { if (tab === 'reviews') { shell('<div class="card">Loading…</div>'); load(); } else if (tab === 'live') renderLive(); else if (tab === 'quotes') renderQuotes(); else if (tab === 'flow') renderFlow(); else renderFunnel(); }
+  function render() { if (tab === 'reviews') { shell('<div class="card">Loading…</div>'); load(); } else if (tab === 'live') renderLive(); else if (tab === 'quotes') renderQuotes(); else if (tab === 'waitlist') renderWaitlist(); else if (tab === 'hostels') renderHostels(); else if (tab === 'flow') renderFlow(); else renderFunnel(); }
   function start() {
     if (!TOKEN) return login();
     Object.keys(window.MM.PLACES).forEach(function (id) { PLACES[id] = window.MM.PLACES[id].n; });
