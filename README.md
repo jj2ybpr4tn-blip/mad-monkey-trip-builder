@@ -7,7 +7,9 @@ Plain static site. No build step, no framework, no server.
 
 ```bash
 npm start        # static preview only (demo mode: nothing is sent anywhere)
-npm test         # 137 logic checks (routing, costs, dates, share links, quiz matcher)
+npm test         # logic, server and page checks (routing, costs, dates, Trip Doctor, visas, festivals, crew server, 104 Google pages)
+npm run server   # the crew server: review + bed holds, waitlist, groups, short links, crew console at /admin
+npm run build-pages   # the pages for Google (see docs/SEO.md)
 ```
 
 ## What's in it
@@ -33,6 +35,18 @@ npm test         # 137 logic checks (routing, costs, dates, share links, quiz ma
 | **Human review + bed hold** | "Hold my beds + get it checked": the trip goes to a real crew member, beds are held while they check, the guest gets a reference and a status page, and approves before paying. Highlighted across the site. See [docs/LEADS.md](docs/LEADS.md). |
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
 | **USD / GBP** | Fixed indicative rate (1.27). Real conversion belongs to the booking engine. |
+| **Trip Doctor** | Scores the pace of a trip and fixes it in one tap: back-to-back night buses, 14-hour journeys, one-night stops, too many stops, odd arrival times, visa length, festival clashes. |
+| **Visa length check** | Compares days in each country with what the guest's passport allows. Limits in `data/rules.js`, official links in `data/entry.js`. |
+| **Festivals + closures** | Tet, Songkran, Nyepi, Ramadan, Holy Week, Loy Krathong, Christmas peak and more, checked against the trip's dates with a suggested better week. |
+| **Know before you go** | Money, SIMs, getting around, scooters and licences, safety, manners and health per country, plus local knowledge per hostel (`data/guide.js`). |
+| **Don't miss** | Flags hostels the route passes through and the standout activity at each stop. |
+| **Themed trips + Surprise me** | Eight hand-picked routes and a remix button. |
+| **Trip pack** | A designed, printable itinerary (`#/pack/...`): hostels, transport, day by day, local knowledge, visas, festivals, packing list. |
+| **Groups** | Vote, suggest stops, heart activities ("Sam wants Pai"), Route A vs B, and see where friends' trips cross. Short share links with rich previews. |
+| **Launch waitlist** | "Tell me when it launches" on Thailand and Laos, by WhatsApp or email, as the guest prefers. |
+| **Crew console** | Reviews + holds, assign, reply templates, wait timers, CSV, waitlist, hostel details, live prices, funnel. |
+| **Pages for Google** | 104 plain pages (trips, routes, hostels, country guides) with structured data and a sitemap. See `docs/SEO.md`. |
+| **Currencies** | USD, GBP, EUR, AUD, CAD, with local currency hints per country. |
 
 ## Go live
 

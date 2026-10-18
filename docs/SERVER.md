@@ -64,3 +64,12 @@ When the server is running, **Share** turns a trip into a short link like `/t/ab
 - Preview images need an absolute address. Behind a proxy that sets `X-Forwarded-Host` this works on its own; otherwise set `PUBLIC_URL`, e.g. `https://trips.madmonkeyhostels.com`.
 - Shared trips live in `DATA_DIR/shares.json` and `DATA_DIR/og/`. They hold routes only, no personal details.
 - On the static GitHub Pages demo there's no server, so Share falls back to the long link with no preview.
+
+
+## Launch waitlist, hostel details and the crew console
+
+- **Waitlist.** ALL IN trips marked `status: 'soon'` show "Tell me when it launches". Guests give a name and *either* WhatsApp or email (their choice). `POST /api/waitlist` stores it in `DATA_DIR/waitlist.json` (duplicates ignored). The **Waitlist** tab shows counts per trip, links to message each person on the channel they chose, and exports CSV.
+- **Hostel details.** The **Hostel details** tab holds address, check-in time, phone and directions for each hostel. They appear in the guest's printable trip pack (`#/pack/...`) and are public via `GET /api/live`.
+- **Crew console.** Requests can be assigned to a crew member ("Take it"), show how long each has been waiting (green under 6 hours, amber under 24, pink beyond), filter by status, search, "mine only", and export to CSV. Reply templates open the guest's chosen channel (WhatsApp or email) with the message filled in.
+- **Homepage preview.** `index.html` gets an absolute preview image and canonical link injected per request. Set `PUBLIC_URL` behind a proxy.
+- **Pages for Google** (`/trips/`, `/routes/`, `/hostels/`, `/guides/`) are served from the project folder. See `docs/SEO.md`.

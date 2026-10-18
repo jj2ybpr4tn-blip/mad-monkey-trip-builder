@@ -224,7 +224,7 @@
   function renderBuilder() {
     root.innerHTML = '<div class="bld"><section class="bmap" id="bmap" aria-label="Map"></section><section class="bpanel" id="bpanel" aria-label="Your trip"></section></div><div class="mbar" id="mbar"></div>';
     var box = $('#bmap'), mapHost = document.createElement('div'); mapHost.style.cssText = 'position:absolute;inset:0'; box.appendChild(mapHost);
-    box.insertAdjacentHTML('beforeend', '<div class="bmap__regions" id="regions"></div><div class="bmap__stats" id="mstats"></div><div class="bmap__hint"><span class="pill pill--sm">Tap a hostel to add it</span></div><div class="bmap__ctl"><button type="button" data-act="mapzoom" data-f="1.5" aria-label="Zoom in">+</button><button type="button" data-act="mapzoom" data-f="0.67" aria-label="Zoom out">−</button><button type="button" class="fit" data-act="mapfit" aria-label="Fit the map to my trip">FIT</button></div>');
+    box.insertAdjacentHTML('beforeend', '<div class="bmap__regions" id="regions"></div><div class="bmap__stats" id="mstats"></div><div class="bmap__hint"><span class="pill pill--sm">Tap a hostel to add it</span></div><div class="bmap__ctl"><button type="button" class="bmap__list" data-act="maplist" aria-label="Show the hostels as a list">List</button><button type="button" data-act="mapzoom" data-f="1.5" aria-label="Zoom in">+</button><button type="button" data-act="mapzoom" data-f="0.67" aria-label="Zoom out">−</button><button type="button" class="fit" data-act="mapfit" aria-label="Fit the map to my trip">FIT</button></div>');
     MM.BuilderMap.mount(mapHost, { pin: onPin, leg: onLegTap });
     refreshBuilder({ instant: true });
   }
@@ -831,7 +831,7 @@
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modalRoot.firstChild) closeModal(); });
 
-  app.util = { ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
+  app.util = { addStop: function (id) { addStop(id); }, ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
   window.addEventListener('hashchange', route);
 
   /* ---------- boot ---------- */

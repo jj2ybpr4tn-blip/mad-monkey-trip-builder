@@ -129,6 +129,23 @@
     u.track('surprise', { theme: s.theme.id }); openState(s.state, 'Surprise: ' + s.why.join(', ') + ' · ' + s.days + ' days');
   };
 
+  /* ---------------- hostel list view (an alternative to the map: phones, screen readers, keyboards) ---------------- */
+  function listHTML() {
+    var inTrip = {}; (A.state.items || []).forEach(function (it, i) { if (it.kind === 'stop') inTrip[it.p] = i + 1; });
+    return Object.keys(MM.COUNTRIES).map(function (c) {
+      var ids = MM.PLACE_ORDER.filter(function (id) { return P[id].c === c; }); if (!ids.length) return '';
+      return '<section class="hlist__c"><h3><i data-c="' + c + '"></i>' + esc(MM.COUNTRIES[c].n) + '</h3><ul>' + ids.map(function (id) {
+        var p = P[id], n = inTrip[id];
+        return '<li><span class="photo hlist__ph">' + u.photo(MM.hostelImg(id)) + '</span><div class="hlist__b"><b>' + esc(p.n) + (p.partner ? ' <em>partner</em>' : '') + '</b><span>' + esc(p.hook) + '</span><span class="hlist__m">Dorm from ' + money(p.bed) + ' · most stay ' + p.sug + ' nights</span></div>' +
+          '<button class="btn btn--sm ' + (n ? '' : 'btn--pink') + '" type="button" data-act="listadd" data-p="' + id + '" ' + (n ? 'disabled' : '') + ' aria-label="' + (n ? esc(p.n) + ' is stop ' + n + ' in your trip' : 'Add ' + esc(p.n) + ' to your trip') + '">' + (n ? 'In your trip · ' + n : 'Add') + '</button></li>';
+      }).join('') + '</ul></section>';
+    }).join('');
+  }
+  X.openList = function () {
+    u.openModal('<div class="modal__hd"><div><div class="over">Every hostel</div><h2 class="disp">Pick your stops.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd hlist" id="hlist">' + listHTML() + '</div>');
+    u.track('map_list');
+  };
+
   /* ---------------- clicks ---------------- */
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act]'); if (!b) return; var act = b.getAttribute('data-act');
@@ -136,7 +153,9 @@
       var d = diagnose(), f = d.findings[+b.getAttribute('data-n')]; if (!f || !f.fix) return;
       var before = MM.plan(A.state).totals; A.state = Object.assign(MM.defaultState(), MM.applyFix(A.state, f.fix)); A.auto = false; u.persist(); u.refresh();
       var after = MM.plan(A.state).totals; u.track('doctor_fix', { id: f.id }); u.toast('Done. ' + (after.total === before.total ? 'Same cost' : (after.total > before.total ? '+' : '−') + money(Math.abs(after.total - before.total))) + ', ' + plural(after.days, 'day') + ' now.');
-    } else if (act === 'gtab') { A.open.gc = b.getAttribute('data-c'); u.refresh(); }
+    } else if (act === 'maplist') { e.preventDefault(); X.openList(); }
+    else if (act === 'listadd') { var pid = b.getAttribute('data-p'); u.addStop(pid); var box = document.getElementById('hlist'); if (box) box.innerHTML = listHTML(); u.toast(P[pid].n + ' added'); }
+    else if (act === 'gtab') { A.open.gc = b.getAttribute('data-c'); u.refresh(); }
     else if (act === 'theme') { var t = MM.themeTrip(b.getAttribute('data-id')); if (t) { u.track('theme', { id: t.theme.id }); openState(t.state, t.theme.n + ': ' + t.days + ' days. Change anything you like.'); } }
     else if (act === 'surprise') { e.preventDefault(); X.surprise(); }
   });
