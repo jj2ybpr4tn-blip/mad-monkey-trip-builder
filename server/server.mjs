@@ -41,8 +41,9 @@ import { createRequire } from 'node:module';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
-for (const f of ['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery']) require(path.join(ROOT, 'data', f + '.js'));
+for (const f of ['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery', 'rules', 'guide']) require(path.join(ROOT, 'data', f + '.js'));
 const MM = require(path.join(ROOT, 'logic.js'));
+require(path.join(ROOT, 'extras.js'));
 
 const PORT = +process.env.PORT || 8000;
 const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -333,7 +334,7 @@ async function api(req, res, url) {
 
 /* ============================================================ static ============================================================ */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js']);
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js']);
 function serveStatic(req, res, url) {
   const tm = url.pathname.match(/^\/t\/([a-z0-9]{7})(\.(jpg|png))?$/);
   if (tm) return sharePage(req, res, tm[1], tm[3]);
