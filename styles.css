@@ -66,7 +66,7 @@ h1,h2,h3,h4,p{margin:0}
 .pill--sm{font-size:10.5px;padding:1px 9px;letter-spacing:.08em;text-transform:uppercase}
 .sticker{display:inline-block;font-family:var(--f-sticker);text-transform:uppercase;background:var(--black);color:var(--lime);padding:6px 14px 4px;border:var(--bw) solid var(--black);box-shadow:5px 5px 0 var(--paper);transform:rotate(-4deg);letter-spacing:.04em;line-height:1}
 .on-bone .sticker,.sticker--onbone{box-shadow:5px 5px 0 var(--pink)}
-.burst{display:grid;place-items:center;text-align:center;aspect-ratio:1;background:var(--lime);color:var(--black);font-weight:900;text-transform:lowercase;line-height:1;transform:rotate(-8deg);
+.burst{display:flex;align-items:center;justify-content:center;text-align:center;aspect-ratio:1;background:var(--lime);color:var(--black);font-weight:900;text-transform:lowercase;line-height:1;transform:rotate(-8deg);
   clip-path:polygon(50.0% 0.0%,57.6% 11.7%,69.1% 3.8%,71.7% 17.6%,85.4% 14.6%,82.4% 28.3%,96.2% 30.9%,88.3% 42.4%,100.0% 50.0%,88.3% 57.6%,96.2% 69.1%,82.4% 71.7%,85.4% 85.4%,71.7% 82.4%,69.1% 96.2%,57.6% 88.3%,50.0% 100.0%,42.4% 88.3%,30.9% 96.2%,28.3% 82.4%,14.6% 85.4%,17.6% 71.7%,3.8% 69.1%,11.7% 57.6%,0.0% 50.0%,11.7% 42.4%,3.8% 30.9%,17.6% 28.3%,14.6% 14.6%,28.3% 17.6%,30.9% 3.8%,42.4% 11.7%)}
 .burst--pink{background:var(--pink)}
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--paper);color:var(--black);border:var(--bw) solid var(--black);border-radius:9999px;padding:6px 14px;font-weight:700;font-size:13px;line-height:1.2}
@@ -103,7 +103,7 @@ main{flex:1;display:flex;flex-direction:column}
 .hero__map .hm{width:100%}
 .hero__map .hm svg{display:block;width:100%;height:auto;max-height:640px;aspect-ratio:.85}
 .hm--m{display:none}
-.hero__burst{position:absolute;right:2%;top:2%;width:clamp(96px,14vw,150px);font-size:clamp(12px,1.5vw,16px);padding:0 12%}
+.hero__burst{position:absolute;right:2%;top:2%;width:clamp(96px,14vw,150px);font-size:clamp(12px,1.5vw,16px)}
 .hero__sticker{position:absolute;left:0;bottom:6%;font-size:clamp(14px,2vw,22px)}
 .ticker{background:var(--lime);color:var(--black);border-bottom:var(--bw) solid var(--black);overflow:hidden;white-space:nowrap;font-weight:900;letter-spacing:.04em;text-transform:uppercase;font-size:13px;padding:9px 0}
 .ticker span{display:inline-block;padding-right:2em;animation:tick 38s linear infinite}
@@ -132,7 +132,7 @@ main{flex:1;display:flex;flex-direction:column}
 .tcard .photo{aspect-ratio:16/10;border-bottom:var(--bw) solid var(--black)}
 .tcard__pill{position:absolute;left:12px;top:12px;z-index:2}
 .tcard__price{position:absolute;right:12px;top:12px;z-index:2;text-align:center}
-.tcard__price .burst{width:92px;font-size:11px;padding:0 8%;background:var(--lime)} .tcard__price b{display:block;font-size:20px;letter-spacing:-.02em}
+.tcard__price .burst{width:92px;font-size:11px;background:var(--lime)} .tcard__price b{display:block;font-size:20px;letter-spacing:-.02em}
 .tcard__body{padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-2);flex:1}
 .tcard h3{font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:-.02em;line-height:.95}
 .tcard__route{font-size:12.5px;font-weight:600;color:var(--ink-dim)}
@@ -844,3 +844,6 @@ body.seo{background:var(--bone);color:var(--black)}
 
 /* hero highlight: a controlled box, so it never clips the line above or spills into the map (Safari draws inline backgrounds taller than Chrome) */
 .hero h1 .hl{display:inline-block;line-height:.86;padding:.05em .12em .03em;margin-block:.03em;max-width:100%}
+
+/* sticker text: always dead centre. (Percentage padding was relative to the parent, not the sticker, so wider words got pushed sideways.) */
+.burst>span{display:block;white-space:nowrap;text-align:center}
