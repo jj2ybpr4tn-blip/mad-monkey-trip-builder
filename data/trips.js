@@ -4,7 +4,7 @@
               madmonkeyhostels.com/all-in-trips + the trip PDFs, Oct 2026).
               Thailand + Laos are "soon" (launching). Laos is the internal
               proposal's recommended RRP and still needs sign-off.
-   SPECIALS — one-off partner events (The Gap Collective).
+   SPECIALS — one featured partner trip on the home page (empty right now, see below).
    CLASSICS — DIY routes we recommend when nobody has a packaged trip for it.
               Used by the quiz matcher. EDITORIAL.
 
@@ -73,11 +73,9 @@
   ];
 
   MM.SPECIALS = [
-    { id: 'gap', n: 'The Gap Collective', tag: 'Bangkok → Phuket → Chiang Mai → Hanoi → Ha Giang → Hoi An → Phnom Penh → Koh Rong → Koh Sdach',
-      kicker: '31 days · 3 countries · 1,500-person island festival', days: 31, gbp: 1995, dates: '16 Nov – 16 Dec 2026', col: 'lime',
-      pitch: 'A month, nine stops and the Ha Giang Loop, ending on a private island with a 1,500-person festival. Run with Collective Experiences.',
-      url: 'https://madmonkeyhostels.com/gapcollective',
-      stops: [S('bangkok', 3, []), S('phuket', 2, []), S('chiang-mai', 3, []), S('hanoi', 5, ['Ha Giang Loop · 4 days, Easy']), S('hoi-an', 3, []), S('phnom-penh', 2, []), S('koh-rong', 3, []), S('koh-sdach', 3, [])] }
+    /* One featured partner trip shows on the home page. Add one object and it appears; remove it and the section hides.
+       { id, n, tag: 'route in words', kicker: 'short line', days, usd | gbp, dates: 'when it runs', col, pitch, url: 'booking page',
+         stats: [['31', 'days'], …] (optional extra tiles), img: 'tour-slug' (optional), stops: [S(place, nights, [activity name fragments])] } */
   ];
 
   /* ---------- DIY classics (EDITORIAL) ----------
@@ -149,7 +147,7 @@
       ['7–10', 'Vang Vieng', 'High-speed train, sunset paramotor, Blue Lagoons + cave + kayak day, zipline, tipsy tubing, farewell night out.']]
   };
 
-  MM.gap = MM.SPECIALS[0];
+  MM.special = MM.SPECIALS[0] || null;
   MM.tripById = function (id) { var all = MM.ALL_IN.concat(MM.SPECIALS, MM.CLASSICS); for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i]; return null; };
 
   /* quiz: where are you landing? */

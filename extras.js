@@ -245,19 +245,34 @@
 
   /* ---------------- themed trips + Surprise me ----------------
      Hand-picked routes (not generated), the way a crew member would suggest them. Every leg is a sensible journey. */
+  // route entries are [hostel, nights, [activity name fragments]]. The activities are picked by hand so the
+  // description, the days and the price all describe the same trip. A test makes sure every fragment still resolves.
   MM.THEMES = [
-    { id: 'party', n: 'The Party Trail', tag: 'Pub crawls, pool parties, island nights', blurb: 'Angkor sunrise, Phnom Penh\'s pool party and pub crawl, then beach nights on Koh Rong.', route: [['siem-reap', 3], ['phnom-penh', 3], ['koh-rong', 4], ['kampot', 2]], vibes: ['party', 'islands'], must: ['party'], c: 'pink' },
-    { id: 'surfdive', n: 'Surf + Dive', tag: 'Learn it. Live it.', blurb: 'Bali surf, Nusa Lembongan reefs, then turtles on the Gilis and Rinjani\'s crater lake.', route: [['uluwatu', 4], ['nusa-lembongan', 3], ['gili-trawangan', 4], ['kuta-lombok', 3]], vibes: ['surf', 'islands'], must: ['dive', 'surf'], c: 'cyan' },
-    { id: 'foodculture', n: 'Food + Culture', tag: 'Street food, temples, old towns', blurb: 'Hanoi street food, Hoi An lanterns and cooking classes, then Luang Prabang\'s temples and waterfalls.', route: [['hanoi', 3], ['hoi-an', 4], ['luang-prabang', 3], ['vang-vieng', 2]], vibes: ['food', 'culture'], must: [], c: 'orange' },
-    { id: 'adventure', n: 'Big Adventure', tag: 'Loops, caves, ziplines, waterfalls', blurb: 'The Ha Giang Loop, then north Laos by train: waterfalls, caves and a hot air balloon.', route: [['hanoi', 4], ['luang-prabang', 3], ['vang-vieng', 3]], vibes: ['adventure', 'moto'], must: ['loop'], c: 'lime' },
-    { id: 'chill', n: 'Slow + Chill', tag: 'Island boats, no alarms', blurb: 'The Visayas at ferry pace: Panglao\'s beaches, Dumaguete and Siquijor\'s waterfalls.', route: [['panglao', 4], ['dumaguete', 3], ['siquijor', 4]], vibes: ['chill', 'islands'], must: [], c: 'yellow' },
-    { id: 'cheap', n: 'Cheap as Chips', tag: 'As far as the money goes', blurb: 'Pai, Chiang Mai, the slow boat and Vang Vieng. Dorm beds from a few dollars and local transport.', route: [['pai', 3], ['chiang-mai', 3], ['luang-prabang', 3], ['vang-vieng', 3]], vibes: ['culture', 'food'], must: [], pref: 'cheap', fund: 14, c: 'green' },
-    { id: 'firsttimer', n: 'First Timer Classic', tag: 'The easy way in', blurb: 'Hanoi, Hoi An, Angkor Wat and Phnom Penh. The route most backpackers do first.', route: [['hanoi', 3], ['hoi-an', 3], ['siem-reap', 3], ['phnom-penh', 2]], vibes: ['culture', 'food', 'party'], must: ['angkor'], c: 'blue' },
-    { id: 'islandhop', n: 'Island Hopper', tag: 'Boats, sand and hammocks', blurb: 'Phnom Penh, then Koh Sdach and Koh Rong by boat, and Kampot\'s river to finish.', route: [['phnom-penh', 2], ['koh-sdach', 3], ['koh-rong', 4], ['kampot', 3]], vibes: ['islands', 'chill'], must: ['islandhop'], c: 'cyan' }];
+    { id: 'party', n: 'The Party Trail', tag: 'Pub crawls, pool parties, island nights', blurb: 'Angkor sunrise and the Siem Reap pub crawl, Phnom Penh\'s pool party, then beach nights on Koh Rong.',
+      route: [['siem-reap', 3, ['Pub Street crawl', 'Sunrise Angkor']], ['phnom-penh', 3, ['Phnom Penh pub crawl', 'Pool party']], ['koh-rong', 4, ['Beach fire show', 'volleyball']], ['kampot', 2, ['River kayak']]], vibes: ['party', 'islands'], c: 'pink' },
+    { id: 'surfdive', n: 'Surf + Dive', tag: 'Learn it. Live it.', blurb: 'A Bali surf lesson, snorkelling at Nusa Lembongan, a first scuba dive off the Gilis, then surf lessons in Lombok.',
+      route: [['uluwatu', 4, ['Surf lesson (group', 'Mt Batur']], ['nusa-lembongan', 3, ['Snorkelling (three', 'Nusa Penida']], ['gili-trawangan', 4, ['Discover scuba', 'Snorkelling adventure']], ['kuta-lombok', 3, ['Surf lesson (intermediate', 'Secret Gili']]], vibes: ['surf', 'islands'], c: 'cyan' },
+    { id: 'foodculture', n: 'Food + Culture', tag: 'Street food, cooking classes, old towns', blurb: 'Hanoi street food, Hoi An cooking classes and lantern nights, then Luang Prabang\'s night market, temples and waterfalls.',
+      route: [['hanoi', 4, ['Street food + Train', 'Hanoi cooking class']], ['hoi-an', 4, ['Cooking class + bamboo', 'Sunset river cruise']], ['luang-prabang', 4, ['Night market food', 'Kuang Si', 'Stories of Luang Prabang']]], vibes: ['food', 'culture'], c: 'orange' },
+    { id: 'adventure', n: 'Big Adventure', tag: 'Loops, caves, ziplines, waterfalls', blurb: 'The Ha Giang Loop, a flight to Laos, then the train to Vang Vieng for waterfalls, caves, ziplines and tubing.',
+      route: [['hanoi', 4, ['Ha Giang Loop · 4 days, Easy', 'Ninh Binh']], ['luang-prabang', 3, ['Kuang Si']], ['vang-vieng', 3, ['Blue Lagoons', 'Zipline', 'Tipsy tubing']]], vibes: ['adventure', 'moto'], c: 'lime' },
+    { id: 'chill', n: 'Slow + Chill', tag: 'Island boats, no alarms', blurb: 'The Visayas at ferry pace: Panglao\'s beaches and sunsets, turtles at Apo Island, and Siquijor by scooter.',
+      route: [['panglao', 4, ['Cave + beach', 'Sunset cruise', 'Sunset beer yoga']], ['dumaguete', 3, ['Apo Island']], ['siquijor', 4, ['Scooter loop', 'Sunset cruise']]], vibes: ['chill', 'islands'], c: 'yellow' },
+    { id: 'cheap', n: 'Cheap as Chips', tag: 'As far as the money goes', blurb: 'Pai, Chiang Mai, the two-day slow boat and Vang Vieng. Dorm beds from a few dollars, local transport and the cheapest things to do.',
+      route: [['pai', 3, ['Pai Canyon', 'Pai pub crawl']], ['chiang-mai', 3, ['Doi Suthep', 'Day Party']], ['luang-prabang', 3, ['Night market food', 'Kuang Si']], ['vang-vieng', 3, ['Tipsy tubing', 'pub crawl']]], vibes: ['culture', 'food'], pref: 'cheap', fund: 14, c: 'green' },
+    { id: 'firsttimer', n: 'First Timer Classic', tag: 'The easy way in', blurb: 'Vietnam\'s two big hitters, Hanoi and Hoi An, then Cambodia\'s temples and capital: Siem Reap and Phnom Penh.',
+      route: [['hanoi', 3, ['Street food + Train', 'Ninh Binh']], ['hoi-an', 3, ['Cooking class + bamboo', 'Sunset river cruise']], ['siem-reap', 3, ['Sunrise Angkor', 'Pub Street crawl']], ['phnom-penh', 2, ['S21']]], vibes: ['culture', 'food', 'party'], c: 'blue' },
+    { id: 'islandhop', n: 'Island Hopper', tag: 'Boats, sand and hammocks', blurb: 'Phnom Penh, then Koh Sdach and Koh Rong by boat, and Kampot\'s river and Bokor Mountain to finish.',
+      route: [['phnom-penh', 2, ['Sunset river cruise']], ['koh-sdach', 3, ['Island-hopping', 'Snorkelling']], ['koh-rong', 4, ['Kayak hire', 'Beach fire show']], ['kampot', 3, ['River kayak', 'Bokor']]], vibes: ['islands', 'chill'], c: 'cyan' }];
 
+  // find the activity at a hostel whose name contains the fragment
+  function actByName(place, frag) {
+    var f = frag.toLowerCase(), hit = MM.actsAt(place).filter(function (a) { return a.n.toLowerCase().indexOf(f) > -1; })[0]; return hit ? hit.id : null;
+  }
+  MM.themeActs = function (place, frags) { return (frags || []).map(function (f) { return actByName(place, f); }).filter(Boolean); };
   function stateFromRoute(route, t, o) {
-    o = o || {}; var prof = { vibes: t.vibes.slice(), must: (t.must || []).slice() };
-    var items = route.map(function (x) { return { kind: 'stop', p: x[0], n: x[1], acts: MM.autoActs ? MM.autoActs(x[0], x[1], prof) : [] }; });
+    o = o || {};
+    var items = route.map(function (x) { return { kind: 'stop', p: x[0], n: x[1], acts: x[2] ? MM.themeActs(x[0], x[2]) : (MM.autoActs ? MM.autoActs(x[0], x[1], { vibes: t.vibes.slice(), must: [] }) : []) }; });
     return { items: items, start: o.start || '', pref: o.pref || t.pref || 'balanced', legPick: {}, fund: t.fund || 20, crew: 0, budget: 0 };
   }
   MM.themeTrip = function (id, extra) {
@@ -266,7 +281,7 @@
   };
   MM.surprise = function (rng) {
     rng = rng || Math.random; var pick = function (a) { return a[Math.floor(rng() * a.length)]; };
-    var t = pick(MM.THEMES), route = t.route.map(function (x) { return [x[0], x[1]]; });
+    var t = pick(MM.THEMES), route = t.route.map(function (x) { return [x[0], x[1], x[2]]; });
     if (rng() < 0.5) route.reverse();                                           // the legs work both ways
     var i = Math.floor(rng() * route.length); if (rng() < 0.6) route[i][1] = Math.max(2, route[i][1] + (rng() < 0.5 ? -1 : 1));
     var st = stateFromRoute(route, t, { pref: t.pref || (rng() < 0.25 ? 'fast' : 'balanced') }), why = [];

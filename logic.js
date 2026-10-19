@@ -835,7 +835,7 @@
 
   /* ============================================================
      GUESTS GO NEXT — ranked from Mad Monkey's own products
-     ALL IN itineraries, The Gap Collective, Mad Packages and the LP↔VV tickets are
+     ALL IN itineraries, any featured partner trip, Mad Packages and the LP↔VV tickets are
      the strongest signal we have without booking data; editorial `next` fills the gaps.
      ============================================================ */
   var flowCache = null;

@@ -19,7 +19,7 @@ npm run build-pages   # the pages for Google (see docs/SEO.md)
 | **Map builder** | All 23 Mad Monkey hostels (+ Ho Chi Minh City as a partner stop) as pins. Tap to add. Animated route, mode + time on every leg, zoom by country. |
 | **Transport engine** | ~60 ground / sea links + ~35 flights, shortest-path routed. Every leg offers *Smart pick / Cheapest / Fastest*; overnight buses replace a bed night; slow boats add nights. |
 | **152 activities** | Real Mad Monkey tours with live prices, photos and deep links to the booking page. Scheduled onto the right weekday when a start date is set. |
-| **7 ALL IN trips** | Vietnam, Ha Giang Loop, Cambodia, Indonesia, Gili T + Lombok, **Thailand** and **Laos** (both "launching soon"), plus The Gap Collective. "Build on this" bolts days on either end; "Customise" turns one into a DIY route. |
+| **7 ALL IN trips** | Vietnam, Ha Giang Loop, Cambodia, Indonesia, Gili T + Lombok, **Thailand** and **Laos** (both "launching soon"). "Build on this" bolts days on either end; "Customise" turns one into a DIY route. |
 | **ALL IN matcher** | If a DIY route looks like an ALL IN trip, it shows DIY cost vs ALL IN price and next departure, and can swap it in. Squad Leader perk (3 mates 50% off, 6 free) built in. |
 | **Quiz** | 7 questions → 3 best-fit routes (ALL IN, DIY classic, or *ALL IN + keep going*). Fits days, vibe, must-dos, budget, month. Runs a route in reverse if you land at the other end. |
 | **Season + event flags** | Wet / rough-sea months per hostel, Rinjani closure, Kampot's 1 Nov opening, Halloween parties, the Thailand–Cambodia border. |
@@ -29,7 +29,7 @@ npm run build-pages   # the pages for Google (see docs/SEO.md)
 | **Declutter map** | Nearby hostels merge into numbered bubbles that split as you zoom; country chips are a multi-select focus (Indonesia + Thailand dims everything else); mode/time pills show only on hover or when you tap a leg; drag, scroll or pinch to move, +/− and FIT buttons. |
 | **Drag-and-drop + timeline** | Reorder stops by dragging the grip (mouse or touch), with a colour-coded timeline strip across the top. |
 | **"Why this leg?"** | Plain-English trade-offs ("flight saves 11h25, costs ~$43 more; the bus doubles as your bed") plus arrival times, with a warning when something lands at 3am. |
-| **Guests go next** | Ranked from Mad Monkey's own products (ALL IN itineraries, The Gap Collective, Mad Packages, the LP↔VV tickets), each chip tagged with where it comes from. |
+| **Guests go next** | Ranked from Mad Monkey's own products (ALL IN itineraries, the featured partner trip, Mad Packages, the LP↔VV tickets), each chip tagged with where it comes from. |
 | **Smarter planning** | Best months for the route (your month highlighted), budget target with live bar, *Suggest my next stop*, *Make it cheaper / faster*, entry rules by passport with official links. |
 | **Photos + trust** | Real photo strips + lightbox for every hostel (127 photos), the published 4.9/5 from 53,000+ travellers and the three named quotes. No hostel-level reviews are published, so none are shown (drop real ones into `MM.REVIEWS`). |
 | **Human review + bed hold** | "Hold my beds + get it checked": the trip goes to a real crew member, beds are held while they check, the guest gets a reference and a status page, and approves before paying. Highlighted across the site. See [docs/LEADS.md](docs/LEADS.md). |
