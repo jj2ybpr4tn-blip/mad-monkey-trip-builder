@@ -267,6 +267,16 @@ profiles.forEach(function (pp) {
   var stack = MM.doctor(st([stop('bangkok', 2), stop('chiang-mai', 1), stop('luang-prabang', 1)], { pref: 'cheap' }));
   ok('doctor: back-to-back overnight journeys are a serious finding', stack.findings.some(function (f) { return f.id === 'ovn-stack' && f.sev === 'bad'; }) || stack.stats.overnights < 2, JSON.stringify(stack.stats));
   MM.THEMES.forEach(function (t) { var x = MM.themeTrip(t.id), d = MM.doctor(x.state); ok('theme "' + t.n + '" is a clean, balanced trip', x.days >= 10 && x.days <= 18 && d.bad === 0 && d.warns === 0, d.findings.map(function (f) { return f.title; }).join('; ')); });
+  // the cards on the home page: every claim must be true of the trip behind it
+  var rows = MM.THEMES.map(function (th) { var x = MM.themeTrip(th.id), p = MM.plan(x.state); return { th: th, p: p, perDay: p.totals.total / p.totals.days }; });
+  ok('themes: every hand-picked activity exists at its hostel', MM.THEMES.every(function (th) { return th.route.every(function (r) { return (r[2] || []).every(function (f) { return MM.themeActs(r[0], [f]).length === 1; }); }); }));
+  ok('themes: every hostel in a route has at least one activity picked', MM.THEMES.every(function (th) { return th.route.every(function (r) { return MM.themeActs(r[0], r[2]).length >= 1; }); }));
+  ok('themes: days are nights + 1 (plus the nights spent travelling) and between 10 and 18', rows.every(function (r) { return r.p.totals.days === r.p.totals.nights + 1 && r.p.totals.days >= 10 && r.p.totals.days <= 18; }));
+  ok('themes: a day costs between $25 and $75 (beds + transport + activities + food)', rows.every(function (r) { return r.perDay >= 25 && r.perDay <= 75; }), rows.map(function (r) { return r.th.id + ' $' + Math.round(r.perDay); }).join(', '));
+  ok('themes: "Cheap as Chips" really is the cheapest a day', rows.filter(function (r) { return r.th.id === 'cheap'; })[0].perDay === Math.min.apply(0, rows.map(function (r) { return r.perDay; })));
+  ok('themes: no single activity over $60 in the cheap trip', MM.plan(MM.themeTrip('cheap').state).segs.every(function (s) { return s.acts.every(function (a) { return a.usd == null || a.usd <= 60; }); }));
+  ok('themes: descriptions only name things that are in the trip (Rinjani, hot air balloon, paramotor, "by train")', rows.every(function (r) { var acts = r.p.segs.map(function (s) { return s.acts.map(function (a) { return a.n; }).join(' '); }).join(' ').toLowerCase(), b = r.th.blurb.toLowerCase(); return (!/rinjani/.test(b) || /rinjani/.test(acts)) && (!/balloon/.test(b) || /balloon/.test(acts)) && (!/paramotor/.test(b) || /paramotor/.test(acts)) && (!/by train/.test(b) || r.p.legs.some(function (l) { return l.chosen.main === 'train'; })); }));
+  ok('home page special is optional: none set means nothing to render', MM.special === null || (MM.special && MM.special.stops.length > 0 && MM.special.url));
   var sp = MM.surprise(function () { return 0.3; });
   ok('surprise me returns a real, planned trip', sp && sp.state.items.length >= 3 && MM.plan(sp.state).totals.days > 8);
   var pk = MM.packing(MM.plan(dated([['hanoi', 3]], '2027-07-01'))), flat = JSON.stringify(pk);

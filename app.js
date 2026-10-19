@@ -93,8 +93,17 @@
       (soon ? '' : '<div class="tcard__next">Next departure: ' + U.fmtDate(nd) + (t.until ? ' · runs until ' + t.until : '') + '</div>') +
       '<div class="tcard__foot">' + (soon ? '<button class="btn btn--sm btn--pink" data-act="waitlist" data-id="' + t.id + '" type="button">Tell me when it launches</button>' : '') + '<button class="btn btn--sm' + (soon ? ' btn--paper' : '') + '" data-act="addblock" data-id="' + t.id + '" type="button">Build on this</button><button class="btn btn--sm btn--paper" data-act="customise" data-id="' + t.id + '" type="button">Customise</button></div></div></article>';
   }
+  // the one featured partner trip (MM.SPECIALS[0]); renders nothing when there isn't one
+  function specialHTML(g) {
+    if (!g) return '';
+    var stats = [[g.days, 'days'], [g.stops.length, 'stops']].concat(g.stats || []).concat([[g.gbp ? 'from £' + g.gbp.toLocaleString('en-GB') : g.usd ? 'from ' + money(g.usd) : '', 'per person']]).filter(function (s) { return s[0] !== '' && s[0] != null; });
+    return '<div class="gap" style="margin-top:var(--s-7)">' + photo((g.img && MM.tourImg(g.img)) || MM.hostelImg(g.stops[0].p)) +
+      '<div class="gap__b"><span class="pill pill--pink pill--sm">Special' + (g.dates ? ' · ' + esc(g.dates) : '') + '</span><h3>' + esc(g.n) + '</h3><p style="font-weight:500">' + esc(g.pitch) + '</p>' +
+      '<div class="stats">' + stats.map(function (s) { return '<div class="stat"><b>' + esc(s[0]) + '</b><span>' + esc(s[1]) + '</span></div>'; }).join('') + '</div>' +
+      '<div class="tcard__foot" style="padding-top:0"><a class="btn btn--sm btn--pink" href="' + esc(g.url) + '" target="_blank" rel="noopener">Book + details ↗</a></div></div></div>';
+  }
   function renderHome() {
-    var g = MM.gap, ticker = '23 hostels · 6 countries · 150+ things to do · every bus, boat + flight in between · $99 holds an ALL IN spot · real prices · real people · ';
+    var g = MM.special, ticker = '23 hostels · 6 countries · 150+ things to do · every bus, boat + flight in between · $99 holds an ALL IN spot · real prices · real people · ';
     root.innerHTML = liveNotice() +
       '<section class="hero on-black"><div class="wrap hero__in"><div>' +
         '<div class="over lime" style="margin-bottom:var(--s-4)">Mad Monkey · Trip Builder</div>' +
@@ -118,8 +127,7 @@
 
       '<section class="sec sec--bone" id="trips"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">ALL IN trips</div><h2 class="disp">Stop planning.<br>Start going.</h2></div><p class="dim" style="max-width:30em">Up to 20 backpackers, real Mad Monkey beds every night, every transfer and activity in the price, free drinks, 24/7 crew. Flights and insurance not included. Hit <b>Build on this</b> to bolt more days on either end.</p></div>' +
         '<div class="tgrid">' + MM.ALL_IN.map(tripCard).join('') + '</div>' +
-        '<div class="gap" style="margin-top:var(--s-7)">' + photo(MM.tourImg('the-ha-giang-loop-tour-4d-3n-easy-rider') || MM.hostelImg('hanoi')) +
-          '<div class="gap__b"><span class="pill pill--pink pill--sm">Special · ' + g.dates + '</span><h3>The Gap Collective</h3><p style="font-weight:500">' + esc(g.pitch) + '</p><div class="stats"><div class="stat"><b>31</b><span>days</span></div><div class="stat"><b>9</b><span>stops</span></div><div class="stat"><b>1,500</b><span>at the festival</span></div><div class="stat"><b>from £1,995</b><span>per person</span></div></div><div class="tcard__foot" style="padding-top:0"><a class="btn btn--sm btn--pink" href="' + g.url + '" target="_blank" rel="noopener">Book + details ↗</a></div></div></div>' +
+        specialHTML(g) +
       '</div></section>' +
 
       '<section class="sec sec--pink" id="humans"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">The human bit</div><h2 class="disp">Humans check<br>everything.</h2></div><p style="max-width:32em;font-weight:600">No robot books your trip. Every plan you send is read by a real Mad Monkey crew member who checks the routes, the beds, the dates and the prices. We can hold your beds while they do it, and you approve before you pay a penny.</p></div>' +
