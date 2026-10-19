@@ -11,6 +11,7 @@ git worktree add -q -B gh-pages .demo-build HEAD
   cd .demo-build
   BASE_PATH="/$NAME" NOINDEX=1 node scripts/build-pages.mjs
   touch .nojekyll
+  rm -rf handoff                       # the patches for the ALL IN site aren't part of the demo
   git add -A
   if git diff --cached --quiet; then echo "Nothing changed in the demo build."; else
     # use your git identity if you have one, otherwise a neutral one so the commit can't fail quietly

@@ -20,7 +20,7 @@ anything else shows `error` to the crew. `key` is the `k` from the link.
 | action | body | returns |
 | --- | --- | --- |
 | `view` | | `{ ok, request, summary, suggestedBalance, revision, original, canAct }` |
-| `balance` | `amount`, `note?` | `{ ok, url, emailed }`: payment link for the balance, emailed to the guest |
+| `balance` | `amount`, `note?` | `{ ok, url, emailed }`: records the balance and emails the guest to choose how to pay it (`url` is their trip page, with their key). See [PAYMENTS.md](PAYMENTS.md) |
 | `decline` | `note?`, `refund` | `{ ok, refunded }` |
 | `revise` | `trip{link,state,route,days,nights,stops,countries,start,estTotalUsd}`, `summary`, `crewText`, `note?` | `{ ok }`: the crew's edited version; status becomes *checking* |
 | `checking`, `note`, `booked` | `note?` | `{ ok }` |

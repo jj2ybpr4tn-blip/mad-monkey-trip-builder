@@ -16,6 +16,15 @@
   var fmtD = U.fmtDate;
   function range(a, b) { return a.getTime() === b.getTime() ? fmtD(a) : fmtD(a) + ' to ' + fmtD(b); }
 
+  // Long reference panels start folded (one tappable row with a hint of what's inside), so the trip itself isn't buried under 3,000px of advice.
+  function fold(cls, key, tag, title, count, hint) {
+    return '<section class="fold ' + cls + '"><button class="fold__hd" type="button" data-act="toggle" data-k="' + key + '" aria-expanded="false"><span class="fold__t"><span class="doc__tag">' + tag + '</span><b>' + esc(title) + '</b>' +
+      (hint ? '<small>' + esc(hint) + '</small>' : '') + '</span><span class="count"><span class="pill pill--sm pill--paper">' + esc(count) + '</span><b aria-hidden="true">+</b></span></button></section>';
+  }
+  function hide(key) { return '<button class="fold__x" type="button" data-act="toggle" data-k="' + key + '" aria-expanded="true">Hide</button>'; }
+  var phone = function () { return !!(window.matchMedia && window.matchMedia('(max-width:620px)').matches); };
+  X.phone = phone;
+
   /* ---------------- Trip Doctor ---------------- */
   var cache = { key: '', val: null };
   function diagnose() {
@@ -35,7 +44,7 @@
   }
   X.doctor = function (pl) {
     if (!pl || !pl.totals.days) return '';
-    var d = diagnose(), F = d.findings, all = !!A.open.docall, show = all ? F : F.slice(0, 3);
+    var d = diagnose(), F = d.findings, all = !!A.open.docall, lim = phone() ? 1 : 3, show = all ? F : F.slice(0, lim);
     var level = d.bad ? 'bad' : d.warns ? 'warn' : 'good', segs = '';
     for (var i = 0; i < 10; i++) segs += '<i class="' + (i < Math.round(d.score / 10) ? 'on' : '') + '"></i>';
     var s = d.stats, statLine = [plural(s.stops, 'stop'), '~' + s.transitH + ' hrs in transit', s.overnights ? plural(s.overnights, 'overnight journey') : 'no night buses', s.avgNights + ' nights a stop'].join(' · ');
@@ -46,7 +55,7 @@
       return '<div class="docf docf--' + f.sev + '"><span class="docf__i">' + ICON[f.sev] + '</span><div class="docf__bd"><span class="docf__tag">' + TAG[f.sev] + '</span><b>' + esc(f.title) + '</b><p>' + esc(f.body) + '</p>' +
         (fx ? '<div class="docf__fix"><button class="btn btn--sm btn--pink" type="button" data-act="docfix" data-n="' + n + '">' + esc(fx.label) + '</button><span class="docf__cost">' + esc(cost) + '</span></div>' : '') + '</div></div>';
     }).join('') + '</div>';
-    if (F.length > 3) h += '<button class="doc__more" type="button" data-act="toggle" data-k="docall">' + (all ? 'Show fewer' : 'Show ' + (F.length - 3) + ' more') + '</button>';
+    if (F.length > lim) h += '<button class="doc__more" type="button" data-act="toggle" data-k="docall">' + (all ? 'Show fewer' : 'Show ' + (F.length - lim) + ' more') + '</button>';
     h += visaRow(d) + '</section>';
     return h;
   };
@@ -68,7 +77,9 @@
       rows = up.slice(0, 8).map(function (e) { return { kind: e.ev.kind, n: e.ev.n, when: (e.core ? e.core + ' ' : '') + range(e.from, e.to), impact: e.ev.impact, advice: e.ev.advice, conf: e.conf, sev: e.ev.sev }; });
       if (!rows.length) return '';
     }
-    var h = '<section class="cal"><div class="cal__hd"><span class="doc__tag">What\'s on</span><h3 class="disp">' + (dated ? 'Festivals + closures on your trip' : 'Coming up where you\'re going') + '</h3>' + (dated ? '' : '<p class="fine">Add a start date and we\'ll check these against your dates and suggest a better week if one clashes.</p>') + '</div><ul class="cal__list">';
+    var ttl = dated ? 'Festivals + closures on your trip' : 'Coming up where you\'re going';
+    if (!A.open.calopen) return fold('cal', 'calopen', 'What\'s on', ttl, rows.length + (rows.length === 1 ? ' thing' : ' things'), rows.slice(0, 3).map(function (r) { return r.n; }).join(' · '));
+    var h = '<section class="cal"><div class="cal__hd">' + hide('calopen') + '<span class="doc__tag">What\'s on</span><h3 class="disp">' + ttl + '</h3>' + (dated ? '' : '<p class="fine">Add a start date and we\'ll check these against your dates and suggest a better week if one clashes.</p>') + '</div><ul class="cal__list">';
     rows.forEach(function (r) {
       h += '<li class="cal__i cal__i--' + r.kind + '"><span class="cal__k">' + KIND[r.kind] + '</span><div><b>' + esc(r.n) + '</b><span class="cal__w">' + esc(r.when) + '</span><p>' + esc(r.impact) + '</p>' + (r.advice ? '<p class="cal__a"><b>What to do:</b> ' + esc(r.advice) + '</p>' : '') + (r.conf === false ? '<p class="fine">Dates are a forecast and can move. Check closer to the time.</p>' : '') + '</div></li>';
     });
@@ -86,7 +97,8 @@
     if (!pl || !pl.countries.length) return '';
     var cs = G.forCountries(pl.countries); if (!cs.length) return '';
     var cur = A.open.gc && cs.indexOf(A.open.gc) > -1 ? A.open.gc : cs[0], riding = G.hasRiding(pl);
-    var h = '<section class="kb"><div class="cal__hd"><span class="doc__tag">Know before you go</span><h3 class="disp">The stuff nobody tells you.</h3><p class="fine">Planning advice from the Mad Monkey team (drafted ' + esc(G.checked) + '). Rules and prices change, so check official sources for anything that matters.</p></div>';
+    if (!A.open.kbopen) return fold('kb', 'kbopen', 'Know before you go', 'The stuff nobody tells you.', cs.length + (cs.length === 1 ? ' country' : ' countries'), 'Money, getting around, safety and local etiquette for ' + cs.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + '));
+    var h = '<section class="kb"><div class="cal__hd">' + hide('kbopen') + '<span class="doc__tag">Know before you go</span><h3 class="disp">The stuff nobody tells you.</h3><p class="fine">Planning advice from the Mad Monkey team (drafted ' + esc(G.checked) + '). Rules and prices change, so check official sources for anything that matters.</p></div>';
     if (riding) {
       h += '<div class="kb__ride"><b>' + esc(G.scooterHead) + '</b><ul>' + G.scooterCore.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' +
         cs.map(function (c) { var s = G.countries[c].scooters; return s ? '<details class="kb__rc"' + (cs.length === 1 ? ' open' : '') + '><summary>' + esc(MM.COUNTRIES[c].n) + ': the rules</summary><ul>' + s.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul></details>' : ''; }).join('') + '</div>';
