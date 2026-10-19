@@ -53,7 +53,7 @@
      ============================================================ */
   function parseHash() {
     var h = location.hash.replace(/^#\/?/, ''), seg = h.split('/'), view = seg[0] || 'home';
-    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
+    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack', 'crew'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
   }
   function go(view, rest) { location.hash = '#/' + (view === 'home' ? '' : view) + (rest ? '/' + rest : ''); }
   function route() {

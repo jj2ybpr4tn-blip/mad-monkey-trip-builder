@@ -1012,7 +1012,7 @@
   }
   function leadPayload(state, pl, contact, meta) {
     var m = pl.match && pl.match[0];
-    return {
+    var out = {
       v: 1, createdAt: new Date().toISOString(), source: (meta && meta.source) || 'trip-builder', ref: (meta && meta.ref) || '', fromHostel: (meta && meta.fromHostel) || '',
       contact: contact, trip: { link: (meta && meta.link) || '', state: encodeState(state), route: routeLine(pl), days: pl.totals.days, nights: pl.totals.nights, countries: pl.countries,
         stops: pl.places, start: state.start || '', estTotalUsd: pl.totals.total, breakdownUsd: { beds: pl.totals.beds, activities: pl.totals.acts, transport: pl.totals.transport, allIn: pl.totals.allin, squadDiscount: pl.totals.squad, spendFund: pl.totals.fund },
@@ -1020,6 +1020,16 @@
         urgency: urgencyOf(state) },
       itinerary: planText(pl, state, 'USD')
     };
+    // The same trip, laid out for the crew: stop by stop, tours, travel, money and a heads-up list (crew.js).
+    if (MM.crewSummary) {
+      try {
+        var sum = MM.crewSummary(state, pl, { people: contact && contact.partySize, dates: contact && contact.dates });
+        out.summary = sum;
+        out.crewText = MM.crewText(sum, { name: contact && contact.name, from: contact && contact.from, notes: contact && contact.notes, link: meta && meta.link,
+          contact: contact && (contact.via === 'whatsapp' ? 'WhatsApp ' + (contact.whatsapp || '') : 'Email ' + (contact.email || '')) });
+      } catch (e) { /* the lead still goes through without the crew layout */ }
+    }
+    return out;
   }
   function urgencyOf(state) {
     var d = parseDate(state.start); if (!d) return 'planning';

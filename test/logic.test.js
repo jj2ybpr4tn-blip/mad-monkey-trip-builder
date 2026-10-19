@@ -2,6 +2,7 @@
 ['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery', 'rules', 'guide'].forEach(function (f) { require('../data/' + f + '.js'); });
 var MM = require('../logic.js');
 require('../extras.js');
+require('../crew.js');
 
 var pass = 0, fail = 0, pending = [];
 function ok(name, cond, extra) { if (cond) { pass++; console.log('PASS  ' + name); } else { fail++; console.log('FAIL  ' + name + (extra ? '  -> ' + extra : '')); } }
@@ -294,5 +295,49 @@ var txt = MM.planText(tt, st([]), 'USD');
 ok('plain-text itinerary mentions every stop and the total', /Hanoi/.test(txt) && /Hoi An/.test(txt) && /est\./.test(txt));
 var lead = MM.leadPayload(st(tt.stops.map(function () { return stop('hanoi', 1); })), tt, { name: 'T', email: 't@example.com' }, { ref: 'exeter', fromHostel: 'hanoi' });
 ok('lead payload carries contact, ref, route + itinerary', lead.contact.email === 't@example.com' && lead.ref === 'exeter' && lead.trip.route && lead.itinerary);
+
+/* ---------- crew summary: what the team sees when a trip lands ---------- */
+(function () {
+  function inDays(n) { return new Date(Date.now() + n * 86400000).toISOString().slice(0, 10); }
+  var ids = { hn: MM.actsAt('hanoi').filter(function (a) { return a.usd; })[0], ha: MM.actsAt('hoi-an').filter(function (a) { return a.usd; })[0] };
+  var s = st([stop('hanoi', 4, [ids.hn.id]), stop('hoi-an', 3, [ids.ha.id]), stop('saigon', 2)], { start: inDays(40), fund: 20, budget: 900 });
+  var pl = MM.plan(s), sum = MM.crewSummary(s, pl, { people: 3, dates: 'fixed' }), b = sum.budget;
+  ok('crew summary lists every stop, in order, with nights', sum.stops.map(function (x) { return x.name + x.nights; }).join('|') === 'Hanoi4|Hoi An3|Ho Chi Minh City2');
+  ok('crew summary: stop bed costs add up to the plan total', sum.stops.reduce(function (a, x) { return a + (x.bedsUsd || 0); }, 0) === pl.totals.beds);
+  ok('crew summary: trip cost + spending money = estimated total (parts within $2 of it)', b.tripCost + b.spendFund === b.total && b.total === pl.totals.total && Math.abs(b.beds + b.tours + b.transport + b.allIn + b.squadDiscount - b.tripCost) <= 2);
+  ok('crew summary: party of 3 multiplies the trip cost', b.people === 3 && b.tripCostAllPeople === b.tripCost * 3);
+  ok('crew summary: tours sit under their own stop with price and day', sum.stops[0].tours.length === 1 && sum.stops[0].tours[0].name === ids.hn.n && sum.stops[0].tours[0].usd === Math.round(ids.hn.usd) && sum.stops[0].tours[0].day > 0 && /^\d{4}-\d\d-\d\d$/.test(sum.stops[0].tours[0].date));
+  ok('crew summary: travel between stops hangs off the stop it leaves', sum.stops[0].next && sum.stops[0].next.to === 'Hoi An' && sum.stops[1].next.to === 'Ho Chi Minh City' && sum.stops[2].next === null && sum.stops[0].next.usd > 0);
+  ok('crew summary: dates run from the start date to the last day', sum.start === s.start && sum.end > sum.start && sum.stops[0].from === s.start && sum.datesLabel === 'Dates are fixed');
+  ok('crew summary: carries the guest\'s own budget and what is left', b.guestBudget === 900 && b.budgetLeft === 900 - b.total);
+  ok('crew summary survives a JSON round trip (it travels in the lead)', JSON.stringify(JSON.parse(JSON.stringify(sum))) === JSON.stringify(sum));
+  ok('crew summary is small enough to email (under 12 KB for a 3-stop trip)', JSON.stringify(sum).length < 12000);
+
+  var txt = MM.crewText(sum, { name: 'Sam', ref: 'MM-ABC123', contact: 'WhatsApp +447700900123', from: 'Leeds', notes: 'First time in Asia', deposit: 150, link: 'https://x.test/#/build/abc' });
+  ok('crew text names every stop, tour, the money and the note', ['HANOI', 'HOI AN', 'HO CHI MINH CITY', ids.hn.n, ids.ha.n, 'Estimated total', 'Deposit paid     $150', 'First time in Asia', 'MM-ABC123', 'party of 3', 'https://x.test/#/build/abc'].every(function (t) { return txt.indexOf(t) > -1; }));
+  ok('crew text is plain text (no HTML, no emoji)', !/<[a-z/]/i.test(txt) && !/[\u{1F300}-\u{1FAFF}]/u.test(txt));
+
+  var lead = MM.leadPayload(s, pl, { name: 'Sam', via: 'email', email: 's@example.com', partySize: 3, dates: 'fixed', notes: '', consent: true }, { link: 'https://x.test/#/build/abc' });
+  ok('lead payload now carries the crew summary and crew text, and the old fields are untouched', lead.summary && lead.summary.stops.length === 3 && /TRIP TO CHECK/.test(lead.crewText) && lead.itinerary && lead.trip.route && lead.trip.estTotalUsd === pl.totals.total);
+
+  ok('suggested balance = trip cost for everyone less the deposit, never the spending money', MM.suggestBalance(sum, 150) === b.tripCostAllPeople - 150);
+  ok('suggested balance is never negative', MM.suggestBalance(sum, 999999) === 0);
+
+  var soon = MM.crewSummary(st([stop('hanoi', 3)], { start: inDays(6) }), MM.plan(st([stop('hanoi', 3)], { start: inDays(6) })), {});
+  ok('a trip leaving within two weeks is flagged "hold the beds today"', soon.flags.some(function (f) { return f.level === 'warn' && /Hold the beds today/.test(f.text); }));
+  ok('warnings that were worded for the guest are reworded for the crew', !sum.flags.some(function (f) { return /We'll find you|pack for it|Pop your details/.test(f.text); }) && sum.flags.some(function (f) { return /Find them a partner hostel/.test(f.text); }));
+  ok('flags put the things to act on first', sum.flags.findIndex(function (f) { return f.level === 'info'; }) === -1 || sum.flags.slice(sum.flags.findIndex(function (f) { return f.level === 'info'; })).every(function (f) { return f.level === 'info'; }));
+
+  var undated = MM.crewSummary(st([stop('hanoi', 3)]), MM.plan(st([stop('hanoi', 3)])), { dates: 'open' });
+  ok('an undated trip says so and has no calendar dates', undated.start === '' && undated.stops[0].from === '' && undated.flags.some(function (f) { return /No start date/.test(f.text); }) && /not decided/.test(MM.crewText(undated, {})));
+
+  var withAllIn = st([{ kind: 'allin', trip: 'vietnam' }, stop('saigon', 2)], { start: inDays(30) });
+  var sa = MM.crewSummary(withAllIn, MM.plan(withAllIn), { people: 2 });
+  ok('an ALL IN block shows as one stop with its own price and route', sa.stops[0].kind === 'allin' && sa.stops[0].usd === 850 && sa.stops[0].tours.length === 0 && sa.budget.allIn === 850 && /ALL IN VIETNAM/.test(MM.crewText(sa, {})));
+
+  var tight = st([stop('hanoi', 1, MM.actsAt('hanoi').filter(function (a) { return a.slot === 'full' && !a.multi; }).slice(0, 4).map(function (a) { return a.id; }))], {});
+  var ts = MM.crewSummary(tight, MM.plan(tight), {});
+  ok('a tour that does not fit is marked so the crew can see it', ts.stops[0].tours.some(function (t) { return t.fits === false; }) && /DOES NOT FIT/.test(MM.crewText(ts, {})));
+})();
 
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

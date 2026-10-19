@@ -16,6 +16,10 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
   for (let i = 0; i < 40; i++) { try { await fetch(B + '/api/live'); break; } catch { await new Promise((r) => setTimeout(r, 150)); } }
   /* static + protection */
   ok('serves the site', (await fetch(B + '/')).status === 200);
+  { const html = await (await fetch(B + '/')).text(), bad = [];
+    const files = [...html.matchAll(/(?:src|href)="((?!https?:|\/\/|#|data:)[^"?]+\.(?:js|css))(?:\?[^"]*)?"/g)].map((m) => m[1]);
+    for (const f of files) if ((await fetch(B + '/' + f)).status !== 200) bad.push(f);
+    ok('every script and stylesheet index.html loads is served (' + files.length + ')', files.length > 20 && !bad.length, bad.join(', ')); }
   ok('config.js switches the API on', /API_BASE:\s*'\/api'/.test(await (await fetch(B + '/config.js')).text()));
   for (const p of ['/server/server.mjs', '/package.json', '/test/logic.test.js', '/.git/config', '/docs/LEADS.md', '/assets/../server/data/leads.json']) ok('blocks ' + p, (await fetch(B + p)).status === 404);
   /* leads */

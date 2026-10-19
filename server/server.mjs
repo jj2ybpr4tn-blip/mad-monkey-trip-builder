@@ -355,7 +355,7 @@ async function api(req, res, url) {
 
 /* ============================================================ static ============================================================ */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'sitemap.xml', 'robots.txt']);
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'crew.js', 'ui-crew.js', 'crew.css', 'sitemap.xml', 'robots.txt']);
 function serveStatic(req, res, url) {
   const tm = url.pathname.match(/^\/t\/([a-z0-9]{7})(\.(jpg|png))?$/);
   if (tm) return sharePage(req, res, tm[1], tm[3]);
