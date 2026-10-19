@@ -36,7 +36,7 @@
       '<div class="pack__facts"><div><b>' + T.days + '</b><span>days</span></div><div><b>' + T.nights + '</b><span>nights</span></div><div><b>' + pl.places.length + '</b><span>stops</span></div><div><b>' + pl.countries.length + '</b><span>' + (pl.countries.length === 1 ? 'country' : 'countries') + '</span></div><div><b>~' + money(T.total, A.cur) + '</b><span>est. each</span></div></div>' +
       (st.start ? '<p class="pack__dates">' + fmtD(U.parseDate(st.start)) + ' to ' + fmtD(U.addDays(U.parseDate(st.start), T.days - 1)) + ', ' + U.parseDate(st.start).getUTCFullYear() + '</p>' : '<p class="pack__dates">Dates not set yet. Add a start date in the builder and your pack fills in.</p>') +
       (rec ? '<p class="pack__ref">Reference <b>' + esc(rec.ref) + '</b></p>' : '') +
-      (checked ? '' : '<p class="pack__note">This is a draft of your trip, not a booking. Hold your beds and a real crew member checks the routes, dates and prices before you pay.</p>') + '</header>';
+      (checked ? '' : '<p class="pack__note">This is a draft of your trip, not a booking. Hold your beds' + (C.DEPOSIT_PER_PERSON > 0 ? ' with a $' + C.DEPOSIT_PER_PERSON + ' deposit per person' : '') + ' and a real crew member checks the routes, dates and prices before you pay' + (C.DEPOSIT_PER_PERSON > 0 ? ' the rest' : '') + '.</p>') + '</header>';
 
     // 1. where you sleep
     h += '<section class="pack__sec"><h2 class="disp">Where you\'re sleeping</h2><div class="pack__stays">' + pl.segs.map(function (sg, i) {

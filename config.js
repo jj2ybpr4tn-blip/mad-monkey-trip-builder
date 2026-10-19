@@ -25,6 +25,16 @@ window.MM_CONFIG = {
   // Only promise what ops can honour: the hold itself happens on YOUR side when the lead arrives.
   HOLD_HOURS: 48,
 
+  // A deposit per person, in US dollars, taken when a trip is sent for checking (LEAD_ENDPOINT answers with a Stripe checkoutUrl). It holds the beds,
+  // counts towards the trip, and is refunded if the crew can't make it work. 0 = no deposit: nothing is paid until the guest approves the checked plan.
+  DEPOSIT_PER_PERSON: 0,
+
+  // Optional. Once the crew has approved a trip, the guest chooses how to pay the rest here: POST { ref, k, plan }. Blank = derived from STATUS_ENDPOINT. See docs/PAYMENTS.md.
+  PAY_ENDPOINT: '',
+
+  // Where "ALL IN details" links and the ALL IN nav button go. The live copy at madmonkeyhostels.com/all-in-trips/trip-builder/ sets '../'.
+  ALLIN_BASE: 'https://madmonkeyhostels.com/all-in-trips',
+
   // Optional. The crew review page (#/crew/<ref>, opened from the buttons in the new-trip email) calls this: POST JSON { action, ref, key, ... }.
   // With the ALL IN backend it is the trip-builder-admin function. Blank = derived from STATUS_ENDPOINT, or the page says it isn't switched on.
   CREW_ENDPOINT: '',

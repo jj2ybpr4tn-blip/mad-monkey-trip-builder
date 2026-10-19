@@ -9,7 +9,7 @@ const post = (p, body, h) => j(p, { method: 'POST', headers: { 'content-type': '
 const adm = { Authorization: 'Bearer ' + TOKEN };
 const lead = (extra) => ({ type: 'review_request', contact: { name: 'Sam', email: 'sam@example.com', whatsapp: '+447000000000', partySize: 2, consent: true }, trip: { state: 'i=s.hanoi.3~s.hoi-an.3&d=2026-11-18', route: 'Hanoi → Hoi An', days: 7, start: '2026-11-18', stops: ['hanoi', 'hoi-an'], estTotalUsd: 300 }, hold: { requested: true }, itinerary: 'x', ...(extra || {}) });
 
-const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'server.mjs')], { env: { ...process.env, PORT, DATA_DIR: DIR, ADMIN_TOKEN: TOKEN, HOLD_HOURS: '48' }, stdio: 'ignore' });
+const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'server.mjs')], { env: { ...process.env, PORT, DATA_DIR: DIR, ADMIN_TOKEN: TOKEN, HOLD_HOURS: '48', MM_TEST_SOON: 'laos,indonesia' }, stdio: 'ignore' });
 const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fail) + ' server checks passed'); setTimeout(() => { try { fs.rmSync(DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* temp dir, the OS cleans it */ } process.exit(code); }, 300); };
 
 (async () => {
@@ -89,7 +89,7 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
   ok('share: preview image served', (await fetch(B + '/t/' + sh.b.code + '.jpg')).headers.get('content-type') === 'image/jpeg');
   ok('share: code resolves back to the trip', (await j('/api/share/' + sh.b.code)).b.state === 'i=s.hanoi.3~s.hoi-an.4&d=2027-01-10');
   /* launch waitlist, assignment, hostel details */
-  const soonTrip = 'thailand', liveTrip = 'vietnam';
+  const soonTrip = 'indonesia', liveTrip = 'vietnam';
   ok('waitlist: rejects a trip that is already live', (await post('/api/waitlist', { trip: liveTrip, contact: { name: 'A', whatsapp: '+447700900123', consent: true } })).s === 400);
   ok('waitlist: rejects without consent or contact', (await post('/api/waitlist', { trip: soonTrip, contact: { name: 'A', whatsapp: '+447700900123' } })).s === 400 && (await post('/api/waitlist', { trip: soonTrip, contact: { name: 'A', consent: true } })).s === 400);
   ok('waitlist: accepts WhatsApp only', (await post('/api/waitlist', { trip: soonTrip, contact: { name: 'Wa', via: 'whatsapp', whatsapp: '+44 7700 900123', consent: true } })).s === 200);

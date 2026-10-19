@@ -45,6 +45,8 @@ const require = createRequire(import.meta.url);
 for (const f of ['places', 'activities', 'media', 'legs', 'trips', 'entry', 'gallery', 'rules', 'guide']) require(path.join(ROOT, 'data', f + '.js'));
 const MM = require(path.join(ROOT, 'logic.js'));
 require(path.join(ROOT, 'extras.js'));
+// Test hook: MM_TEST_SOON=laos marks those ALL IN trips as "launching soon" so the waitlist can be exercised (no real trip is 'soon' once everything is live).
+if (process.env.MM_TEST_SOON) MM.ALL_IN.forEach((t) => { if (process.env.MM_TEST_SOON.split(',').includes(t.id)) t.status = 'soon'; });
 
 const PORT = +process.env.PORT || 8000;
 const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');

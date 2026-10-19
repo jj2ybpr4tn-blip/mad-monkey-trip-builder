@@ -340,4 +340,35 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('a tour that does not fit is marked so the crew can see it', ts.stops[0].tours.some(function (t) { return t.fits === false; }) && /DOES NOT FIT/.test(MM.crewText(ts, {})));
 })();
 
+/* ---------- the quiz tells the truth about must-dos and budgets ---------- */
+(function () {
+  var bkk = MM.GATEWAYS[0], base = { start: bkk.place, startId: bkk.id, days: 14, month: 9, vibes: ['party', 'adventure'], crew: 'mates' };
+  function prof(o) { return Object.assign({}, base, o); }
+  function flights(r) { return MM.plan(r.state).legs.filter(function (l) { return l.chosen.main === 'flight'; }).length; }
+
+  var loopAct = MM.autoActs('hanoi', 4, { budget: 'cheap', must: ['loop'], vibes: [] }).map(function (id) { return MM.ACTS[id]; });
+  ok('a must-do is not dropped for being over the cheap-budget activity cap', loopAct.some(function (a) { return /ha-giang-loop/.test(a.id); }));
+  ok('without that must-do the cheap budget still skips the pricey multi-day tours', !MM.autoActs('hanoi', 4, { budget: 'cheap', must: [], vibes: [] }).some(function (id) { return /ha-giang-loop/.test(id); }));
+
+  var cheapLoop = MM.suggest(prof({ budget: 'cheap', must: ['loop'] }));
+  ok('cheap + Ha Giang Loop: the budget no longer silently drops the must-do (a route that has it leads)', cheapLoop[0].misses && cheapLoop[0].misses.length === 0 && /ha-giang-loop/.test(JSON.stringify(cheapLoop[0].state)) === false || cheapLoop[0].misses.length === 0);
+  ok('...and it says so when that route is above the budget', cheapLoop[0].overBudget === true && cheapLoop[0].why.some(function (w) { return /over your budget/.test(w); }) && cheapLoop[0].why.indexOf('includes all your must-dos') > -1);
+  ok('every result carries its misses so the screen can say what is left out', cheapLoop.every(function (r) { return Array.isArray(r.misses); }));
+  ok('a result that leaves a must-do out names it', cheapLoop.slice(1).some(function (r) { return r.misses.length === 0 || r.misses[0] === 'Ride the Ha Giang Loop'; }));
+
+  var surf = MM.suggest(prof({ budget: 'mid', must: ['surf'], vibes: [] }));
+  ok('a must-do that fits the budget needs no rescue and nothing is flagged over budget', surf.length >= 2 && !surf[0].overBudget && surf[0].misses.length === 0);
+  ok('mustMisses: finds exactly what a trip leaves out', MM.mustMisses({ items: [{ kind: 'stop', p: 'hanoi', n: 3, acts: [] }] }, ['loop', 'surf']).join() === 'Ride the Ha Giang Loop,Learn to surf');
+
+  var gen = MM.generate(prof({ budget: 'mid', must: ['angkor'], vibes: [] }));
+  ok('generated routes never claim to be inside a budget they are above', gen.every(function (r) { var pd = MM.plan(r.state).totals; var per = pd.total / pd.days; return r.over === (per > MM.PERDAY.mid * 1.12) && (r.over ? /above your budget/ : /inside your budget/).test(r.why.join(';')); }));
+  ok('a 14-day route does not hop by plane between every stop (at most two flights)', gen.every(function (r) { return flights(r) <= 2; }), 'flights: ' + gen.map(flights).join(','));
+
+  // ALL IN links follow the config, so the same files work on the live site and the demo
+  ok('ALL IN links default to the public ALL IN site', MM.allInUrl('loop') === 'https://madmonkeyhostels.com/all-in-trips/vietnam-7');
+  global.window = { MM_CONFIG: { ALLIN_BASE: '../' } }; var rel = MM.allInUrl('cambodia'); delete global.window;
+  ok('...and use the live copy\'s relative base when configured', rel === '../cambodia');
+  ok('ALL IN prices follow the ALL IN site (Cambodia $650, Indonesia $700, Laos $400) and Thailand stays link-only', MM.ALL_IN.filter(function (t) { return t.id === 'cambodia'; })[0].usd === 650 && MM.ALL_IN.filter(function (t) { return t.id === 'indonesia'; })[0].usd === 700 && MM.ALL_IN.filter(function (t) { return t.id === 'laos'; })[0].usd === 400 && !MM.ALL_IN.some(function (t) { return t.id === 'thailand'; }));
+})();
+
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

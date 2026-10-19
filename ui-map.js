@@ -27,8 +27,14 @@
     philippines: { n: 'Philippines', b: [8.4, 119.0, 15.3, 127.0] }
   };
   function bboxPx(b) { var a = proj(b[2], b[1]), c = proj(b[0], b[3]); return { x0: a[0], y0: a[1], x1: c[0], y1: c[1] }; }
-  function viewBoxFor(px, aspect, pad) {
+  // The view that frames a bounding box. With `ins` (px covered by buttons on each edge) and `sz` (the map's size in px) the box is fitted into the
+  // part of the map you can actually see, so no pin ends up under the region chips or the zoom buttons.
+  function viewBoxFor(px, aspect, pad, ins, sz) {
     var w = (px.x1 - px.x0) * (1 + pad * 2), h = (px.y1 - px.y0) * (1 + pad * 2), cx = (px.x0 + px.x1) / 2, cy = (px.y0 + px.y1) / 2;
+    if (ins && sz) {
+      var iw = Math.max(80, sz.w - ins.l - ins.r), ih = Math.max(80, sz.h - ins.t - ins.b), s = Math.max(w / iw, h / ih);
+      return { x: cx - (ins.l + iw / 2) * s, y: cy - (ins.t + ih / 2) * s, w: s * sz.w, h: s * sz.h };
+    }
     if (w / h < aspect) w = h * aspect; else h = w / aspect;
     return { x: cx - w / 2, y: cy - h / 2, w: w, h: h };
   }
@@ -116,6 +122,16 @@
     function el(name, attrs, parent) { var e = document.createElementNS(NS, name); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
     function size() { var b = box.getBoundingClientRect(); return { w: Math.max(200, b.width), h: Math.max(200, b.height) }; }
     function aspect() { var s = size(); return s.w / s.h; }
+    // How much of each edge is covered by the region chips, the zoom buttons and the stat pills (measured, so it follows the layout at any width).
+    function insets() {
+      var host = box && box.parentElement, ins = { t: 8, r: 8, b: 8, l: 8 }; if (!host) return ins;
+      var b = box.getBoundingClientRect(), q;
+      if ((q = host.querySelector('.bmap__regions')) && q.offsetHeight) ins.t = Math.max(ins.t, q.getBoundingClientRect().bottom - b.top + 10);
+      if ((q = host.querySelector('.bmap__ctl')) && q.offsetWidth) ins.r = Math.max(ins.r, b.right - q.getBoundingClientRect().left + 10);
+      if ((q = host.querySelector('.bmap__stats')) && q.offsetHeight) ins.b = Math.max(ins.b, b.bottom - q.getBoundingClientRect().top + 10);
+      return ins;
+    }
+    function fitView(px, pad) { return viewBoxFor(px, aspect(), pad, insets(), size()); }
     function inFocus(c) { return !focus.length || focus.indexOf(c) > -1; }
 
     /* ---------- mount ---------- */
@@ -236,18 +252,17 @@
         if (clash) nm.style.visibility = 'hidden'; else kept.push(r);
       });
     }
-    function focusOn(ids) { manual = true; animateTo(viewBoxFor(routePx(ids, 130), aspect(), 0.35)); }
+    function focusOn(ids) { manual = true; animateTo(fitView(routePx(ids, 130), 0.35)); }
     function animateTo(t) {
       var from = { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, t0 = null, dur = 600; cancelAnimationFrame(anim);
       (function step(ts) { if (t0 == null) t0 = ts; var p = Math.min(1, (ts - t0) / dur), e = p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
         setView({ x: from.x + (t.x - from.x) * e, y: from.y + (t.y - from.y) * e, w: from.w + (t.w - from.w) * e, h: from.h + (t.h - from.h) * e }); if (p < 1) anim = requestAnimationFrame(step); })(performance.now());
     }
     function targetView(plan) {
-      var a = aspect();
-      if (focus.length) { var ps = Object.keys(MM.PLACES).filter(function (id) { return focus.indexOf(MM.PLACES[id].c) > -1; }); return viewBoxFor(routePx(ps, 120), a, 0.16); }
+      if (focus.length) { var ps = Object.keys(MM.PLACES).filter(function (id) { return focus.indexOf(MM.PLACES[id].c) > -1; }); return fitView(routePx(ps, 120), 0.1); }
       var rp = plan && plan.places && plan.places.length ? plan.places : null;
-      if (!rp) return viewBoxFor(bboxPx(MM.REGIONS.all.b), a, 0.02);
-      return viewBoxFor(routePx(rp, 330), a, 0.28);
+      if (!rp) return fitView(bboxPx(MM.REGIONS.all.b), 0.02);
+      return fitView(routePx(rp, 330), 0.2);
     }
     function refit(instant) { if (!svg) return; var t = targetView(lastPlan); if (instant || !vb) { cancelAnimationFrame(anim); setView(t); } else animateTo(t); }
 

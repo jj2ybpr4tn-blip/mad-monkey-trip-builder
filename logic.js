@@ -442,7 +442,9 @@
     var vibes = (prof && prof.vibes) || [], musts = (prof && prof.must) || [], budget = (prof && prof.budget) || 'mid';
     var want = {}; vibes.forEach(function (v) { (VIBE_TAGS[v] || []).forEach(function (t) { want[t] = 1; }); });
     var capUsd = { cheap: 140, mid: 320, splash: 1e9 }[budget];
-    var list = MM.actsAt(placeId).filter(function (a) { return (a.usd == null || a.usd <= capUsd); }).filter(function (a) { return !(a.multi && a.multi.d > 1) || musts.some(function (m) { var M = MM.MUSTS.filter(function (x) { return x.k === m; })[0]; return M && M.test(a); }); });
+    var isMust = function (a) { return musts.some(function (m) { var M = MM.MUSTS.filter(function (x) { return x.k === m; })[0]; return M && M.test(a); }); };
+    // A must-do is something they asked for, so it isn't dropped for being over the price cap (the result says when it pushes the budget).
+    var list = MM.actsAt(placeId).filter(function (a) { return (a.usd == null || a.usd <= capUsd || isMust(a)); }).filter(function (a) { return !(a.multi && a.multi.d > 1) || musts.some(function (m) { var M = MM.MUSTS.filter(function (x) { return x.k === m; })[0]; return M && M.test(a); }); });
     var scored = list.map(function (a) {
       var s = a.star ? 2 : 0; a.tags.forEach(function (t) { if (want[t]) s += 1.5; });
       musts.forEach(function (m) { var M = MM.MUSTS.filter(function (x) { return x.k === m; })[0]; if (M && M.test(a)) s += 6; });
@@ -463,6 +465,16 @@
     return pick.slice(0, Math.max(2, budget === 'cheap' ? nights : nights + 1));
   }
   MM.autoActs = autoActs;
+
+  // Which of the guest's must-dos a route does NOT include (by label). Looks at the tours actually picked, or the ALL IN trip's tours.
+  function mustMisses(state, musts) {
+    var acts = []; ((state && state.items) || []).forEach(function (it) {
+      if (it.kind === 'allin') { var t = MM.ALL_IN.filter(function (x) { return x.id === it.trip; })[0]; if (t) t.stops.forEach(function (s) { s.acts.forEach(function (id) { acts.push(MM.ACTS[id]); }); }); }
+      else (it.acts || []).forEach(function (id) { acts.push(MM.ACTS[id]); });
+    });
+    return (musts || []).map(function (k) { return MM.MUSTS.filter(function (x) { return x.k === k; })[0]; }).filter(function (M) { return M && !acts.some(function (a) { return a && M.test(a); }); }).map(function (M) { return M.n; });
+  }
+  MM.mustMisses = mustMisses;
 
   /* ============================================================
      SUGGEST — quiz answers -> best-fit routes
@@ -625,7 +637,21 @@
     var mixed = gen.slice(0, 2);
     if (bestAll && bestAll.score >= 8) mixed.splice(1, 0, bestAll);
     while (mixed.length < 3 && gen[mixed.length]) mixed.push(gen[mixed.length]);
-    if (mixed.length) return mixed.slice(0, 3);
+    if (mixed.length) {
+      var res = mixed.slice(0, 3), musts0 = prof.must || [];
+      if (musts0.length) {
+        res.forEach(function (r) { r.misses = mustMisses(r.state, musts0); });
+        // If the budget crowded every route's must-dos out, look again one budget step up and lead with a route that has them all, saying so.
+        if (res.every(function (r) { return r.misses.length; })) {
+          var up = { cheap: 'mid', mid: 'splash' }[prof.budget || 'mid'];
+          if (up) {
+            var rescue = generate(Object.assign({}, prof, { budget: up })).map(function (r) { r.misses = mustMisses(r.state, musts0); return r; }).filter(function (r) { return !r.misses.length; })[0];
+            if (rescue) { rescue.why = ['includes all your must-dos', 'a bit over your budget: about ' + MM.money(Math.round(plan(rescue.state).totals.total / Math.max(1, plan(rescue.state).totals.days)), 'USD') + ' a day'].concat(rescue.why.filter(function (w) { return !/must-do|a day|within|inside/.test(w); })); rescue.overBudget = true; res.unshift(rescue); res = res.slice(0, 3); }
+          }
+        }
+      }
+      return res;
+    }
     // keep top 3 distinct
     var seen = {}, top = [];
     out.forEach(function (x) { var k = x.cand.tpl.id + (x.hybrid ? '+' : ''); if (!seen[k] && top.length < 3) { seen[k] = 1; top.push(x); } });
@@ -691,8 +717,10 @@
           if (cost > cap * 1.12) return;
           var newC = allow && !st.seq.some(function (x) { return P()[x.p].c === P()[q].c; });
           var same = P()[q].c === P()[last].c, back = !same && st.seq.some(function (x) { return P()[x.p].c === P()[q].c; });
+          // Backpackers reach for a flight last: on a short trip each one eats a day and a chunk of the budget, so a route that links its stops by land or boat beats one that hops by plane.
+          var flights = leg.steps.filter(function (x) { return x.e.m === 'flight'; }).length, flightPen = flights * (D <= 14 ? 3.2 : D <= 21 ? 2 : 1);
           next.push({ seq: st.seq.concat([{ p: q, n: n }]), used: st.used + leg.nights + n, cost: cost,
-            score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * leg.h - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0) + (newC ? 5 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
+            score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * leg.h - flightPen - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0) + (newC ? 5 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
           grew = true;
         });
         done.push(st);                                  // stopping here is always an option
@@ -713,7 +741,7 @@
     var well = ranked.filter(function (r) { return r.st.used >= nightsCap * 0.85; }); if (well.length >= 3) ranked = well;
     var seen = {}, picks = [];
     ranked.forEach(function (r) {
-      if (picks.length >= 3) return;
+      if (picks.length >= 6) return;
       var cset = {}; r.st.seq.forEach(function (x) { cset[P()[x.p].c] = 1; });
       var key = Object.keys(cset).sort().join('') + '|' + r.st.seq[0].p + '|' + r.st.seq[r.st.seq.length - 1].p;
       var key2 = r.st.seq.map(function (x) { return x.p; }).slice().sort().join(',');
@@ -722,9 +750,9 @@
       var dup = picks.some(function (pk) { var a = pk.st.seq.map(function (x) { return x.p; }), b = r.st.seq.map(function (x) { return x.p; }); var sh = a.filter(function (p) { return b.indexOf(p) > -1; }).length; return sh / Math.max(a.length, b.length) > 0.6; });
       if (dup) return; picks.push(r);
     });
-    if (picks.length < 3) ranked.forEach(function (r) { if (picks.length < 3 && picks.indexOf(r) < 0 && !picks.some(function (pk) { return pk.st.seq.map(function (x) { return x.p; }).sort().join() === r.st.seq.map(function (x) { return x.p; }).sort().join(); })) picks.push(r); });
+    if (picks.length < 6) ranked.forEach(function (r) { if (picks.length < 6 && picks.indexOf(r) < 0 && !picks.some(function (pk) { return pk.st.seq.map(function (x) { return x.p; }).sort().join() === r.st.seq.map(function (x) { return x.p; }).sort().join(); })) picks.push(r); });
 
-    return picks.map(function (r, i) {
+    var built = picks.map(function (r, i) {
       var stops = r.st.seq.map(function (x) { return { p: x.p, n: x.n, acts: [] }; });
       stops.forEach(function (s) { s.acts = autoActs(s.p, s.n, prof); });
       var fit = fitDays(stops, D, prof);
@@ -733,13 +761,18 @@
       var stt = toState(stops, prof); stt.fund = fund; var pl = plan(stt);
       var cs = {}; stops.forEach(function (s) { cs[P()[s.p].c] = 1; });
       var coveredN = allow ? allow.filter(function (c) { return stops.some(function (s) { return P()[s.p].c === c; }); }).length : 0;
-      var why = [allow ? (coveredN === allow.length ? 'covers ' + allow.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + ') : 'only reaches ' + coveredN + ' of your ' + allow.length + ' countries') : 'built from scratch for you', 'about ' + MM.money(Math.round(pl.totals.total / pl.totals.days), 'USD') + ' a day, inside your budget'];
+      var why = [allow ? (coveredN === allow.length ? 'covers ' + allow.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + ') : 'only reaches ' + coveredN + ' of your ' + allow.length + ' countries') : 'built from scratch for you', 'about ' + MM.money(Math.round(pl.totals.total / pl.totals.days), 'USD') + ' a day' + (pl.totals.total / pl.totals.days > perDay * 1.12 ? ', above your budget' : ', inside your budget')];
       if (prof.start && stops[0].p === prof.start) why.push('starts where you land');
       var mh = musts.filter(function (k) { return stops.some(function (s) { return mustHit(s.p, k); }); }).length; if (mh) why.push(mh + ' of your must-dos');
       if (month != null) { var av = stops.reduce(function (a, s) { return a + seasonOf(s.p, month); }, 0) / stops.length; if (av >= 2.5) why.push('prime season in ' + MONTHN[month]); }
       return { cand: { tpl: { id: 'custom-' + i, n: stops.map(function (s) { return P()[s.p].n; }).join(' → '), pitch: 'Picked by scoring every Mad Monkey for your vibe, budget and days, then routing the real buses, boats and flights between them.' } },
-        isAllIn: false, generated: true, score: 100 - i, why: why, state: stt, days: pl.totals.days, o: {} };
+        isAllIn: false, generated: true, score: 100 - i, why: why, state: stt, days: pl.totals.days, o: {}, misses: mustMisses(stt, musts), perDay: pl.totals.total / pl.totals.days, over: pl.totals.total / pl.totals.days > perDay * 1.12 };
     });
+    // The search ranks on its own rough estimate; the plan has the real total. Keep the routes that really fit the money.
+    var fits = built.filter(function (r) { return !r.over; }), over = built.filter(function (r) { return r.over; });
+    // Routes a little over the money (up to 25%) can fill out the three, flagged as such; anything further over is only shown when nothing fits.
+    var near = over.filter(function (r) { return r.perDay <= perDay * 1.25; }), pool = fits.concat(near);
+    return (pool.length ? pool : over).slice(0, 3).map(function (r, i) { r.score = 100 - i; return r; });
   }
   MM.generate = generate;
 

@@ -69,7 +69,7 @@
       (banner ? '<div class="cbanner cbanner--ok" role="status">' + banner + '</div>' : '') +
       (!can ? '<div class="cbanner">' + (r.status === 'approved' ? 'This trip is booked. Nothing left to action.' : r.status === 'declined' ? 'This trip was declined' + (r.refunded_at ? ' and the deposit refunded' : '') + '.' : r.status === 'pending_payment' ? 'The deposit isn\'t paid yet, so there is nothing to action.' : 'Nothing to action.') + '</div>' : '') +
       '<div class="crew__acts" role="group" aria-label="Decide about this trip">' +
-        act('approve', 'yes', 'Approve', r.status === 'ready' ? 'Send a new payment link' : 'Send ' + first + ' the final price', can, open) +
+        act('approve', 'yes', 'Approve', r.status === 'ready' ? 'Change the price' : 'Send ' + first + ' the final price', can, open) +
         act('decline', 'no', 'Not approved', 'Say no and refund the deposit', can, open) +
         act('edit', 'edit', 'Edit it', canEdit || !can ? 'Change it, add our input' : 'Balance link already sent', canEdit, open) + '</div>' +
       '<div id="cpanel"></div>' +
@@ -140,14 +140,16 @@
   }
 
   function historyHTML(r, rev, original, first) {
-    if (!rev && !r.crew_note && !(r.balance_amount && r.status === 'ready')) return '';
+    if (!rev && !r.crew_note && !(r.balance_amount && r.status === 'ready') && !(r.pay_plan && r.pay_schedule && r.pay_schedule.length)) return '';
     var h = '<div class="cbox"><h3>History</h3>';
     if (rev) {
       h += '<p>Edited by the crew ' + esc(when(rev.at)) + '.' + (rev.note ? ' Note: “' + esc(rev.note) + '”' : '') + '</p>';
       if (original && original.trip) h += '<p class="cdim">' + esc(first) + '\'s own version: ' + esc(original.trip.route || '') + ' · ' + (original.trip.days || 0) + ' days' + (original.trip.estTotalUsd != null ? ' · ' + usd(original.trip.estTotalUsd) + ' est.' : '') + (original.trip.link ? ' · <a href="' + esc(original.trip.link) + '">open it</a>' : '') + '</p>';
     }
     if (r.crew_note) h += '<p>Note on file: “' + esc(r.crew_note) + '”</p>';
-    if (r.status === 'ready' && r.balance_amount) h += '<p>Balance link sent for <b>' + usd(r.balance_amount) + '</b>.' + (r.balance_url ? ' <a href="' + esc(r.balance_url) + '" target="_blank" rel="noopener">Open the link</a>' : '') + '</p>';
+    if (r.status === 'ready' && r.balance_amount) h += '<p>Waiting for ' + esc(first) + ' to choose how to pay the <b>' + usd(r.balance_amount) + '</b>.</p>';
+    var sch = Array.isArray(r.pay_schedule) ? r.pay_schedule : [];
+    if (r.pay_plan && sch.length) h += '<p><b>' + esc({ now: 'Paying it all now', later: 'Paying a week before they leave', instalments: 'Paying in instalments' }[r.pay_plan] || r.pay_plan) + '</b></p><ul class="cplan">' + sch.map(function (i) { return '<li class="' + i.status + '"><span>' + esc(day(i.due, true)) + '</span><b>' + usd(i.amount) + '</b><i>' + esc({ paid: 'Paid', pending: 'Due', failed: 'Failed, retrying', gave_up: 'Not taken' }[i.status] || i.status) + '</i></li>'; }).join('') + '</ul>';
     return h + '</div>';
   }
 
@@ -155,12 +157,12 @@
   function panelHTML(which, r, sum, d, first, dep) {
     if (which === 'approve') {
       var sug = d.suggestedBalance || '';
-      return '<div class="cpanel cpanel--yes"><h3>' + (r.status === 'ready' ? 'Send ' + esc(first) + ' a new payment link' : 'Send ' + esc(first) + ' the final price') + '</h3>' +
-        '<p>The trip checks out. ' + esc(first) + ' gets an email with a secure payment link for the balance. The ' + dep + ' deposit is already taken off.</p>' +
+      return '<div class="cpanel cpanel--yes"><h3>' + (r.status === 'ready' ? 'Update ' + esc(first) + '\'s price' : 'Send ' + esc(first) + ' the final price') + '</h3>' +
+        '<p>The trip checks out. ' + esc(first) + ' gets an email to choose how to pay the rest: all now, a week before they leave, or in instalments if they leave 2+ months out. The ' + dep + ' deposit is already counted, and nothing is charged until they choose.</p>' +
         '<div class="field"><label for="cbal">Balance to charge (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? r.balance_amount : (sug || '')) + '" inputmode="decimal">' +
         '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (sum.people > 1 ? ' for ' + sum.people : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ') less the ' + dep + ' deposit. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : 'Work out the balance after the deposit.') + '</p></div>' +
         '<div class="field"><label for="cnote">Note to ' + esc(first) + ' (optional, goes in the email)</label><textarea class="input" id="cnote" placeholder="e.g. All checked. We swapped the night bus for a day minivan so you arrive in daylight.">' + esc(r.crew_note || '') + '</textarea></div>' +
-        '<p class="cerr" id="cerr" role="alert" hidden></p><button class="btn btn--lg" id="cgo" type="button">Send ' + esc(first) + ' the payment link</button></div>';
+        '<p class="cerr" id="cerr" role="alert" hidden></p><button class="btn btn--lg" id="cgo" type="button">' + (r.status === 'ready' ? 'Send ' + esc(first) + ' the new price' : 'Send ' + esc(first) + ' the final price') + '</button></div>';
     }
     if (which === 'decline') {
       return '<div class="cpanel cpanel--no"><h3>Can\'t make this version work</h3><p>' + esc(first) + ' gets a kind email with your reason and an offer to find a version that does work.</p>' +
@@ -191,7 +193,7 @@
         if (!(amt >= 1 && amt <= 50000)) return fail(new Error('Enter the balance in US dollars, after the deposit.'));
         call({ action: 'balance', ref: q.ref, key: q.k, amount: amt, note: noteV }).then(function (res) {
           setSess(null);
-          load(root, q, '', 'Sent. ' + esc(first) + ' has a payment link for <b>' + usd(amt) + '</b>' + (res.emailed ? ' by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(res.url || '') + '">payment link</a>.'));
+          load(root, q, '', 'Sent. ' + esc(first) + ' can now choose how to pay the <b>' + usd(amt) + '</b>' + (res.emailed ? ', by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(res.url || '') + '">choose how to pay</a>.'));
         }).catch(fail);
       } else {
         var refund = !!($('#cref', root) && $('#cref', root).checked);

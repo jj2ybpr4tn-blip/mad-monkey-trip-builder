@@ -18,6 +18,17 @@
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var money = function (usd) { return MM.money(usd, app.cur); };
+  // Money wording shared by every screen. A deposit is taken when MM_CONFIG.DEPOSIT_PER_PERSON > 0 (the live ALL IN site); without one, nothing is paid until the guest approves the checked plan.
+  var dep = function () { return +C.DEPOSIT_PER_PERSON || 0; };
+  var TERMS = {
+    hold: function () { return dep() ? 'A $' + dep() + ' deposit per person holds the beds on a trip you build while they do it, and you only pay the rest once you\'ve approved the plan.' : 'We can hold your beds while they do it, and you approve before you pay a penny.'; },
+    step2: function () { return dep() ? 'Send it for checking with a $' + dep() + ' deposit per person and we hold the nights while we look.' : 'Send it for checking and we hold the nights while we look.'; },
+    step4: function () { return dep() ? 'You get the checked plan and the final price. Happy? Pay the rest now, later or in instalments. Can\'t make it work? Your deposit comes back.' : 'You get a confirmed plan. Happy? Pay the deposit. Not? No harm done.'; },
+    send: function () { return dep() ? 'Send it for checking and a real person looks over every bus, bed and price before you pay the rest.' : 'One tap sends your plan to a real person who can book it.'; },
+    box: function () { return dep() ? 'Hit "Hold my beds" ($' + dep() + ' deposit per person) and the crew reviews your whole trip before you pay the rest.' : 'Hit "Hold my beds" and the crew reviews your whole trip before you pay a penny.'; },
+    cta: function () { return dep() ? 'A $' + dep() + ' deposit per person holds your beds, the crew reviews the routes, dates and prices, and you approve before you pay the rest.' : 'We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.'; },
+    before: function () { return dep() ? 'before you pay the rest' : 'before you pay anything'; }
+  };
   var plural = function (n, w, ws) { return n + ' ' + (n === 1 ? w : (ws || w + 's')); };
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
   var SID = (function () { try { var s = sessionStorage.getItem('mm-sid'); if (!s) { s = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('mm-sid', s); } return s; } catch (e) { return 'x'; } })();
@@ -55,7 +66,14 @@
     var h = location.hash.replace(/^#\/?/, ''), seg = h.split('/'), view = seg[0] || 'home';
     return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack', 'crew'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
   }
-  function go(view, rest) { location.hash = '#/' + (view === 'home' ? '' : view) + (rest ? '/' + rest : ''); }
+  function sameAddress(a, b) { try { return decodeURIComponent(a) === decodeURIComponent(b); } catch (e) { return a === b; } }
+  // Setting the address to what it already is fires no hashchange, so the screen would never redraw: buttons like "start from a classic",
+  // "Surprise me" or "Swap in ALL IN" did nothing when pressed from the builder. Draw it ourselves in that case.
+  function go(view, rest) {
+    var h = '#/' + (view === 'home' ? '' : view) + (rest ? '/' + rest : '');
+    if (sameAddress(location.hash, h)) { route(); return; }
+    location.hash = h;
+  }
   function route() {
     if (app._unwatch) { app._unwatch(); app._unwatch = null; }
     var r = parseHash(); closeModal();
@@ -130,20 +148,20 @@
         specialHTML(g) +
       '</div></section>' +
 
-      '<section class="sec sec--pink" id="humans"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">The human bit</div><h2 class="disp">Humans check<br>everything.</h2></div><p style="max-width:32em;font-weight:600">No robot books your trip. Every plan you send is read by a real Mad Monkey crew member who checks the routes, the beds, the dates and the prices. We can hold your beds while they do it, and you approve before you pay a penny.</p></div>' +
-        '<div class="how how--4">' + [['1', 'You build it', 'Pick stops on the map, or let us build it from your budget.'], ['2', 'We hold your beds', 'Send it for checking and we hold the nights while we look.'], ['3', 'A human checks it', 'Routes, beds, dates, prices: read by someone who has done the trip.'], ['4', 'You say yes', 'You get a confirmed plan. Happy? Pay the deposit. Not? No harm done.']].map(function (s) { return '<div class="hs"><b>' + s[0] + '</b><h4>' + s[1] + '</h4><p>' + s[2] + '</p></div>'; }).join('') + '</div>' +
+      '<section class="sec sec--pink" id="humans"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">The human bit</div><h2 class="disp">Humans check<br>everything.</h2></div><p style="max-width:32em;font-weight:600">No robot books your trip. Every plan you send is read by a real Mad Monkey crew member who checks the routes, the beds, the dates and the prices. ' + TERMS.hold() + '</p></div>' +
+        '<div class="how how--4">' + [['1', 'You build it', 'Pick stops on the map, or let us build it from your budget.'], ['2', 'We hold your beds', TERMS.step2()], ['3', 'A human checks it', 'Routes, beds, dates, prices: read by someone who has done the trip.'], ['4', 'You say yes', TERMS.step4()]].map(function (s) { return '<div class="hs"><b>' + s[0] + '</b><h4>' + s[1] + '</h4><p>' + s[2] + '</p></div>'; }).join('') + '</div>' +
         '<div class="rate"><b>' + MM.TRUST.rating + '</b><span>from ' + MM.TRUST.raters + ' Mad Monkey travellers</span></div>' +
         '<div class="quotes">' + MM.TRUST.quotes.map(function (q) { return '<blockquote class="quote">“' + esc(q.q) + '”<cite>' + esc(q.by) + ' · ' + esc(q.from) + '</cite></blockquote>'; }).join('') + '</div></div></section>' +
 
       '<section class="sec"><div class="wrap"><div class="sec__head"><h2 class="disp">How it works.</h2></div><div class="how">' +
         '<div><b class="lime">1</b><h4>Pick your stops</h4><p class="dim">Tap hostels, or take the quiz. Every bus, boat and flight between them is already in.</p></div>' +
         '<div><b class="lime">2</b><h4>See the real cost</h4><p class="dim">Beds, transport and activities add up live. Switch between cheapest, smart and fastest on any leg.</p></div>' +
-        '<div><b class="lime">3</b><h4>Send it to the crew</h4><p class="dim">One tap sends your plan to a real person who can book it. Or spot an ALL IN that already covers it.</p></div>' +
+        '<div><b class="lime">3</b><h4>Send it to the crew</h4><p class="dim">' + TERMS.send() + ' Or spot an ALL IN that already covers it.</p></div>' +
       '</div></div></section>' +
       footer();
   }
   function footer() {
-    return '<footer class="foot"><div class="wrap"><p>Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (or marked est.). The crew confirms live rates before you pay anything. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
+    return '<footer class="foot"><div class="wrap"><p>Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (or marked est.). The crew confirms live rates ' + TERMS.before() + '. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
   }
 
   /* ============================================================
@@ -210,7 +228,7 @@
   function renderResults() {
     var pr = app.profile, g = MM.GATEWAYS.filter(function (x) { return x.id === pr.startId; })[0];
     var chips = ['Landing: ' + (g ? g.n : 'anywhere'), pr.days + ' days', pr.month != null ? U.MONTHN[pr.month] : 'Any month'].concat(pr.vibes.map(function (v) { return MM.VIBES.filter(function (x) { return x.k === v; })[0].n; }), pr.must.map(function (v) { return MM.MUSTS.filter(function (x) { return x.k === v; })[0].n; }), [({ cheap: 'Every dollar counts', mid: 'Comfortable', splash: 'Happy to spend' })[pr.budget]]);
-    root.innerHTML = '<section class="res"><div class="wrap"><div class="res__head"><div class="over">Your routes</div><h2 class="disp">Three trips<br>built for <span class="hl">you</span>.</h2></div>' +
+    root.innerHTML = '<section class="res"><div class="wrap"><div class="res__head"><div class="over">Your routes</div><h2 class="disp">' + ({ 1: 'One trip', 2: 'Two trips', 3: 'Three trips' }[Math.min(3, Math.max(1, app.results.length))]) + '<br>built for <span class="hl">you</span>.</h2></div>' +
       '<div class="res__prof">' + chips.map(function (c) { return '<span class="chip">' + esc(c) + '</span>'; }).join('') + '<button class="chip" data-act="qedit" type="button" style="background:var(--lime)">Edit answers</button></div>' +
       '<div class="rcards">' + app.results.map(function (r, i) { return resultCard(r, i); }).join('') + '</div>' +
       '<div style="margin-top:var(--s-7);display:flex;gap:var(--s-3);flex-wrap:wrap"><button class="btn btn--pink" data-go="build" type="button">Start from a blank map</button></div></div></section>' + footer();
@@ -221,9 +239,10 @@
     return '<article class="rcard' + (top ? ' rcard--top' : '') + '"><div class="rcard__map">' + map + '<span class="rcard__rank pill ' + (top ? 'pill--pink' : 'pill--paper') + '">' + (top ? 'Best fit' : '#' + (i + 1)) + '</span><span class="pill pill--sm ' + (r.generated ? 'pill--paper' : 'pill--yellow') + '" style="position:absolute;right:12px;top:12px">' + (r.generated ? 'Built for you' : 'Ready-made ALL IN') + '</span></div>' +
       '<div class="rcard__body"><div><h3>' + esc(resultName(r)) + '</h3><div class="rcard__route">' + esc(MM.routeLine(pl)) + '</div></div>' +
       '<div class="stats"><div class="stat"><b>' + pl.totals.days + '</b><span>days</span></div><div class="stat"><b>' + (price && t.nStops ? t.nStops : pl.totals.stops) + '</b><span>stops</span></div><div class="stat"><b>' + (price ? money(t.usd) : '~' + money(pl.totals.total)) + '</b><span>' + (price ? 'ALL IN from' : r.hybrid ? 'est. all-in' : 'est. total') + '</span></div></div>' +
-      '<div class="why">' + r.why.map(function (w) { return '<span class="pill pill--sm">' + esc(w) + '</span>'; }).join('') + '</div>' +
+      '<div class="why">' + r.why.map(function (w) { return '<span class="pill pill--sm' + (/above your budget|over your budget/.test(w) ? ' pill--yellow' : '') + '">' + esc(w) + '</span>'; }).join('') + '</div>' +
+      (r.misses && r.misses.length ? '<p class="rcard__miss"><b>Doesn\'t include:</b> ' + esc(r.misses.join(', ')) + '. Open it in the builder to add ' + (r.misses.length === 1 ? 'it' : 'them') + '.</p>' : '') +
       (r.isAllIn ? '<p style="font-size:13px;font-weight:500">' + (r.hybrid ? 'Start with the ALL IN crew trip, then keep going on your own with beds and transport sorted below.' : esc(t.pitch)) + (t.status === 'soon' ? ' <b>Launching soon.</b>' : '') + '</p>' : '<p style="font-size:13px;font-weight:500">' + esc(t.pitch) + '</p>') +
-      '<div class="rcard__cta"><button class="btn btn--sm" data-act="openres" data-i="' + i + '" type="button">Open in builder</button>' + (r.isAllIn ? '<a class="btn btn--sm btn--paper" href="' + MM.ALLIN_URL + '" target="_blank" rel="noopener">ALL IN details ↗</a>' : '') + '</div></div></article>';
+      '<div class="rcard__cta"><button class="btn btn--sm" data-act="openres" data-i="' + i + '" type="button">Open in builder</button>' + (r.isAllIn ? '<a class="btn btn--sm btn--paper" href="' + MM.allInUrl(t.id) + '" target="_blank" rel="noopener">ALL IN details ↗</a>' : '') + '</div></div></article>';
   }
 
   /* ============================================================
@@ -288,7 +307,7 @@
       '<div class="field full"><label for="fund">Food + fun fund: ' + money(s.fund) + ' a day</label><input class="range" id="fund" type="range" min="5" max="60" step="1" value="' + s.fund + '" aria-label="Daily spending money"></div>' +
       '<div class="field full"><label for="budget">Budget target: ' + (s.budget ? money(s.budget) : 'not set') + '</label><input class="range" id="budget" type="range" min="0" max="6000" step="50" value="' + (s.budget || 0) + '" aria-label="Total budget target"></div></div>' +
       (items.length && s.budget ? budgetBar(t) : '') + (items.length ? seasonStrip(pl) : '') +
-      '<div class="humans"><b>Checked by a real person.</b> Hit "Hold my beds" and the crew reviews your whole trip before you pay a penny.</div></div>';
+      '<div class="humans"><b>Checked by a real person.</b> ' + TERMS.box() + '</div></div>';
 
     if (plannerOn()) h += recoHTML();
 
@@ -335,9 +354,9 @@
     h += X('calendar', pl) + X('guide', pl);
     h += entryHTML(pl);
     /* CTA */
-    h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.</div>' +
+    h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> ' + TERMS.cta() + '</div>' +
       '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="openpack" type="button">Trip pack</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
-      '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability before you pay anything.</p></div>';
+      '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability ' + TERMS.before() + '.</p></div>';
     return h;
   }
 
@@ -384,7 +403,7 @@
   function missList() { try { return MM.missed(app.state, app.nmOff); } catch (e) { return []; } }
   function missHTML() {
     var list = missList(); app._miss = list; if (!list.length) return '';
-    var show = list.slice(0, app.open.missall ? 8 : 3);
+    var lim = X('phone') ? 1 : 3, show = list.slice(0, app.open.missall ? 8 : lim);
     return '<section class="miss" aria-label="Don\'t miss"><div class="miss__hd"><span class="miss__tag">Don\'t miss</span><span class="miss__sub">The crew spotted ' + (list.length === 1 ? 'something' : list.length + ' things') + ' you went past</span></div>' +
       show.map(function (x) {
         var isP = x.kind === 'place', a = isP ? null : MM.ACTS[x.act], img = isP ? MM.hostelImg(x.p) : (MM.actImg(a) || MM.hostelImg(x.p));
@@ -393,7 +412,7 @@
           '<div class="miss__ft"><span class="miss__cost">' + cost + '</span><button class="btn btn--sm btn--pink" type="button" data-act="' + (isP ? 'nmadd' : 'nmact') + '" data-k="' + esc(x.k) + '">' + (isP ? 'Add ' + esc(P[x.p].n) : 'Add it') + '</button>' +
           '<button class="miss__no" type="button" data-act="nmoff" data-k="' + esc(x.k) + '">Not for me</button></div></div></div>';
       }).join('') +
-      (list.length > 3 ? '<button class="miss__more" type="button" data-act="toggle" data-k="missall">' + (app.open.missall ? 'Show fewer' : 'Show ' + (list.length - 3) + ' more') + '</button>' : '') + '</section>';
+      (list.length > lim ? '<button class="miss__more" type="button" data-act="toggle" data-k="missall">' + (app.open.missall ? 'Show fewer' : 'Show ' + (list.length - lim) + ' more') + '</button>' : '') + '</section>';
   }
   // after an edit, flag anything newly skipped once, so it doesn't go unnoticed
   function missToast() {
@@ -562,7 +581,7 @@
       '<p>You\'re hitting ' + esc(names) + (m.missing.length ? ' but skipping ' + esc(m.missing.map(function (p) { return P[p].n; }).join(', ')) : '') + '. On ALL IN you get beds, every transfer, every activity, free drinks and a crew of up to ' + t.max + ' in one price.</p>' +
       '<div class="cmp"><div><b>~' + money(pl.totals.diy) + '</b><span>Your DIY route</span></div><div><b>' + money(t.usd) + '</b><span>ALL IN ' + (t.status === 'soon' ? 'rrp' : 'from') + '</span></div></div>' +
       '<p class="fine" style="color:var(--black)">' + (cheaper ? 'ALL IN is the cheaper way to do it, and meals + drinks are on top of your DIY number.' : 'Not like for like: ALL IN also covers meals, free drinks and a guaranteed crew.') + ' ' + (t.status === 'soon' ? 'Launching soon.' : 'Next departure ' + nd + '.') + '</p>' +
-      '<div class="match__row"><button class="btn btn--sm btn--black" data-act="swapallin" data-id="' + t.id + '" type="button">Swap in ALL IN</button><a class="btn btn--sm btn--paper" href="' + MM.ALLIN_URL + '" target="_blank" rel="noopener">Details ↗</a></div></div>';
+      '<div class="match__row"><button class="btn btn--sm btn--black" data-act="swapallin" data-id="' + t.id + '" type="button">Swap in ALL IN</button><a class="btn btn--sm btn--paper" href="' + MM.allInUrl(t.id) + '" target="_blank" rel="noopener">Details ↗</a></div></div>';
   }
   function squadCard(pl) {
     var s = app.state, t = pl.totals, first = pl.segs.filter(function (x) { return x.kind === 'allin'; })[0].trip;
@@ -636,50 +655,6 @@
     box.querySelectorAll('.seg [data-via]').forEach(function (x) { var on = x === b; x.setAttribute('aria-pressed', on); x.setAttribute('aria-checked', on); });
     var inp = box.querySelector(via === 'email' ? '.cpick__em' : '.cpick__wa'); if (inp) inp.focus();
   });
-
-  function openLead() {
-    if (!plan || !plan.totals.days) { toast('Add a stop first'); return; }
-    var q = store('mm-lead') || {};
-    openModal('<div class="modal__hd"><div><div class="over">Almost there</div><h2 class="disp">Send it to the crew.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div>' +
-      '<div class="modal__bd"><p style="font-weight:500">A real person from the crew gets your whole plan: stops, dates, transport choices and what you\'re keen to do. They\'ll pick it up from here.</p>' +
-      '<form id="leadf" novalidate><div class="form2"><div class="field"><label for="lf-name">First name</label><input class="input" id="lf-name" name="name" autocomplete="given-name" required value="' + esc(q.name || '') + '"></div>' +
-      contactPick(q) +
-      '<div class="field"><label for="lf-from">Where are you now?</label><input class="input" id="lf-from" name="from" placeholder="city or country" value="' + esc(q.from || '') + '"></div>' +
-      '<div class="field"><label for="lf-size">Travelling as</label><select class="select" id="lf-size" name="size"><option value="1">Just me</option><option value="2">2 of us</option><option value="3">3 of us</option><option value="4">4 of us</option><option value="6">5–6 of us</option><option value="8">7+ of us</option></select></div>' +
-      '<div class="field"><label for="lf-flex">Dates</label><select class="select" id="lf-flex" name="flex"><option value="fixed">These dates, locked</option><option value="flex">Flexible by a week or so</option><option value="open">Still deciding</option></select></div>' +
-      '<div class="field full"><label for="lf-notes">Anything else?</label><textarea class="input" id="lf-notes" name="notes" placeholder="dietary, budget worries, who you\'re bringing…"></textarea></div>' +
-      '<div class="full" style="display:none"><label>Leave empty <input name="website" tabindex="-1" autocomplete="off"></label></div>' +
-      '<label class="chk full"><input type="checkbox" name="consent" required><span>It\'s OK for Mad Monkey to contact me about this trip. We only use your details to plan it with you.' + (C.PRIVACY_URL ? ' <a href="' + esc(C.PRIVACY_URL) + '" target="_blank" rel="noopener">Privacy</a>' : '') + '</span></label></div>' +
-      '<div id="leaderr" class="warn" style="display:none;margin-top:var(--s-3)"><i>!</i><span></span></div>' +
-      '<div style="display:flex;gap:var(--s-2);margin-top:var(--s-4);flex-wrap:wrap"><button class="btn btn--pink" type="submit">Send it</button><button class="btn btn--ghost" data-act="close" type="button">Not yet</button></div></form></div>', function (m) {
-        $('#leadf', m).addEventListener('submit', submitLead);
-      });
-  }
-  function submitLead(e) {
-    e.preventDefault(); var f = e.target, v = {}; new FormData(f).forEach(function (val, k) { v[k] = typeof val === 'string' ? val.trim() : val; });
-    var err = $('#leaderr'), show = function (m) { err.style.display = 'grid'; $('span', err).textContent = m; };
-    if (v.website) return;                                               // honeypot
-    if (!v.name) return show('Pop your first name in.');
-    var ct = readContact(v); if (ct.err) return show(ct.err);
-    if (!v.consent) return show('Tick the box so we\'re allowed to reply.');
-    store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
-    var payload = MM.leadPayload(app.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: +v.size || 1, dates: v.flex, notes: v.notes || '', consent: true },
-      { ref: app.meta.ref, fromHostel: app.meta.from, link: shareLink() });
-    track('lead', { stops: plan.places.length, days: plan.totals.days });
-    var btn = $('button[type=submit]', f); btn.disabled = true; btn.textContent = 'Sending…';
-    if (!C.LEAD_ENDPOINT) return setTimeout(function () { leadDone(payload, 'demo'); }, 400);
-    fetch(C.LEAD_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); leadDone(payload, 'sent'); })
-      .catch(function () { btn.disabled = false; btn.textContent = 'Send it'; show('That didn\'t go through. Try again, or copy your plan and message the crew directly.'); });
-  }
-  function leadDone(payload, mode) {
-    var wa = C.WHATSAPP ? 'https://wa.me/' + C.WHATSAPP + '?text=' + encodeURIComponent('Hi Mad Monkey, I built a trip: ' + MM.routeLine(plan) + ' (' + plan.totals.days + ' days). ' + shareLink()) : '';
-    openModal('<div class="modal__hd"><div><div class="over">' + (mode === 'sent' ? 'Sent' : 'Demo mode') + '</div><h2 class="disp">' + (mode === 'sent' ? 'Nice one. The crew has it.' : 'Lead card ready.') + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
-      (mode === 'demo' ? '<div class="demo">DEMO MODE: nothing was sent. Set <code>LEAD_ENDPOINT</code> in config.js and this goes straight to the crew.</div>' : '<p style="font-weight:500">A real person will pick this up. Keep an eye on ' + (payload.contact.whatsapp ? 'WhatsApp' : 'your email') + '.</p>') +
-      '<div class="leadcard"><b style="color:var(--lime);letter-spacing:.1em;text-transform:uppercase;font-size:11px">What the crew sees</b><div style="margin-top:6px"><b>' + esc(payload.contact.name) + '</b> · ' + esc(payload.contact.email) + (payload.contact.whatsapp ? ' · ' + esc(payload.contact.whatsapp) : '') + '<br>' + esc(payload.trip.route) + '<br>' + payload.trip.days + ' days · ~' + MM.money(payload.trip.estTotalUsd, 'USD') + ' est. · ' + payload.trip.urgency + (payload.ref ? ' · ref ' + esc(payload.ref) : '') + (payload.fromHostel ? ' · from Mad Monkey ' + esc(P[payload.fromHostel] ? P[payload.fromHostel].n : payload.fromHostel) : '') + '</div><pre>' + esc(payload.itinerary) + '</pre></div>' +
-      '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><button class="btn btn--sm" data-act="copylead" type="button">Copy lead card</button>' + (wa ? '<a class="btn btn--sm btn--pink" href="' + wa + '" target="_blank" rel="noopener">Message the crew on WhatsApp</a>' : '') + (C.CREW_EMAIL && mode === 'demo' ? '<a class="btn btn--sm btn--paper" href="mailto:' + esc(C.CREW_EMAIL) + '?subject=' + encodeURIComponent('Trip: ' + MM.routeLine(plan)) + '&body=' + encodeURIComponent(payload.itinerary + '\n\n' + shareLink()) + '">Email it</a>' : '') + '<button class="btn btn--sm btn--ghost" data-act="close" type="button">Done</button></div></div>');
-    app._lastLead = payload;
-  }
 
   function openShare() {
     var link = shareLink(), text = function (l) { return MM.planText(plan, app.state, app.cur) + '\n\n' + l; };
@@ -788,7 +763,7 @@
       case 'pref': mutate(function (s2) { s2.pref = el.getAttribute('data-v'); s2.legPick = {}; }); break;
       case 'crew': mutate(function (s2) { s2.crew = Math.max(0, Math.min(8, (s2.crew || 0) + (+el.getAttribute('data-d')))); }); break;
       case 'reset': if (confirm('Clear this trip and start over?')) { app.state = MM.defaultState(); app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); } break;
-      case 'lead': if (app.review) app.review.open(); else openLead(); break;
+      case 'lead': if (app.review) app.review.open(); break;
       case 'share': openShare(); break;
       case 'story': openStory(); break;
       case 'print': app.open.days = true; refreshBuilder(); setTimeout(function () { window.print(); }, 150); break;
@@ -840,6 +815,7 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modalRoot.firstChild) closeModal(); });
 
   app.util = { addStop: function (id) { addStop(id); }, ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
+  var navAllIn = $('#nav-allin'); if (navAllIn && MM.allInBase) navAllIn.href = MM.allInBase();   // the ALL IN site, wherever this copy lives
   window.addEventListener('hashchange', route);
 
   /* ---------- boot ---------- */

@@ -2,8 +2,8 @@
    TRIPS
    ALL_IN   — the packaged crew trips (prices, departures, inclusions from
               madmonkeyhostels.com/all-in-trips + the trip PDFs, Oct 2026).
-              Thailand + Laos are "soon" (launching). Laos is the internal
-              proposal's recommended RRP and still needs sign-off.
+              Thailand and Laos are live, and every "from" price matches the ALL IN site
+              (Cambodia $650, Indonesia $700, Laos $400): the ALL IN site is the source of truth.
    SPECIALS — one featured partner trip on the home page (empty right now, see below).
    CLASSICS — DIY routes we recommend when nobody has a packaged trip for it.
               Used by the quiz matcher. EDITORIAL.
@@ -23,6 +23,10 @@
   function S(p, n, frags) { return { p: p, n: n, acts: (frags || []).map(function (f) { return find(p, f); }) }; }
 
   MM.ALLIN_URL = 'https://madmonkeyhostels.com/all-in-trips';
+  // Where "ALL IN details" links go. MM_CONFIG.ALLIN_BASE overrides it (the live copy at all-in-trips/trip-builder/ sets '../').
+  var ALLIN_PAGE = { vietnam: 'vietnam', loop: 'vietnam-7', cambodia: 'cambodia', indonesia: 'indonesia', 'gili-lombok': 'indonesia-7', thailand: 'thailand', laos: 'laos' };
+  MM.allInBase = function () { var c = (typeof window !== 'undefined' && window.MM_CONFIG) || {}, b = c.ALLIN_BASE != null ? c.ALLIN_BASE : MM.ALLIN_URL; return String(b).replace(/\/*$/, '/'); };
+  MM.allInUrl = function (id) { return MM.allInBase() + (ALLIN_PAGE[id] || ''); };
   MM.DEPOSIT = 99;
 
   MM.INCLUDED = ['Dorm beds at Mad Monkey', 'All scheduled transport: transfers, buses, island boats', 'Every activity in the itinerary',
@@ -42,13 +46,13 @@
       pitch: 'Street food in Hanoi, then four days through towering peaks, epic passes and homestay dinners on the legendary Loop.',
       hl: ['Train Street', 'Khau Lan Waterfall', 'Ma Pi Leng Pass', 'Ancient villages'], img: ['the-ha-giang-loop-tour-4d-3n-easy-rider', 'hanoi'],
       stops: [S('hanoi', 3, ['Ha Giang Loop · 4 days, Easy', 'Street food + Train', 'Hanoi pub crawl'])] },
-    { id: 'cambodia', nStops: 4, n: 'Cambodia', tag: 'Phnom Penh → Siem Reap → Koh Rong → Koh Sdach', kicker: 'Coast to coast', days: 14, usd: 600,
+    { id: 'cambodia', nStops: 4, n: 'Cambodia', tag: 'Phnom Penh → Siem Reap → Koh Rong → Koh Sdach', kicker: 'Coast to coast', days: 14, usd: 650,
       dep: 4, until: 'Apr 2027', status: 'live', col: 'yellow', max: 20, meals: '1 breakfast · 3 lunches · 5 dinners',
       pitch: 'Phnom Penh\'s history and nightlife, Angkor Wat, a beach party and sunrise rave on Koh Rong, then the hidden oasis of Koh Sdach.',
       hl: ['Angkor Wat', 'Beach fire show', 'Koh Rong', 'Koh Sdach'], img: ['sunrise-angkor-wat-temple-tour', 'koh-rong'],
       stops: [S('phnom-penh', 3, ['S21', 'Sunset river', 'Khmer family', 'Pool party']), S('siem-reap', 4, ['Sunrise Angkor', 'Pub Street', 'floating village', 'pizza']),
               S('koh-rong', 3, ['volleyball', 'fire show']), S('koh-sdach', 3, ['E-bike', 'sunset cruise', 'Snorkelling'])] },
-    { id: 'indonesia', nStops: 4, n: 'Indonesia', tag: 'Uluwatu → Nusa Lembongan → Gili T → Kuta Lombok', kicker: 'Island hopping', days: 12, usd: 650,
+    { id: 'indonesia', nStops: 4, n: 'Indonesia', tag: 'Uluwatu → Nusa Lembongan → Gili T → Kuta Lombok', kicker: 'Island hopping', days: 12, usd: 700,
       dep: 6, until: 'Apr 2027', status: 'live', col: 'orange', max: 20, meals: '4 breakfasts · 5 lunches · 5 dinners',
       pitch: 'Cliffside Uluwatu and a Mt Batur sunrise, manta rays off Nusa Penida, a car-free party island on Gili T, then surf camp in Lombok.',
       hl: ['Mt Batur sunrise', 'Snorkel with turtles', 'Foam party', 'Surf camp'], img: ['mt-batur-sunrise-trekking', 'gili-trawangan-boat-party'],
@@ -60,17 +64,20 @@
       hl: ['Boat party', 'Foam party', 'Snorkelling', 'Surf camp'], img: ['gili-trawangan-boat-party', 'surf-camp'],
       stops: [S('gili-trawangan', 3, ['Boat party', 'Foam party', 'Snorkelling adventure']), S('kuta-lombok', 3, ['Surf lesson', 'Secret Gili'])] },
     { id: 'thailand', nStops: 3, n: 'Thailand', tag: 'Bangkok → Chiang Mai → Pai', kicker: 'Temples + jungle', days: 11, usd: 340,
-      dep: 2, until: '', status: 'soon', col: 'pink', max: 20, meals: 'Welcome BBQ in Chiang Mai + elephant-day lunch',
+      dep: 2, until: '', status: 'live', col: 'pink', max: 20, meals: 'Welcome BBQ in Chiang Mai + elephant-day lunch',
       pitch: 'Temples, jungle, waterfalls and legendary Mad Monkey nights, from the chaos of Bangkok to the mountains of Pai. 10 nights of beds, every intercity transfer, every activity.',
       hl: ['Elephant sanctuary', 'Bamboo rafting', 'Lod Cave', 'Tipsy tubing'], img: ['karaoke-night-bkk', 'chiang-mai'],
       stops: [S('bangkok', 2, ['Old Town', 'Bangkok pub crawl', 'Beats']), S('chiang-mai', 3, ['Elephant', 'Day Party', 'Ultimate Pub Crawl', 'Grand Canyon']),
               S('pai', 3, ['Tipsy tubing', 'Lod Cave', 'Sunset at Pai']), S('chiang-mai', 1, ['Game Night'])] },
-    { id: 'laos', nStops: 4, n: 'Laos', tag: 'Luang Prabang → Nong Khiaw → Muang Ngoi → Vang Vieng', kicker: 'Waterfalls + karsts', days: 10, usd: 449,
-      dep: 0, until: '', status: 'soon', col: 'cyan', max: 20, meals: 'Lunch on the Kuang Si + Vang Vieng tours',
+    { id: 'laos', nStops: 4, n: 'Laos', tag: 'Luang Prabang → Nong Khiaw → Muang Ngoi → Vang Vieng', kicker: 'Waterfalls + karsts', days: 10, usd: 400,
+      dep: 0, until: '', status: 'live', col: 'cyan', max: 20, meals: 'Lunch on the Kuang Si + Vang Vieng tours',
       pitch: 'Golden temples and Kuang Si falls, a mountain camp and river villages around Nong Khiaw, then caves, kayaking, ziplines and a sunset paramotor in Vang Vieng.',
       hl: ['Kuang Si Falls', 'Nong Khiaw viewpoint', 'Sunset paramotor', 'Tipsy tubing'], img: ['kuang-si-waterfall', 'vang-vieng-tipsy-tubing'],
       stops: [S('luang-prabang', 4, ['Kuang Si', 'Nong Khiaw', 'Stories of', 'Jewellery', 'Night market']), S('vang-vieng', 3, ['paramotor', 'Blue Lagoons', 'Zipline', 'Tipsy tubing', 'pub crawl'])] }
   ];
+  // ALL IN Thailand is link-only on the ALL IN site: sold privately, never listed. Its entry stays above so it's one line to bring back.
+  MM.ALL_IN = MM.ALL_IN.filter(function (t) { return t.id !== 'thailand'; });
+
 
   MM.SPECIALS = [
     /* One featured partner trip shows on the home page. Add one object and it appears; remove it and the section hides.
