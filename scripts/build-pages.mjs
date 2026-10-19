@@ -10,6 +10,7 @@
 
    Writes:  trips/  routes/  hostels/  guides/  sitemap.xml  robots.txt   (each folder holds a .generated marker)
    Without SITE_URL the pages still work; canonical links, the sitemap and preview images are skipped.
+   NOINDEX=1 adds a robots noindex tag (used for the demo site, so it never competes with the real one).
    ============================================================ */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -61,7 +62,7 @@ function shell({ path: p, title, desc, h1, crumbs, body, ld, image }) {
 <meta name="description" content="${esc(desc)}">
 ${SITE ? `<link rel="canonical" href="${esc(url)}">\n` : ''}<meta property="og:type" content="website"><meta property="og:site_name" content="Mad Monkey Trip Builder"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">${SITE ? `<meta property="og:url" content="${esc(url)}">` : ''}${og ? `<meta property="og:image" content="${esc(og)}"><meta name="twitter:card" content="summary_large_image">` : ''}
 <meta name="theme-color" content="#0a0a0a">
-<link rel="icon" type="image/png" href="${href('/assets/logo/favicon.png')}">
+${process.env.NOINDEX ? '<meta name="robots" content="noindex">\n' : ''}<link rel="icon" type="image/png" href="${href('/assets/logo/favicon.png')}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
 <link rel="stylesheet" href="${href('/styles.css')}?v=${CSS_V}">

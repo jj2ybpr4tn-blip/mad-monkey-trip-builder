@@ -10,6 +10,7 @@
     "mirror-photos": "node scripts/mirror-photos.mjs",
     "build-map": "node scripts/build-map.mjs",
     "build-pages": "node scripts/build-pages.mjs",
-    "og-home": "bash scripts/render-og.sh"
+    "og-home": "bash scripts/render-og.sh",
+    "deploy-demo": "bash scripts/deploy-demo.sh"
   }
 }
