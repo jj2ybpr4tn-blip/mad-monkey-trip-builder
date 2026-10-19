@@ -11,7 +11,12 @@ git worktree add -q -B gh-pages .demo-build HEAD
   cd .demo-build
   BASE_PATH="/$NAME" NOINDEX=1 node scripts/build-pages.mjs
   touch .nojekyll
-  git add -A && git -c user.name="$(git config user.name)" -c user.email="$(git config user.email)" commit -qm "Demo site build ($(date -u +%Y-%m-%d))" || true
+  git add -A
+  if git diff --cached --quiet; then echo "Nothing changed in the demo build."; else
+    # use your git identity if you have one, otherwise a neutral one so the commit can't fail quietly
+    NAME_ARG=(); [ -z "$(git config user.name)" ] && NAME_ARG=(-c user.name="Trip Builder deploy" -c user.email="deploy@localhost")
+    git "${NAME_ARG[@]}" commit -qm "Demo site build ($(date -u +%Y-%m-%d))"
+  fi
   git push -q -f origin gh-pages
 )
 git worktree remove --force .demo-build
