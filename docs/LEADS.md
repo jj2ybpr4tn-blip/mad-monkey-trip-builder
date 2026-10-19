@@ -75,3 +75,31 @@ node scripts/test-receiver.mjs
 ## How to contact the guest
 
 The guest picks **one** way to be contacted: WhatsApp or email. Only that field is filled in and `contact.via` says which (`"whatsapp"` or `"email"`). Reply on that channel. The server accepts a request with either a valid email or a WhatsApp number (8–15 digits); it refuses one with neither.
+
+
+## What the crew sees: `summary` and `crewText`
+
+Every lead now also carries the trip laid out for a human reviewer (built by `crew.js`), so the email, the admin tab and the
+crew review page all show the same thing without re-doing the maths:
+
+```jsonc
+"summary": {                          // JSON-safe, about 3 KB for a 3-stop trip
+  "headline": "Hanoi → Hoi An → Ho Chi Minh City", "days": 12, "nights": 11, "stopCount": 3, "countries": ["Vietnam"],
+  "start": "2026-11-13", "end": "2026-11-24", "datesLabel": "Dates are fixed", "people": 2, "pref": "Smart pick",
+  "stops": [{
+    "kind": "stop | allin", "name": "Hanoi", "country": "Vietnam", "nights": 4, "from": "2026-11-13", "to": "2026-11-17",
+    "bedUsd": 6.76, "bedsUsd": 27, "partner": false,
+    "tours": [{ "name": "Ninh Binh · Trang An boats + Mua Cave", "usd": 48, "est": false, "payOnDay": false, "date": "2026-11-14", "day": 2, "fits": true }],
+    "next": { "to": "Hoi An", "mode": "Flight", "hours": "5h35", "usd": 65, "overnight": false, "date": "2026-11-17" }   // travel to the next stop; null on the last
+  }],
+  "budget": { "beds": 73, "tours": 155, "transport": 123, "allIn": 0, "squadDiscount": 0, "tripCost": 351, "spendPerDay": 20, "spendFund": 220,
+              "total": 571, "people": 2, "tripCostAllPeople": 702, "totalAllPeople": 1142, "guestBudget": 1500, "budgetLeft": 929 },   // US dollars, per person unless it says AllPeople
+  "flags": [{ "level": "warn | info", "text": "Ho Chi Minh City has no Mad Monkey yet. Find them a partner hostel and confirm the bed price." }],
+  "allInMatch": { "id": "vietnam", "name": "Vietnam", "days": 14, "usd": 850, "nextDeparture": "2026-11-18" }   // or null
+},
+"crewText": "TRIP TO CHECK\nSam Carter · party of 2 · from Leeds\n…"   // the same thing as plain text, for WhatsApp / a CRM note
+```
+
+`itinerary` (the day-by-day text) is unchanged. A receiver that ignores `summary` and `crewText` keeps working.
+"Spending money" (`spendFund`) is the guest's own food-and-fun budget: it is in the estimate but is never something to charge.
+`MM.suggestBalance(summary, deposit)` gives a starting balance (trip cost for everyone less the deposit).

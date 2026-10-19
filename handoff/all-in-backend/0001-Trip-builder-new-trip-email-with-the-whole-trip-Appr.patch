@@ -1,0 +1,1659 @@
+From b817f2d1574483a57546fffa563515b54f9b6052 Mon Sep 17 00:00:00 2001
+From: Ewan McIntyre <ewan3568@me.com>
+Date: Tue, 20 Oct 2026 01:06:01 +0800
+Subject: [PATCH] Trip builder: new-trip email with the whole trip + Approve /
+ Not approved / Edit it
+
+The email the crew gets for a new trip request now shows everything the guest built:
+who they are, dates, every stop with its tours and the travel between, the money
+(including a suggested balance), a heads-up list and their note. Three buttons open
+a crew review page in the trip builder where the crew can approve (send the balance
+link), decline (optional refund) or edit the trip and save the crew's version.
+
+- email.ts: new tripBuilderOpsEmail layout; ready email links the checked plan
+- trip-builder-crew.ts: signed per-trip links (HMAC, 30 days, one trip), safe summary reader
+- trip-builder-admin: view / revise / link actions; crew key accepted for one open trip
+- trip-builder-request: store the crew brief as the itinerary text
+- trip-builder-test-emails: sample request MM-SAMPLE so the buttons work in the test send
+- Admin > Trip builder: Review page button
+- public/trip-builder: crew.js, ui-crew.js, crew.css, logic.js, CREW_ENDPOINT
+- optional TRIP_BUILDER_TEAM_EMAILS to copy the team
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ docs/trip-builder-crew-review.md              |  41 +++
+ public/trip-builder/app.js                    |   2 +-
+ public/trip-builder/config.js                 |   3 +
+ public/trip-builder/crew.css                  |  90 ++++++
+ public/trip-builder/crew.js                   | 164 ++++++++++
+ public/trip-builder/index.html                |  49 +--
+ public/trip-builder/logic.js                  |  12 +-
+ public/trip-builder/ui-crew.js                | 234 +++++++++++++++
+ src/components/admin/TripBuilderAdmin.tsx     |  17 ++
+ supabase/functions/_shared/email.ts           | 140 ++++++++-
+ .../_shared/trip-builder-crew.test.ts         |  58 ++++
+ .../functions/_shared/trip-builder-crew.ts    | 112 +++++++
+ .../functions/_shared/trip-builder-sample.ts  | 281 ++++++++++++++++++
+ supabase/functions/_shared/trip-builder.ts    |  17 +-
+ .../functions/trip-builder-admin/index.ts     |  70 ++++-
+ .../functions/trip-builder-request/index.ts   |   3 +-
+ .../trip-builder-test-emails/index.ts         |  37 ++-
+ 17 files changed, 1286 insertions(+), 44 deletions(-)
+ create mode 100644 docs/trip-builder-crew-review.md
+ create mode 100644 public/trip-builder/crew.css
+ create mode 100644 public/trip-builder/crew.js
+ create mode 100644 public/trip-builder/ui-crew.js
+ create mode 100644 supabase/functions/_shared/trip-builder-crew.test.ts
+ create mode 100644 supabase/functions/_shared/trip-builder-crew.ts
+ create mode 100644 supabase/functions/_shared/trip-builder-sample.ts
+
+diff --git a/docs/trip-builder-crew-review.md b/docs/trip-builder-crew-review.md
+new file mode 100644
+index 0000000..46e014a
+--- /dev/null
++++ b/docs/trip-builder-crew-review.md
+@@ -0,0 +1,41 @@
++# Trip builder: the new-trip email and the crew review page
++
++Ewan, 20 Oct 2026. What the crew gets when a guest sends a trip, and how they act on it.
++
++## What changed
++
++**The email** ("Trip to check: …", to Ewan, optional CC to the team) now shows the whole trip the way the guest built it:
++who they are and how to reach them, length and dates, every stop with its tours and the travel to the next stop, the money
++(beds, tours, travel, the guest's own spending money, their budget, a suggested balance), a "heads up" list (partner hostels,
++festivals clashing with their dates, leaving soon, over their budget, tours that don't fit), and their note.
++Three buttons at the top and bottom: **Approve**, **Not approved**, **Edit it**.
++
++**The review page** (`/all-in-trips/trip-builder/#/crew/<ref>?k=<key>`) is where the buttons go. Same trip, plus the three decisions:
++
++| Button | What it does |
++| --- | --- |
++| Approve | Asks for the balance (pre-filled: trip cost for everyone less the deposit; spending money is never charged) and an optional note, then sends the guest the Stripe payment link. Same as Admin > "Send balance link". |
++| Not approved | Reason for the guest, and "refund the deposit" (ticked). Same as Admin > "Decline". |
++| Edit it | Opens the trip in the builder with a "Save our version" bar. Saving updates the request (route, days, dates, estimate, trip link), moves it to *checking*, and keeps the guest's own version in `payload.original`. Then Approve sends the guest the edited plan. |
++
++Opening a link only **reads**. Nothing is sent, charged or refunded until someone presses the button inside a panel, so mail scanners that follow links do nothing.
++
++## Links and security
++
++The `k` key is `HMAC-SHA256(ref + expiry)` signed with `ADMIN_PASSWORD` (or `TRIP_BUILDER_LINK_SECRET`, if you want to rotate it separately).
++It works for **one trip only**, for 30 days, and only while that trip is still being checked. It cannot list requests or make new links.
++It sits in the `#fragment`, so it is never sent to a server or logged. Treat the email like a key: forward it inside the team only.
++Admin > Trip builder has a **Review page** button that makes a fresh link for any open trip.
++
++## Setup
++
++1. Deploy the changed functions: `trip-builder-request`, `trip-builder-admin`, `trip-builder-test-emails` (they share `_shared/email.ts`, `_shared/trip-builder.ts`, `_shared/trip-builder-crew.ts`).
++2. `public/trip-builder` has the new builder files (`crew.js`, `ui-crew.js`, `crew.css`, `logic.js`, one line in `app.js`, three tags in `index.html`, and `CREW_ENDPOINT` in `config.js`). Deploy the site.
++3. Optional: set `TRIP_BUILDER_TEAM_EMAILS` (comma separated) in the function secrets to copy the team on every new-trip email.
++4. Press the test send (`trip-builder-test-emails`). It emails Ewan the five trip builder emails and creates a sample request, `MM-SAMPLE` ("Charlie (sample)"), so the buttons in the first email open something real. Approving the sample sends Ewan a real payment link for the amount typed: don't pay it. Decline it to clear it from the To do list.
++
++Trips sent before the builder was updated have no stored summary. The review page rebuilds the view from the guest's own link; the email falls back to the plain itinerary (buttons still work).
++
++## Tests
++
++`deno test supabase/functions/_shared/` covers the key signing (own trip only, 30 days, tampering, wrong secret), the link format, and cleaning the summary the browser sends.
+diff --git a/public/trip-builder/app.js b/public/trip-builder/app.js
+index 5ce3d66..131bf3e 100644
+--- a/public/trip-builder/app.js
++++ b/public/trip-builder/app.js
+@@ -55,7 +55,7 @@
+      ============================================================ */
+   function parseHash() {
+     var h = location.hash.replace(/^#\/?/, ''), seg = h.split('/'), view = seg[0] || 'home';
+-    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
++    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack', 'crew'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
+   }
+   function go(view, rest) { location.hash = '#/' + (view === 'home' ? '' : view) + (rest ? '/' + rest : ''); }
+   function route() {
+diff --git a/public/trip-builder/config.js b/public/trip-builder/config.js
+index 49e8e7a..fe576c2 100644
+--- a/public/trip-builder/config.js
++++ b/public/trip-builder/config.js
+@@ -35,6 +35,9 @@ window.MM_CONFIG = {
+   // Deposit per person taken when a trip is sent for checking (Charlie, 19 Oct 2026). The server charges this too.
+   DEPOSIT_PER_PERSON: 50,
+ 
++  // The crew review page (#/crew/<ref>, opened from the buttons in the new-trip email). Ewan, 20 Oct 2026.
++  CREW_ENDPOINT: 'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin',
++
+   // Optional. GET <url>?ref=MM-XXXXXX -> { status: 'submitted'|'checking'|'ready'|'approved', note?, payLink? } powers the trip status page.
+   STATUS_ENDPOINT: 'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-status',
+ 
+diff --git a/public/trip-builder/crew.css b/public/trip-builder/crew.css
+new file mode 100644
+index 0000000..dd88ce2
+--- /dev/null
++++ b/public/trip-builder/crew.css
+@@ -0,0 +1,90 @@
++/* ============================================================
++   CREW REVIEW PAGE (ui-crew.js): what the team sees when a trip arrives.
++   Same brand rules as the rest of the builder: 3px outlines, hard-offset shadows, poster colours.
++   ============================================================ */
++.crew .wrap{max-width:1120px}
++.crew__top h2{font-size:clamp(34px,6vw,68px);margin:var(--s-3) 0 var(--s-2)}
++.crew__sub{font-weight:600;font-size:16px;color:var(--ink-dim);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
++.cpill{display:inline-block;border:var(--bw) solid var(--black);background:var(--paper);padding:1px 10px;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--black)}
++.cpill--new{background:var(--pink)} .cpill--chk{background:var(--orange)} .cpill--rdy{background:var(--yellow)} .cpill--ok{background:var(--lime)} .cpill--off{background:var(--black);color:var(--paper)} .cpill--edit{background:var(--cyan)}
++.cbanner{margin:var(--s-4) 0 0;padding:12px 16px;border:var(--bw) solid var(--black);background:var(--yellow);font-weight:600}
++.cbanner--ok{background:var(--lime)}
++
++/* the three decisions */
++.crew__acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-3);margin:var(--s-5) 0 var(--s-4)}
++.crew__act{border:var(--bw) solid var(--black);box-shadow:4px 4px 0 var(--black);padding:18px 10px 16px;font-family:inherit;font-weight:900;font-size:clamp(15px,2.4vw,22px);letter-spacing:.04em;text-transform:uppercase;text-align:center;color:var(--black);cursor:pointer;transition:transform .08s,box-shadow .08s}
++.crew__act small{display:block;margin-top:5px;font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:none;line-height:1.3}
++.crew__act--yes{background:var(--lime)} .crew__act--no{background:var(--pink)} .crew__act--edit{background:var(--orange)}
++.crew__act:hover:not([disabled]){transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--black)}
++.crew__act[aria-expanded="true"]{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--black);outline:var(--bw) solid var(--black);outline-offset:3px}
++.crew__act[disabled]{opacity:.38;cursor:not-allowed}
++.crew__orange{background:var(--orange)}
++
++.cpanel{border:var(--bw) solid var(--black);background:var(--paper);box-shadow:6px 6px 0 var(--black);padding:var(--s-5);margin:0 0 var(--s-5);display:flex;flex-direction:column;gap:var(--s-3);scroll-margin-top:calc(var(--hdr) + 12px)}
++.cpanel h3{font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
++.cpanel--yes{border-top:14px solid var(--lime)} .cpanel--no{border-top:14px solid var(--pink)} .cpanel--edit{border-top:14px solid var(--orange)}
++.cpanel .btn{align-self:flex-start} .cpanel textarea.input{min-height:96px}
++.cdim{font-size:12.5px;font-weight:500;color:var(--ink-dim);line-height:1.45}
++.cerr{background:var(--pink);border:var(--bw) solid var(--black);padding:8px 12px;font-weight:700;font-size:14px}
++.cerr[hidden]{display:none}
++
++/* the trip */
++.crew__grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:var(--s-5);align-items:start;margin-top:var(--s-4)}
++.crew__h{font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);margin:var(--s-5) 0 var(--s-2)}
++.cglance{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:var(--bw) solid var(--black);background:var(--bone);box-shadow:4px 4px 0 var(--black)}
++.cglance>div{padding:10px 12px;border-right:var(--bw) solid var(--black);min-width:0} .cglance>div:last-child{border-right:0}
++.cglance span{display:block;font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim)}
++.cglance b{display:block;font-size:19px;font-weight:900;line-height:1.2} .cglance i{display:block;font-style:normal;font-size:12px;font-weight:500;color:#333}
++
++.cbox{border:var(--bw) solid var(--black);background:var(--paper);padding:var(--s-4);margin:var(--s-4) 0 0}
++.crew__side .cbox:first-child{margin-top:0}
++.cbox h3{font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);margin:0 0 var(--s-2)}
++.cbox p{font-size:14px;font-weight:500;line-height:1.5;margin:0 0 var(--s-2)}
++.cbox--flags{padding:0;background:var(--paper)} .cbox--flags h3{background:var(--yellow);color:var(--black);margin:0;padding:8px 14px}
++.cbox--flags ul{list-style:none;margin:0;padding:0} .cbox--flags li{padding:8px 14px;border-top:1px solid #ddd;font-size:14px;font-weight:500;line-height:1.4}
++.cbox--flags li:first-child{border-top:0} .cbox--flags li.info{color:#333}
++.cbox--flags li b{display:inline-block;background:var(--yellow);border:2px solid var(--black);padding:0 6px;margin-right:4px}
++.cbox--note{background:var(--bone)}
++
++.cstop{display:grid;grid-template-columns:44px minmax(0,1fr);border:var(--bw) solid var(--black);background:var(--paper);margin:0 0 var(--s-2)}
++.cstop__n{background:var(--lime);border-right:var(--bw) solid var(--black);font-weight:900;font-size:20px;display:flex;justify-content:center;padding-top:12px}
++.cstop__b{padding:12px 14px;min-width:0}
++.cstop h4{font-size:16px;font-weight:900;text-transform:uppercase;margin:0} .cstop h4 small{font-size:13px;font-weight:700;color:#444;text-transform:none}
++.cstop__b>p{font-size:12.5px;font-weight:500;color:#333;margin:2px 0 8px}
++.cstop ul{list-style:none;margin:0;padding:0} .cstop li{display:flex;justify-content:space-between;gap:14px;font-size:14px;font-weight:500;padding:4px 0}
++.cstop li>span:last-child{text-align:right;white-space:nowrap} .cstop li i{display:block;font-style:normal;font-size:11.5px;color:var(--ink-dim)}
++.cstop li.none{color:#777} .cstop li em{font-style:normal;font-weight:900;font-size:10.5px;background:var(--yellow);padding:0 5px;border:2px solid var(--black);text-transform:uppercase}
++.cstop__next{margin-top:8px;padding-top:8px;border-top:2px dashed var(--black);font-size:13px;font-weight:500}
++
++.cmoney{width:100%;border-collapse:collapse;border:var(--bw) solid var(--black);background:var(--paper);margin:var(--s-4) 0 0;font-size:14px}
++.cmoney caption{background:var(--black);color:var(--paper);text-align:left;padding:8px 14px;font-size:11px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
++.cmoney td{padding:7px 14px;vertical-align:top} .cmoney td:last-child{text-align:right;white-space:nowrap} .cmoney tr.b td{font-weight:900}
++.cmoney td i{display:block;font-style:normal;font-size:11.5px;font-weight:500;color:var(--ink-dim);white-space:normal;max-width:34em}
++.cmoney tfoot td{background:var(--lime);padding:10px 14px;text-align:left!important;white-space:normal} .cmoney tfoot i{display:inline;font-size:12px;color:var(--black)}
++
++.cwho{font-size:16px!important} .clinks{display:flex;flex-wrap:wrap;gap:var(--s-2)}
++.cdl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:var(--s-3) 0 0;font-size:13px} .cdl dt{font-weight:900;color:var(--ink-dim)} .cdl dd{margin:0;font-weight:500;word-break:break-word}
++
++/* the edit bar that shows in the builder */
++.crewbar{position:fixed;left:0;right:0;bottom:0;z-index:400;background:var(--black);color:var(--paper);border-top:var(--bw) solid var(--orange);padding:10px 16px;--shadow-on:var(--orange)}
++.crewbar__in{max-width:1120px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
++.crewbar__who{display:flex;flex-direction:column;line-height:1.2} .crewbar__who .over{color:var(--orange)} .crewbar__who b{font-size:13px}
++.crewbar .input{flex:1 1 220px;min-width:0;padding:8px 10px;font-size:14px;box-shadow:3px 3px 0 var(--orange)}
++.crewbar .btn--ghost{color:var(--paper)}
++body.crewing{padding-bottom:96px}
++
++@media (max-width:900px){
++  .crew__grid{grid-template-columns:minmax(0,1fr)}
++}
++@media (max-width:620px){
++  .crew__acts{grid-template-columns:minmax(0,1fr)}
++  .crew__act{display:flex;flex-direction:column;align-items:center;padding:14px 10px}
++  .cglance{grid-template-columns:repeat(2,minmax(0,1fr))}
++  .cglance>div:nth-child(2){border-right:0} .cglance>div:nth-child(-n+2){border-bottom:var(--bw) solid var(--black)}
++  .cpanel{padding:var(--s-4)} .cpanel .btn{align-self:stretch}
++  .crewbar__who{flex:1 0 100%}
++}
++@media print{.crewbar,.crew__acts,.cpanel{display:none!important}}
++
++/* the review page is a work screen: no marketing footer under it */
++body[data-view="crew"] .foot{display:none}
+diff --git a/public/trip-builder/crew.js b/public/trip-builder/crew.js
+new file mode 100644
+index 0000000..62a2151
+--- /dev/null
++++ b/public/trip-builder/crew.js
+@@ -0,0 +1,164 @@
++/* ============================================================
++   CREW SUMMARY: everything a human needs to review a trip, as one plain
++   (JSON-safe) object, plus a plain-text version of it.
++
++   It travels inside the lead payload as `summary` and `crewText`, so the email,
++   the admin tab and the crew review page all show the same thing, in the same
++   order: who, the route stop by stop with the tours and the travel between,
++   the money, and a short "heads up" list of things worth a second look.
++
++     MM.crewSummary(state, plan, {people, dates})   -> summary object
++     MM.crewText(summary, extra)                    -> plain text for WhatsApp / a CRM note
++     MM.suggestBalance(summary, depositPaid)        -> a starting figure for the balance (crew can change it)
++   ============================================================ */
++(function (r) {
++  var MM = r.MM = r.MM || {}, U = MM.util, P = function () { return MM.PLACES; };
++  var DOWN = U.DOWN;
++  function iso(d) { return d ? U.isoDate(d) : ''; }
++  function nice(isoStr) { var d = U.parseDate(isoStr); return d ? U.fmtDate(d) : ''; }
++  function niceY(isoStr) { var d = U.parseDate(isoStr); return d ? U.fmtDate(d) + ' ' + d.getUTCFullYear() : ''; }
++  function usd(n) { return '$' + Math.round(+n || 0).toLocaleString('en-US'); }
++  function clean(s) { return String(s == null ? '' : s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); }
++  var PREFS = { balanced: 'Smart pick', cheap: 'Cheapest', fast: 'Fastest' };
++  var DATES = { fixed: 'Dates are fixed', flex: 'Dates are flexible', open: 'Dates not decided' };
++
++  MM.crewSummary = function (state, pl, ctx) {
++    ctx = ctx || {}; state = state || MM.defaultState();
++    var T = pl.totals, segs = pl.segs || pl.stops || [], people = Math.max(1, Math.min(8, Math.round(+ctx.people) || 1));
++
++    // days grouped by stop, and the first day each tour lands on
++    var bySeg = segs.map(function () { return []; }), tourDay = {};
++    pl.days.forEach(function (d) {
++      if (d.si != null && bySeg[d.si]) bySeg[d.si].push(d);
++      (d.acts || []).forEach(function (a) { var k = a.id + '@' + d.si; if (!tourDay[k]) tourDay[k] = d; });
++      if (d.epic) { var k2 = d.epic.id + '@' + d.si; if (!tourDay[k2]) tourDay[k2] = d; }
++    });
++    var cantFit = {}; (pl.unscheduled || []).forEach(function (u) { cantFit[u.act.id + '@' + u.seg] = true; });
++
++    var stops = segs.map(function (s, si) {
++      var ds = bySeg[si], stay = ds.filter(function (d) { return d.kind === 'stay' || d.kind === 'epic' || d.kind === 'block'; });
++      var from = stay.length && stay[0].date ? iso(stay[0].date) : '', last = stay.length ? stay[stay.length - 1] : null;
++      var to = last && last.date ? iso(U.addDays(last.date, 1)) : '';
++      if (s.kind === 'allin') {
++        return { kind: 'allin', id: s.trip.id, name: 'ALL IN ' + s.trip.n, nights: s.trip.days - 1, days: s.trip.days, usd: s.trip.usd, from: from, to: to,
++          route: s.trip.tag, departs: DOWN[s.trip.dep], status: s.trip.status, tours: [], next: null };
++      }
++      var pl1 = P()[s.p], covered = 0;
++      s.inline.forEach(function (a) { if (a.multi && a.multi.covers) covered += Math.max(0, a.multi.d - 1); });
++      var billable = Math.max(0, s.n - covered);
++      var tours = s.acts.map(function (a) {
++        var at = tourDay[a.id + '@' + si];
++        return { id: a.id, name: a.n, usd: a.usd == null ? null : Math.round(a.usd), est: !!a.est, payOnDay: a.usd == null, days: a.multi && a.multi.d > 1 ? a.multi.d : 1,
++          includesBeds: !!(a.multi && a.multi.covers), when: a.when && a.when !== 'Every day' ? a.when : '', day: at ? at.n : 0, date: at && at.date ? iso(at.date) : '', fits: !cantFit[a.id + '@' + si] };
++      });
++      return { kind: 'stop', id: s.p, name: pl1.n, country: MM.COUNTRIES[pl1.c] ? MM.COUNTRIES[pl1.c].n : pl1.c, nights: s.n, from: from, to: to,
++        bedUsd: pl1.bed, bedNights: billable, bedsUsd: Math.round(billable * pl1.bed), partner: !!pl1.partner, tours: tours, next: null };
++    });
++
++    pl.legs.forEach(function (l) {
++      var c = l.chosen, s = stops[l.index]; if (!s) return;
++      s.next = { to: P()[l.to].n, mode: c.modeLabel, hours: U.hoursLabel(c.h), usd: Math.round(l.u), overnight: !!c.ovn, date: l.date || '', pref: PREFS[c.key] || '',
++        lastMinuteFare: l.fare ? { min: l.fare.min, max: l.fare.max } : null, note: l.border || '' };
++    });
++
++    // Straight from the plan's own total so it matches the builder's headline figure (the parts are each rounded, so they can differ by a dollar).
++    var tripCost = T.total - T.fund;
++    var budget = { beds: T.beds, tours: T.acts, transport: T.transport, allIn: T.allin, squadDiscount: T.squad, tripCost: tripCost,
++      spendPerDay: +state.fund || 0, spendFund: T.fund, total: T.total, people: people, tripCostAllPeople: tripCost * people, totalAllPeople: T.total * people,
++      toursPaidOnTheDay: T.payOnDay, hasEstimates: !!T.est, guestBudget: T.budget || 0, budgetLeft: T.budget ? T.budgetLeft : null };
++
++    /* ---- heads up for the crew ---- */
++    var flags = [], seen = {};
++    function flag(level, text) { text = clean(text); if (!text || seen[text]) return; seen[text] = 1; flags.push({ level: level, text: text }); }
++    if (state.start) {
++      var inDays = Math.round((U.parseDate(state.start).getTime() - Date.now()) / 86400000);
++      if (inDays <= 14) flag('warn', 'Leaves ' + (inDays <= 0 ? 'right now' : 'in ' + inDays + ' days') + '. Hold the beds today.');
++      else flag('info', 'Leaves in ' + inDays + ' days.');
++    } else flag('info', 'No start date yet. Help them pick one so the beds can be held.');
++    // The planner words some warnings for the guest. The crew reads them in the crew's voice.
++    pl.warnings.forEach(function (w) {
++      var t = w.m;
++      if (/no Mad Monkey yet/.test(t)) { flag('warn', P()[w.p].n + ' has no Mad Monkey yet. Find them a partner hostel and confirm the bed price.'); return; }
++      if (/is launching soon/.test(t)) { flag('warn', t.replace(/ is launching soon\..*$/, ' is not on sale yet.')); return; }
++      flag(w.t === 'warn' ? 'warn' : 'info', t.replace(/ It still runs, pack for it\.$/, ''));
++    });
++    try {
++      if (MM.doctor) MM.doctor(state, {}).findings.filter(function (f) { return f.sev === 'bad' || f.sev === 'warn'; }).slice(0, 5)
++        .forEach(function (f) { flag(f.sev === 'bad' ? 'warn' : 'info', f.title + '. ' + f.body); });
++    } catch (e) { /* the summary still works without the Doctor */ }
++    try {
++      if (state.start && MM.eventsFor) MM.eventsFor(pl).forEach(function (e) {
++        var where = e.places && e.places.length ? ' (' + e.places.map(function (p) { return P()[p].n; }).join(', ') + ')' : '';
++        flag(e.sev >= 2 ? 'warn' : 'info', e.title + ' overlaps ' + e.nights + (e.nights === 1 ? ' night' : ' nights') + where + (e.conf ? '' : ', date still a forecast') +
++          '. Beds go fast.' + (e.shift ? ' Moving the trip ' + Math.abs(e.shift.days) + ' days ' + (e.shift.days > 0 ? 'later' : 'earlier') + ' avoids it.' : ''));
++      });
++    } catch (e2) { /* ignore */ }
++    var m = pl.match && pl.match[0], allInMatch = null;
++    if (m) {
++      allInMatch = { id: m.trip.id, name: m.trip.n, days: m.trip.days, usd: m.trip.usd, nextDeparture: iso(m.next) };
++      flag('info', 'Close to ALL IN ' + m.trip.n + ' (' + m.trip.days + ' days, ' + usd(m.trip.usd) + '). Next departure ' + nice(iso(m.next)) + '. Worth offering.');
++    }
++    if (state.budget && T.budgetLeft < 0) flag('warn', 'Over their own budget by ' + usd(-T.budgetLeft) + ' (they said ' + usd(state.budget) + ' per person).');
++    if (T.payOnDay) flag('info', T.payOnDay + (T.payOnDay === 1 ? ' tour is' : ' tours are') + ' paid on the day, so not in the total.');
++    if (T.est) flag('info', 'Some tour prices are estimates. Check them before quoting.');
++    flags.sort(function (a, b) { return (a.level === 'warn' ? 0 : 1) - (b.level === 'warn' ? 0 : 1); });
++
++    var lastDay = pl.days.length ? pl.days[pl.days.length - 1] : null;
++    return { v: 1, headline: MM.routeLine(pl), days: T.days, nights: T.nights, stopCount: T.stops, km: pl.km,
++      countries: pl.countries.map(function (c) { return MM.COUNTRIES[c] ? MM.COUNTRIES[c].n : c; }),
++      start: state.start || '', end: lastDay && lastDay.date ? iso(lastDay.date) : '', dates: ctx.dates || '', datesLabel: DATES[ctx.dates] || '',
++      people: people, pref: PREFS[state.pref] || '', crewMates: state.crew || 0, stops: stops, budget: budget, flags: flags.slice(0, 14), allInMatch: allInMatch };
++  };
++
++  // A starting figure for the balance: the trip cost for everyone, less the deposit already paid. Never their spending money.
++  MM.suggestBalance = function (sum, deposit) {
++    var b = sum && sum.budget; if (!b) return 0;
++    return Math.max(0, Math.round(b.tripCostAllPeople - (+deposit || 0)));
++  };
++
++  MM.crewText = function (sum, x) {
++    x = x || {}; var L = [], b = sum.budget;
++    function rule(t) { L.push(''); L.push(t); }
++    L.push('TRIP TO CHECK' + (x.ref ? ' · ' + x.ref : ''));
++    var who = [x.name, sum.people > 1 ? 'party of ' + sum.people : 'travelling solo', x.from ? 'from ' + x.from : ''].filter(Boolean).join(' · ');
++    if (who) L.push(who);
++    if (x.contact) L.push('Contact: ' + x.contact);
++    rule('THE TRIP');
++    L.push(sum.headline);
++    L.push(sum.days + ' days · ' + sum.nights + ' nights · ' + sum.stopCount + (sum.stopCount === 1 ? ' stop · ' : ' stops · ') + sum.countries.join(' + '));
++    L.push(sum.start ? 'Dates: ' + niceY(sum.start) + (sum.end ? ' to ' + niceY(sum.end) : '') + (sum.datesLabel ? ' (' + sum.datesLabel.toLowerCase() + ')' : '') : 'Dates: not decided yet');
++    if (sum.pref) L.push('Travel style: ' + sum.pref);
++    rule('STOP BY STOP');
++    sum.stops.forEach(function (s, i) {
++      var when = s.from ? ' · ' + nice(s.from) + ' to ' + nice(s.to) : '';
++      L.push('');
++      if (s.kind === 'allin') { L.push((i + 1) + '. ' + s.name.toUpperCase() + ' · ' + s.days + ' days · ' + usd(s.usd) + when); if (s.route) L.push('   ' + s.route); }
++      else {
++        L.push((i + 1) + '. ' + s.name.toUpperCase() + ' (' + s.country + ') · ' + s.nights + (s.nights === 1 ? ' night' : ' nights') + when);
++        L.push('   Bed from ' + usd(s.bedUsd) + ' a night' + (s.partner ? ' (partner hostel, price is an estimate)' : ''));
++        if (!s.tours.length) L.push('   No tours picked');
++        s.tours.forEach(function (t) {
++          L.push('   - ' + t.name + ' · ' + (t.payOnDay ? 'pay on the day' : usd(t.usd) + (t.est ? ' (est.)' : '')) + (t.date ? ' · ' + nice(t.date) : t.day ? ' · day ' + t.day : '') + (t.fits ? '' : ' · DOES NOT FIT, needs another night'));
++        });
++      }
++      if (s.next) L.push('   Then: ' + s.next.mode + ' to ' + s.next.to + ' · ' + s.next.hours + ' · ' + usd(s.next.usd) + (s.next.overnight ? ' · overnight' : '') + (s.next.date ? ' · ' + nice(s.next.date) : ''));
++    });
++    rule('MONEY (per person, US dollars)');
++    L.push('Beds             ' + usd(b.beds));
++    L.push('Tours            ' + usd(b.tours));
++    L.push('Travel           ' + usd(b.transport));
++    if (b.allIn) L.push('ALL IN trip      ' + usd(b.allIn));
++    if (b.squadDiscount) L.push('Squad discount   -' + usd(-b.squadDiscount));
++    L.push('Trip cost        ' + usd(b.tripCost) + (b.people > 1 ? '  (x' + b.people + ' = ' + usd(b.tripCostAllPeople) + ')' : ''));
++    L.push('Spending money   ' + usd(b.spendFund) + ' (' + usd(b.spendPerDay) + ' a day, their own, not charged)');
++    L.push('Estimated total  ' + usd(b.total) + (b.people > 1 ? '  (x' + b.people + ' = ' + usd(b.totalAllPeople) + ')' : ''));
++    if (b.guestBudget) L.push('Their budget     ' + usd(b.guestBudget) + (b.budgetLeft >= 0 ? ' (' + usd(b.budgetLeft) + ' to spare)' : ' (over by ' + usd(-b.budgetLeft) + ')'));
++    if (x.deposit) L.push('Deposit paid     ' + usd(x.deposit));
++    if (sum.flags.length) { rule('HEADS UP'); sum.flags.forEach(function (f) { L.push((f.level === 'warn' ? '! ' : '- ') + f.text); }); }
++    if (x.notes) { rule('THEIR NOTE'); L.push(x.notes); }
++    if (x.link) { rule('OPEN IT EXACTLY AS THEY BUILT IT'); L.push(x.link); }
++    return L.join('\n');
++  };
++
++  if (typeof module !== 'undefined' && module.exports) module.exports = MM;
++})(typeof window !== 'undefined' ? window : globalThis);
+diff --git a/public/trip-builder/index.html b/public/trip-builder/index.html
+index 3e3bdf0..039ec19 100644
+--- a/public/trip-builder/index.html
++++ b/public/trip-builder/index.html
+@@ -14,7 +14,8 @@
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
+-  <link rel="stylesheet" href="styles.css?v=38">
++  <link rel="stylesheet" href="styles.css?v=39">
++  <link rel="stylesheet" href="crew.css?v=39">
+ </head>
+ <body data-view="home">
+   <header class="hdr" id="hdr">
+@@ -35,27 +36,29 @@
+   <div id="modal-root"></div>
+   <div id="toast-root" aria-live="polite"></div>
+ 
+-  <script src="data/map-data.js?v=38"></script>
+-  <script src="data/places.js?v=38"></script>
+-  <script src="data/activities.js?v=38"></script>
+-  <script src="data/media.js?v=38"></script>
+-  <script src="data/legs.js?v=38"></script>
+-  <script src="data/trips.js?v=38"></script>
+-  <script src="data/entry.js?v=38"></script>
+-  <script src="data/gallery.js?v=38"></script>
+-  <script src="data/rules.js?v=38"></script>
+-  <script src="data/guide.js?v=38"></script>
+-  <script src="logic.js?v=38"></script>
+-  <script src="extras.js?v=38"></script>
+-  <script src="group.js?v=38"></script>
+-  <script src="config.js?v=38"></script>
+-  <script src="ui-map.js?v=38"></script>
+-  <script src="ui-story.js?v=38"></script>
+-  <script src="app.js?v=38"></script>
+-  <script src="ui-review.js?v=38"></script>
+-  <script src="ui-group.js?v=38"></script>
+-  <script src="ui-live.js?v=38"></script>
+-  <script src="ui-extras.js?v=38"></script>
+-  <script src="ui-pack.js?v=38"></script>
++  <script src="data/map-data.js?v=39"></script>
++  <script src="data/places.js?v=39"></script>
++  <script src="data/activities.js?v=39"></script>
++  <script src="data/media.js?v=39"></script>
++  <script src="data/legs.js?v=39"></script>
++  <script src="data/trips.js?v=39"></script>
++  <script src="data/entry.js?v=39"></script>
++  <script src="data/gallery.js?v=39"></script>
++  <script src="data/rules.js?v=39"></script>
++  <script src="data/guide.js?v=39"></script>
++  <script src="logic.js?v=39"></script>
++  <script src="extras.js?v=39"></script>
++  <script src="crew.js?v=39"></script>
++  <script src="group.js?v=39"></script>
++  <script src="config.js?v=39"></script>
++  <script src="ui-map.js?v=39"></script>
++  <script src="ui-story.js?v=39"></script>
++  <script src="app.js?v=39"></script>
++  <script src="ui-review.js?v=39"></script>
++  <script src="ui-group.js?v=39"></script>
++  <script src="ui-live.js?v=39"></script>
++  <script src="ui-extras.js?v=39"></script>
++  <script src="ui-pack.js?v=39"></script>
++  <script src="ui-crew.js?v=39"></script>
+ </body>
+ </html>
+diff --git a/public/trip-builder/logic.js b/public/trip-builder/logic.js
+index 57b421a..4df021d 100644
+--- a/public/trip-builder/logic.js
++++ b/public/trip-builder/logic.js
+@@ -1012,7 +1012,7 @@
+   }
+   function leadPayload(state, pl, contact, meta) {
+     var m = pl.match && pl.match[0];
+-    return {
++    var out = {
+       v: 1, createdAt: new Date().toISOString(), source: (meta && meta.source) || 'trip-builder', ref: (meta && meta.ref) || '', fromHostel: (meta && meta.fromHostel) || '',
+       contact: contact, trip: { link: (meta && meta.link) || '', state: encodeState(state), route: routeLine(pl), days: pl.totals.days, nights: pl.totals.nights, countries: pl.countries,
+         stops: pl.places, start: state.start || '', estTotalUsd: pl.totals.total, breakdownUsd: { beds: pl.totals.beds, activities: pl.totals.acts, transport: pl.totals.transport, allIn: pl.totals.allin, squadDiscount: pl.totals.squad, spendFund: pl.totals.fund },
+@@ -1020,6 +1020,16 @@
+         urgency: urgencyOf(state) },
+       itinerary: planText(pl, state, 'USD')
+     };
++    // The same trip, laid out for the crew: stop by stop, tours, travel, money and a heads-up list (crew.js).
++    if (MM.crewSummary) {
++      try {
++        var sum = MM.crewSummary(state, pl, { people: contact && contact.partySize, dates: contact && contact.dates });
++        out.summary = sum;
++        out.crewText = MM.crewText(sum, { name: contact && contact.name, from: contact && contact.from, notes: contact && contact.notes, link: meta && meta.link,
++          contact: contact && (contact.via === 'whatsapp' ? 'WhatsApp ' + (contact.whatsapp || '') : 'Email ' + (contact.email || '')) });
++      } catch (e) { /* the lead still goes through without the crew layout */ }
++    }
++    return out;
+   }
+   function urgencyOf(state) {
+     var d = parseDate(state.start); if (!d) return 'planning';
+diff --git a/public/trip-builder/ui-crew.js b/public/trip-builder/ui-crew.js
+new file mode 100644
+index 0000000..0cc15ba
+--- /dev/null
++++ b/public/trip-builder/ui-crew.js
+@@ -0,0 +1,234 @@
++/* ============================================================
++   CREW REVIEW PAGE   #/crew/<ref>?k=<key>[&do=approve|decline|edit]
++
++   Where the three buttons in the new-trip email land. It shows the trip exactly as the guest
++   built it (stop by stop, tours, travel, money, heads-up) with the guest's details, and the
++   three decisions:
++     Approve       send the guest the final price + payment link for the balance
++     Not approved  say no (with a reason), optionally refund the deposit
++     Edit it       open the trip in the builder, change it, then "Save our version"
++   The key in the link proves it came from the email. Opening the page only reads: nothing is
++   sent, charged or refunded until a person presses the button in a panel.
++   Needs MM_CONFIG.CREW_ENDPOINT (the trip-builder-admin function).
++   ============================================================ */
++(function () {
++  var A = window.MMApp, MM = window.MM, C = window.MM_CONFIG || {}, u = A.util, esc = u.esc, $ = u.$, U = MM.util;
++  var SKEY = 'mm-crew';
++  var STATUS = { pending_payment: ['Unpaid', 'off'], submitted: ['New', 'new'], checking: ['Checking', 'chk'], ready: ['Balance link sent', 'rdy'], approved: ['Booked', 'ok'], declined: ['Declined', 'off'] };
++
++  function endpoint() { return C.CREW_ENDPOINT || (C.STATUS_ENDPOINT ? C.STATUS_ENDPOINT.replace(/trip-builder-status/, 'trip-builder-admin') : ''); }
++  function usd(n) { return '$' + Math.round(+n || 0).toLocaleString('en-US'); }
++  function day(iso, year) { var d = U.parseDate(iso); return d ? U.fmtDate(d) + (year ? ' ' + d.getUTCFullYear() : '') : ''; }
++  function when(ts) { var d = ts ? new Date(ts) : null; return d && !isNaN(d) ? d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : ''; }
++  function firstName(n) { return String(n || '').trim().split(/\s+/)[0] || 'them'; }
++  function sess() { try { return JSON.parse(sessionStorage.getItem(SKEY)); } catch (e) { return null; } }
++  function setSess(s) { try { if (s) sessionStorage.setItem(SKEY, JSON.stringify(s)); else sessionStorage.removeItem(SKEY); } catch (e) { /* private mode */ } }
++  function parse(rest) {
++    var p = decodeURIComponent(rest || '').split('?'), q = {}; (p[1] || '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); });
++    return { ref: (p[0] || '').toUpperCase(), k: q.k || '', doo: q.do || '' };
++  }
++  function call(body) {
++    return fetch(endpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) {
++      return r.json().catch(function () { return {}; }).then(function (d) {
++        if (!r.ok || d.ok === false) { var e = new Error(d.error || ('Something went wrong (' + r.status + ')')); e.status = r.status; throw e; }
++        return d;
++      });
++    });
++  }
++  function stateOf(link) { var i = String(link || '').indexOf('#/build/'); return i < 0 ? '' : link.slice(i + 8); }
++  function derive(r) {                       // trips sent before the summary existed: rebuild it from the guest's own link
++    var st = MM.decodeState(stateOf(r.trip_link)); if (!st.items.length) return null;
++    return MM.crewSummary(st, MM.plan(st), { people: r.party_size, dates: r.dates_flex });
++  }
++  function note(root, html, cls) { root.innerHTML = '<section class="quiz crew"><div class="wrap"><div class="qbox"><span class="over">Crew review</span>' + html + '</div></div></section>'; }
++
++  /* ---------- the page ---------- */
++  A.views.crew = function (rest) {
++    var root = document.getElementById('app'), q = parse(rest);
++    removeBar();
++    if (!endpoint()) return note(root, '<h2 class="disp">Not switched on here.</h2><p class="qhelp">Crew review needs <code>CREW_ENDPOINT</code> in config.js.</p>');
++    if (!q.ref || !q.k) return note(root, '<h2 class="disp">That link looks cut off.</h2><p class="qhelp">Open the trip from a button in the new-trip email, or from Admin &gt; Trip builder.</p>');
++    note(root, '<h2 class="disp">Opening ' + esc(q.ref) + '…</h2>');
++    load(root, q, q.doo, '');
++  };
++
++  function load(root, q, open, banner) {
++    call({ action: 'view', ref: q.ref, key: q.k }).then(function (d) { paint(root, q, d, open, banner); }).catch(function (e) {
++      note(root, '<h2 class="disp">' + (e.status === 401 ? 'That link has run out.' : 'Couldn\'t open that trip.') + '</h2><p class="qhelp">' + esc(e.message) + '</p>');
++    });
++  }
++
++  function paint(root, q, d, open, banner) {
++    var r = d.request, sum = d.summary || derive(r), first = firstName(r.name), st = STATUS[r.status] || [r.status, 'off'], can = !!d.canAct, dep = usd(r.deposit_amount);
++    var enc = stateOf(r.trip_link), canEdit = can && r.status !== 'ready', rev = d.revision;
++    setSess({ ref: r.ref, k: q.k, name: r.name, first: first, people: r.party_size, dates: r.dates_flex, from: r.from_place, notes: r.notes, editing: false });
++
++    var h = '<section class="quiz crew"><div class="wrap">' +
++      '<div class="crew__top"><span class="over">Crew review · ' + esc(r.ref) + '</span><h2 class="disp">' + esc(r.name) + '\'s trip</h2>' +
++      '<p class="crew__sub">' + esc(r.route || '') + ' · ' + (r.days || 0) + ' days' + (r.start_date ? ' · from ' + esc(day(r.start_date, true)) : '') + ' <span class="cpill cpill--' + st[1] + '">' + esc(st[0]) + '</span>' + (rev ? ' <span class="cpill cpill--edit">Edited by the crew</span>' : '') + '</p></div>' +
++      (banner ? '<div class="cbanner cbanner--ok" role="status">' + banner + '</div>' : '') +
++      (!can ? '<div class="cbanner">' + (r.status === 'approved' ? 'This trip is booked. Nothing left to action.' : r.status === 'declined' ? 'This trip was declined' + (r.refunded_at ? ' and the deposit refunded' : '') + '.' : r.status === 'pending_payment' ? 'The deposit isn\'t paid yet, so there is nothing to action.' : 'Nothing to action.') + '</div>' : '') +
++      '<div class="crew__acts" role="group" aria-label="Decide about this trip">' +
++        act('approve', 'yes', 'Approve', r.status === 'ready' ? 'Send a new payment link' : 'Send ' + first + ' the final price', can, open) +
++        act('decline', 'no', 'Not approved', 'Say no and refund the deposit', can, open) +
++        act('edit', 'edit', 'Edit it', canEdit || !can ? 'Change it, add our input' : 'Balance link already sent', canEdit, open) + '</div>' +
++      '<div id="cpanel"></div>' +
++      '<div class="crew__grid"><div class="crew__main">' + (sum ? tripHTML(sum, d.suggestedBalance, r) : '<div class="cbox"><p>This trip can\'t be shown here. Open it in the builder below.</p></div>') + '</div>' +
++      '<aside class="crew__side">' + guestHTML(r, first, enc) + historyHTML(r, rev, d.original, first) + '</aside></div>' +
++      '</div></section>';
++    root.innerHTML = h;
++    var panel = $('#cpanel', root);
++    function show(which) {
++      Array.prototype.forEach.call(root.querySelectorAll('.crew__act'), function (b) { b.setAttribute('aria-expanded', b.getAttribute('data-crew') === which ? 'true' : 'false'); });
++      panel.innerHTML = which ? panelHTML(which, r, sum, d, first, dep) : '';
++      if (which) { wirePanel(which, root, q, r, d, first, dep); panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
++    }
++    Array.prototype.forEach.call(root.querySelectorAll('.crew__act'), function (b) {
++      b.addEventListener('click', function () { if (b.disabled) return; var w = b.getAttribute('data-crew'); show(b.getAttribute('aria-expanded') === 'true' ? '' : w); });
++    });
++    if (open && /^(approve|decline|edit)$/.test(open)) { var ob = root.querySelector('.crew__act[data-crew="' + open + '"]'); if (ob && !ob.disabled) show(open); }
++  }
++
++  function act(k, cls, label, sub, on, open) {
++    return '<button type="button" class="crew__act crew__act--' + cls + '" data-crew="' + k + '" aria-expanded="' + (open === k ? 'true' : 'false') + '"' + (on ? '' : ' disabled') + '>' + label + '<small>' + esc(sub) + '</small></button>';
++  }
++
++  /* ---------- the trip itself ---------- */
++  function tripHTML(s, suggested, r) {
++    var b = s.budget, h = '';
++    h += '<div class="cglance"><div><span>Length</span><b>' + s.days + ' days</b><i>' + s.nights + ' nights</i></div><div><span>Stops</span><b>' + s.stopCount + '</b><i>' + esc((s.countries || []).join(' + ')) + '</i></div>' +
++      '<div><span>Dates</span><b>' + (s.start ? esc(day(s.start)) : 'Not set') + '</b><i>' + (s.start ? 'to ' + esc(day(s.end, true)) : esc(s.datesLabel || 'Needs dates')) + '</i></div>' +
++      '<div><span>Estimate</span><b>' + usd(b.total) + '</b><i>each' + (s.people > 1 ? ' · ' + usd(b.totalAllPeople) + ' for ' + s.people : '') + '</i></div></div>';
++    if (s.flags && s.flags.length) h += '<div class="cbox cbox--flags"><h3>Heads up before you decide</h3><ul>' + s.flags.map(function (f) { return '<li class="' + f.level + '">' + (f.level === 'warn' ? '<b>!</b> ' : '') + esc(f.text) + '</li>'; }).join('') + '</ul></div>';
++    h += '<h3 class="crew__h">The trip, stop by stop</h3>';
++    h += s.stops.map(function (p, i) {
++      var date = p.from ? day(p.from) + ' to ' + day(p.to) : '';
++      var head = p.kind === 'allin' ? esc(p.name) + ' <small>· ' + p.days + ' days · ' + usd(p.usd) + '</small>' : esc(p.name) + (p.country ? ' <small>· ' + esc(p.country) + '</small>' : '');
++      var sub = p.kind === 'allin' ? esc(p.route || '') : p.nights + (p.nights === 1 ? ' night' : ' nights') + (date ? ' · ' + esc(date) : '') + ' · bed from ' + usd(p.bedUsd) + ' a night' + (p.partner ? ' (partner hostel, estimate)' : '');
++      var tours = (p.tours || []).map(function (t) {
++        return '<li><span>' + (t.fits ? '' : '<em>No room</em> ') + esc(t.name) + '</span><span>' + (t.payOnDay ? 'pay on the day' : usd(t.usd) + (t.est ? ' est.' : '')) + (t.date ? '<i>' + esc(day(t.date)) + '</i>' : t.day ? '<i>day ' + t.day + '</i>' : '') + '</span></li>';
++      }).join('') || (p.kind === 'allin' ? '' : '<li class="none"><span>No tours picked</span></li>');
++      var next = p.next ? '<div class="cstop__next"><b>Then</b> ' + esc(p.next.mode) + ' to ' + esc(p.next.to) + ' · ' + esc(p.next.hours) + ' · ' + usd(p.next.usd) + (p.next.overnight ? ' · overnight' : '') + (p.next.date ? ' · ' + esc(day(p.next.date)) : '') + '</div>' : '';
++      return '<article class="cstop"><div class="cstop__n">' + (i + 1) + '</div><div class="cstop__b"><h4>' + head + '</h4><p>' + sub + '</p><ul>' + tours + '</ul>' + next + '</div></article>';
++    }).join('');
++    var row = function (k, v, bold, n) { return '<tr' + (bold ? ' class="b"' : '') + '><td>' + esc(k) + (n ? '<i>' + esc(n) + '</i>' : '') + '</td><td>' + v + '</td></tr>'; };
++    h += '<table class="cmoney"><caption>The money · each person, US dollars</caption>' + row('Beds', usd(b.beds)) + row('Tours', usd(b.tours)) + row('Getting around', usd(b.transport)) + (b.allIn ? row('ALL IN trip', usd(b.allIn)) : '') +
++      (b.squadDiscount ? row('Squad discount', '-' + usd(-b.squadDiscount)) : '') + row('Trip cost', usd(b.tripCost), true) +
++      row('Their spending money', usd(b.spendFund), false, usd(b.spendPerDay) + ' a day for food and fun. Theirs to spend, not charged by us.') + row('Estimated total', usd(b.total), true) +
++      (s.people > 1 ? row('For all ' + s.people, usd(b.tripCostAllPeople) + ' trip cost · ' + usd(b.totalAllPeople) + ' with spending money', true) : '') +
++      (b.guestBudget ? row('Their own budget', usd(b.guestBudget) + ' each', false, b.budgetLeft == null ? '' : b.budgetLeft >= 0 ? usd(b.budgetLeft) + ' to spare' : usd(-b.budgetLeft) + ' over') : '') +
++      '<tfoot><tr><td colspan="2">Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (s.people > 1 ? ' for ' + s.people : '') + ' less the deposit)</i></td></tr></tfoot></table>';
++    if (r.notes) h += '<div class="cbox cbox--note"><h3>' + esc(firstName(r.name)) + '\'s note</h3><p>' + esc(r.notes).replace(/\n/g, '<br>') + '</p></div>';
++    return h;
++  }
++
++  function guestHTML(r, first, enc) {
++    var wa = String(r.whatsapp || '').replace(/\D/g, ''), h = '<div class="cbox"><h3>Who</h3><p class="cwho"><b>' + esc(r.name) + '</b><br>' + (r.party_size > 1 ? 'Party of ' + r.party_size : 'Travelling solo') + (r.from_place ? ' · from ' + esc(r.from_place) : '') + '</p><p class="clinks">';
++    if (wa.length >= 8) h += '<a class="btn btn--sm btn--paper" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">WhatsApp ' + esc(first) + '</a>';
++    if (r.email) h += '<a class="btn btn--sm btn--paper" href="mailto:' + esc(r.email) + '">Email ' + esc(first) + '</a>';
++    else if (r.guest_email) h += '<a class="btn btn--sm btn--paper" href="mailto:' + esc(r.guest_email) + '">Email ' + esc(first) + '</a>';
++    h += '</p><dl class="cdl"><dt>Prefers</dt><dd>' + (r.contact_via === 'whatsapp' ? 'WhatsApp ' + esc(r.whatsapp || '') : 'Email ' + esc(r.email || '')) + '</dd>' +
++      (r.guest_email && r.guest_email !== r.email ? '<dt>Receipts</dt><dd>' + esc(r.guest_email) + '</dd>' : '') +
++      '<dt>Dates</dt><dd>' + esc({ fixed: 'Fixed', flex: 'Flexible', open: 'Not decided' }[r.dates_flex] || '—') + '</dd>' +
++      '<dt>Sent</dt><dd>' + esc(when(r.created_at)) + '</dd>' +
++      '<dt>Deposit</dt><dd>' + usd(r.deposit_amount) + (r.deposit_paid_at ? ' paid' : ' not paid') + (r.refunded_at ? ', refunded' : '') + '</dd>' +
++      (r.hold_until && ['submitted', 'checking'].indexOf(r.status) > -1 ? '<dt>Beds held</dt><dd>until ' + esc(when(r.hold_until)) + '</dd>' : '') +
++      (r.all_in_match ? '<dt>Looks like</dt><dd>ALL IN ' + esc(r.all_in_match) + '</dd>' : '') +
++      (r.campaign_ref ? '<dt>Came from</dt><dd>' + esc(r.campaign_ref) + '</dd>' : '') + (r.from_hostel ? '<dt>QR at</dt><dd>' + esc(r.from_hostel) + '</dd>' : '') + '</dl></div>';
++    if (enc) h += '<div class="cbox"><h3>See it as ' + esc(first) + ' did</h3><p class="clinks"><a class="btn btn--sm" href="#/build/' + esc(enc) + '">Open in the builder</a><a class="btn btn--sm btn--paper" href="#/pack/' + esc(enc) + '">Trip pack</a></p></div>';
++    return h;
++  }
++
++  function historyHTML(r, rev, original, first) {
++    if (!rev && !r.crew_note && !(r.balance_amount && r.status === 'ready')) return '';
++    var h = '<div class="cbox"><h3>History</h3>';
++    if (rev) {
++      h += '<p>Edited by the crew ' + esc(when(rev.at)) + '.' + (rev.note ? ' Note: “' + esc(rev.note) + '”' : '') + '</p>';
++      if (original && original.trip) h += '<p class="cdim">' + esc(first) + '\'s own version: ' + esc(original.trip.route || '') + ' · ' + (original.trip.days || 0) + ' days' + (original.trip.estTotalUsd != null ? ' · ' + usd(original.trip.estTotalUsd) + ' est.' : '') + (original.trip.link ? ' · <a href="' + esc(original.trip.link) + '">open it</a>' : '') + '</p>';
++    }
++    if (r.crew_note) h += '<p>Note on file: “' + esc(r.crew_note) + '”</p>';
++    if (r.status === 'ready' && r.balance_amount) h += '<p>Balance link sent for <b>' + usd(r.balance_amount) + '</b>.' + (r.balance_url ? ' <a href="' + esc(r.balance_url) + '" target="_blank" rel="noopener">Open the link</a>' : '') + '</p>';
++    return h + '</div>';
++  }
++
++  /* ---------- the three panels ---------- */
++  function panelHTML(which, r, sum, d, first, dep) {
++    if (which === 'approve') {
++      var sug = d.suggestedBalance || '';
++      return '<div class="cpanel cpanel--yes"><h3>' + (r.status === 'ready' ? 'Send ' + esc(first) + ' a new payment link' : 'Send ' + esc(first) + ' the final price') + '</h3>' +
++        '<p>The trip checks out. ' + esc(first) + ' gets an email with a secure payment link for the balance. The ' + dep + ' deposit is already taken off.</p>' +
++        '<div class="field"><label for="cbal">Balance to charge (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? r.balance_amount : (sug || '')) + '" inputmode="decimal">' +
++        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (sum.people > 1 ? ' for ' + sum.people : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ') less the ' + dep + ' deposit. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : 'Work out the balance after the deposit.') + '</p></div>' +
++        '<div class="field"><label for="cnote">Note to ' + esc(first) + ' (optional, goes in the email)</label><textarea class="input" id="cnote" placeholder="e.g. All checked. We swapped the night bus for a day minivan so you arrive in daylight.">' + esc(r.crew_note || '') + '</textarea></div>' +
++        '<p class="cerr" id="cerr" role="alert" hidden></p><button class="btn btn--lg" id="cgo" type="button">Send ' + esc(first) + ' the payment link</button></div>';
++    }
++    if (which === 'decline') {
++      return '<div class="cpanel cpanel--no"><h3>Can\'t make this version work</h3><p>' + esc(first) + ' gets a kind email with your reason and an offer to find a version that does work.</p>' +
++        '<div class="field"><label for="cnote">Reason for ' + esc(first) + ' (goes in the email)</label><textarea class="input" id="cnote" placeholder="e.g. Koh Sdach is full on those nights. Want to swap it for Koh Rong Samloem?">' + esc(r.crew_note || '') + '</textarea></div>' +
++        (r.deposit_paid_at && !r.refunded_at ? '<label class="chk"><input type="checkbox" id="cref" checked><span>Refund the <b>' + dep + '</b> deposit to their card</span></label>' : '') +
++        '<p class="cerr" id="cerr" role="alert" hidden></p><button class="btn btn--pink btn--lg" id="cgo" type="button">Decline and email ' + esc(first) + '</button></div>';
++    }
++    return '<div class="cpanel cpanel--edit"><h3>Make it right, then send it back</h3>' +
++      '<p>This opens ' + esc(first) + '\'s trip in the builder. Change the stops, nights, tours or travel. When you\'re happy, press <b>Save our version</b> on the bar at the bottom. ' + esc(first) + '\'s own version is kept safe, and you can approve the new one straight after.</p>' +
++      '<button class="btn btn--lg crew__orange" id="cgo" type="button">Open it in the builder</button></div>';
++  }
++
++  function wirePanel(which, root, q, r, d, first, dep) {
++    var go = $('#cgo', root), err = $('#cerr', root);
++    function fail(e) { go.disabled = false; go.textContent = go.getAttribute('data-label'); if (err) { err.hidden = false; err.textContent = e.message; } else u.toast(e.message); }
++    go.setAttribute('data-label', go.textContent);
++    go.addEventListener('click', function () {
++      if (err) err.hidden = true;
++      var noteV = ($('#cnote', root) || {}).value || '';
++      if (which === 'edit') {
++        var s = sess() || {}; s.editing = true; setSess(s);
++        var enc = stateOf(r.trip_link); if (!enc) return u.toast('That trip has no link to open.');
++        return u.go('build', enc);
++      }
++      go.disabled = true; go.textContent = 'Working…';
++      if (which === 'approve') {
++        var amt = Math.round(parseFloat($('#cbal', root).value) * 100) / 100;
++        if (!(amt >= 1 && amt <= 50000)) return fail(new Error('Enter the balance in US dollars, after the deposit.'));
++        call({ action: 'balance', ref: q.ref, key: q.k, amount: amt, note: noteV }).then(function (res) {
++          setSess(null);
++          load(root, q, '', 'Sent. ' + esc(first) + ' has a payment link for <b>' + usd(amt) + '</b>' + (res.emailed ? ' by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(res.url || '') + '">payment link</a>.'));
++        }).catch(fail);
++      } else {
++        var refund = !!($('#cref', root) && $('#cref', root).checked);
++        call({ action: 'decline', ref: q.ref, key: q.k, note: noteV, refund: refund }).then(function (res) {
++          setSess(null);
++          load(root, q, '', 'Declined. ' + esc(first) + ' has been emailed' + (res.refunded ? ' and ' + usd(res.refunded) + ' is on its way back to their card.' : '.'));
++        }).catch(fail);
++      }
++    });
++  }
++
++  /* ---------- the "Save our version" bar, shown in the builder while a crew member is editing ---------- */
++  function removeBar() { var b = document.getElementById('crewbar'); if (b) b.remove(); document.body.classList.remove('crewing'); }
++  function bar() {
++    var s = sess(), el = document.getElementById('crewbar');
++    if (!s || !s.editing || A.view !== 'build') return removeBar();
++    if (!el) { el = document.createElement('div'); el.id = 'crewbar'; el.className = 'crewbar'; document.body.appendChild(el); document.body.classList.add('crewing'); }
++    if (el.getAttribute('data-ref') === s.ref) return;
++    el.setAttribute('data-ref', s.ref);
++    el.innerHTML = '<div class="crewbar__in"><div class="crewbar__who"><span class="over">Crew edit</span><b>' + esc(s.ref) + ' · ' + esc(s.name) + '</b></div>' +
++      '<input class="input" id="crewnote" maxlength="400" placeholder="Note to ' + esc(s.first || 'them') + ' (optional)" aria-label="Note to the guest">' +
++      '<button class="btn btn--sm" id="crewsave" type="button">Save our version</button>' +
++      '<a class="btn btn--sm btn--paper" href="#/crew/' + esc(s.ref) + '?k=' + encodeURIComponent(s.k) + '">Back to review</a>' +
++      '<button class="btn btn--sm btn--ghost" id="crewleave" type="button">Leave edit mode</button></div>';
++    document.getElementById('crewleave').addEventListener('click', function () { s.editing = false; setSess(s); removeBar(); });
++    document.getElementById('crewsave').addEventListener('click', function () {
++      var cur = sess(), st = A.state, pl = MM.plan(st), b = this;
++      if (!pl.totals.days) return u.toast('Add a stop first');
++      var link = u.baseUrl() + '#/build/' + MM.encodeState(st), sum = MM.crewSummary(st, pl, { people: cur.people, dates: cur.dates });
++      b.disabled = true; b.textContent = 'Saving…';
++      call({ action: 'revise', ref: cur.ref, key: cur.k, note: document.getElementById('crewnote').value,
++        trip: { link: link, state: MM.encodeState(st), route: MM.routeLine(pl), days: pl.totals.days, nights: pl.totals.nights, stops: pl.places, countries: pl.countries, start: st.start || '', estTotalUsd: pl.totals.total },
++        summary: sum, crewText: MM.crewText(sum, { name: cur.name, from: cur.from, notes: cur.notes, link: link }) })
++        .then(function () { cur.editing = false; setSess(cur); removeBar(); u.toast('Saved. Now approve it, or send it back.'); location.hash = '#/crew/' + cur.ref + '?k=' + encodeURIComponent(cur.k) + '&do=approve'; })
++        .catch(function (e) { b.disabled = false; b.textContent = 'Save our version'; u.toast(e.message); });
++    });
++  }
++  window.addEventListener('hashchange', function () { setTimeout(bar, 60); });
++  setTimeout(bar, 300);
++})();
+diff --git a/src/components/admin/TripBuilderAdmin.tsx b/src/components/admin/TripBuilderAdmin.tsx
+index 4f25199..e6bea44 100644
+--- a/src/components/admin/TripBuilderAdmin.tsx
++++ b/src/components/admin/TripBuilderAdmin.tsx
+@@ -94,6 +94,18 @@ export default function TripBuilderAdmin({ refreshKey }: { refreshKey?: number }
+     }
+   }
+ 
++  // The same review page the new-trip email links to: the whole trip as the guest built it, with Approve / Not approved / Edit it.
++  async function openReview(r: Req) {
++    const w = window.open("about:blank", "_blank"); // opened first so the browser doesn't treat it as a pop-up
++    try {
++      const d = await call({ action: "link", ref: r.ref });
++      if (w) w.location.href = d.url as string; else window.location.href = d.url as string;
++    } catch (e) {
++      w?.close();
++      toast.error(e instanceof Error ? e.message : "Couldn't open the review page");
++    }
++  }
++
+   if (!rows) {
+     return <div className="p-8 text-center font-sticker text-[11px] tracking-[0.15em] text-mm-black/60">{error ?? "LOADING…"}</div>;
+   }
+@@ -161,6 +173,11 @@ export default function TripBuilderAdmin({ refreshKey }: { refreshKey?: number }
+                           <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+                             <div>
+                               <div className="flex flex-wrap gap-2">
++                                {["submitted", "checking", "ready"].includes(r.status) && (
++                                  <button onClick={() => openReview(r)} className="inline-flex items-center gap-1 border-[2px] border-mm-black bg-mm-lime px-2 py-1 font-sticker text-[10px] tracking-[0.15em]">
++                                    REVIEW PAGE: APPROVE / DECLINE / EDIT <ExternalLink className="h-3 w-3" />
++                                  </button>
++                                )}
+                                 {r.trip_link && <a href={r.trip_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 border-[2px] border-mm-black bg-mm-bone px-2 py-1 font-sticker text-[10px] tracking-[0.15em]">OPEN THEIR TRIP <ExternalLink className="h-3 w-3" /></a>}
+                                 <span className="text-xs text-mm-black/70 self-center">
+                                   Builder estimate {usd(r.est_total_usd)} per person, incl. their spending money{r.all_in_match ? ` · looks like ALL IN ${r.all_in_match}` : ""}{r.from_place ? ` · now in ${r.from_place}` : ""}{r.campaign_ref ? ` · ref ${r.campaign_ref}` : ""}{r.from_hostel ? ` · QR at ${r.from_hostel}` : ""}
+diff --git a/supabase/functions/_shared/email.ts b/supabase/functions/_shared/email.ts
+index 0e56eb1..fc3cf96 100644
+--- a/supabase/functions/_shared/email.ts
++++ b/supabase/functions/_shared/email.ts
+@@ -1,6 +1,8 @@
+ // Shared Resend email helper for the ALL IN — Mad Monkey app.
+ // Verified Resend domain: all.in.trips.madmonkeyhostels.com
+ 
++import type { Summary } from "./trip-builder-crew.ts";
++
+ export const EMAIL_FROM = "ALL IN - Mad Monkey <hello@all.in.trips.madmonkeyhostels.com>";
+ export const EMAIL_REPLY_TO = "cs@madmonkeyhostels.com";
+ export const APP_URL = "https://madmonkeyhostels.com/all-in-trips";
+@@ -791,36 +793,152 @@ export function tripBuilderDepositEmail(v: {
+   return { subject: `Your trip is with the crew (${v.ref})`, html: tbShell("Your trip is with the crew", "It's with the crew 🐒", body) };
+ }
+ 
+-/** Ops: a new trip to check, deposit paid. */
++/** Ops: a new trip to check, deposit paid. Shows the whole trip the way the guest built it, with Approve / Not approved / Edit it buttons. */
+ export function tripBuilderOpsEmail(v: {
+   ref: string; name: string; contact: string; guestEmail: string; guestWhatsapp?: string; people: number; route: string; days: number;
+   startDate: string; dates: string; estTotal: string; deposit: string; allInMatch: string; notes: string;
+   itinerary: string; tripLink: string; adminUrl: string; holdUntil: string;
++  /** What the builder sent (payload.summary). Null for trips sent before the summary existed: the email falls back to the plain itinerary. */
++  summary?: Summary | null;
++  /** Links to the crew review page, one per button. */
++  reviewUrl?: string; approveUrl?: string; declineUrl?: string; editUrl?: string;
++  /** "$602" – the trip cost for everyone less the deposit. A starting figure only. */
++  suggestedBalance?: string;
+ }): { subject: string; html: string } {
+   const e = escapeHtml;
+-  const row = (k: string, val: string) =>
+-    `<tr><td style="padding:6px 10px;border-bottom:1px solid #0a0a0a;font-weight:700;white-space:nowrap">${e(k)}</td><td style="padding:6px 10px;border-bottom:1px solid #0a0a0a">${e(val || "None")}</td></tr>`;
++  const D = "color:#0a0a0a";
++  const sum = v.summary ?? null;
++  const first = (v.name || "").trim().split(/\s+/)[0] || "them";
++  const waDigits = (v.guestWhatsapp ?? "").replace(/\D/g, "");
++  const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
++  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
++  const day = (iso: string, year = false) => {
++    const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : null;
++    return d ? `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}${year ? ` ${d.getUTCFullYear()}` : ""}` : "";
++  };
++
++  /* ---- the three buttons ---- */
++  const actions = (v.approveUrl && v.declineUrl && v.editUrl)
++    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 6px 0"><tr>
++<td width="34%" style="padding:0 4px 0 0"><a href="${e(v.approveUrl)}" style="display:block;background:#ccff01;${D};font-weight:900;font-size:13px;text-transform:uppercase;text-align:center;padding:14px 4px;border:2px solid #0a0a0a;text-decoration:none">Approve</a></td>
++<td width="34%" style="padding:0 4px"><a href="${e(v.declineUrl)}" style="display:block;background:#ff01aa;${D};font-weight:900;font-size:13px;text-transform:uppercase;text-align:center;padding:14px 4px;border:2px solid #0a0a0a;text-decoration:none">Not approved</a></td>
++<td width="32%" style="padding:0 0 0 4px"><a href="${e(v.editUrl)}" style="display:block;background:#ff6600;${D};font-weight:900;font-size:13px;text-transform:uppercase;text-align:center;padding:14px 4px;border:2px solid #0a0a0a;text-decoration:none">Edit it</a></td>
++</tr></table>
++<p style="margin:0 0 16px 0;font-size:12px;color:#555">Each button opens ${e(first)}'s trip exactly as they built it. Nothing is sent, charged or refunded until you confirm on that page.</p>`
++    : "";
++
++  /* ---- who ---- */
++  const contactLine = waDigits.length >= 8
++    ? `WhatsApp <a href="https://wa.me/${waDigits}" style="${D}">${e(v.guestWhatsapp ?? "")}</a>`
++    : v.guestEmail ? `Email <a href="mailto:${e(v.guestEmail)}" style="${D}">${e(v.guestEmail)}</a>` : e(v.contact);
++  const who = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0;font-size:14px;line-height:1.5"><tr><td style="padding:12px 14px">
++<div style="font-size:18px;font-weight:900;${D}">${e(v.name)}</div>
++<div style="${D}">${v.people > 1 ? `Party of ${v.people}` : "Travelling solo"} · ${contactLine}</div>
++<div style="${D}">Deposit paid <strong>${e(v.deposit)}</strong>${v.holdUntil ? ` · beds held until <strong>${e(v.holdUntil)}</strong>` : " · no start date, so no beds to hold yet"}</div>
++<div style="font-size:12px;color:#555">Ref ${e(v.ref)}${v.guestEmail && waDigits.length >= 8 ? ` · receipts to ${e(v.guestEmail)}` : ""}</div>
++</td></tr></table>`;
++
++  /* ---- no summary (older trip): the plain version ---- */
++  if (!sum) {
++    const row = (k: string, val: string) =>
++      `<tr><td style="padding:6px 10px;border-bottom:1px solid #0a0a0a;font-weight:700;white-space:nowrap">${e(k)}</td><td style="padding:6px 10px;border-bottom:1px solid #0a0a0a">${e(val || "None")}</td></tr>`;
++    const body = [
++      actions, who,
++      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0;font-size:14px;border-collapse:collapse">${row("Route", v.route)}${row("Days", String(v.days))}${row("Start", v.startDate)}${row("Dates", v.dates)}${row("Builder estimate", v.estTotal)}${row("Looks like ALL IN", v.allInMatch)}${row("Notes", v.notes)}</table>`,
++      `<pre style="margin:0 0 16px 0;padding:12px;border:2px solid #0a0a0a;background:#f5efe2;font-size:12px;line-height:1.45;white-space:pre-wrap;font-family:Menlo,Consolas,monospace">${e(v.itinerary)}</pre>`,
++      actions,
++      `<p style="margin:0 0 8px 0;font-size:13px"><a href="${e(v.tripLink)}" style="${D}">Open the trip in the builder</a> · <a href="${e(v.adminUrl)}" style="${D}">Open admin</a></p>`,
++    ].join("\n");
++    return { subject: `Trip to check: ${v.name} · ${v.route} · ${v.days} days`, html: tbShell("New trip to check", "New trip to check", body) };
++  }
++
++  /* ---- at a glance ---- */
++  const b = sum.budget;
++  const cell = (label: string, big: string, small: string) =>
++    `<td valign="top" style="padding:10px 12px;border-right:2px solid #0a0a0a"><div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#555">${e(label)}</div><div style="font-size:17px;font-weight:900;${D};line-height:1.2">${e(big)}</div><div style="font-size:12px;color:#333">${e(small)}</div></td>`;
++  const glance = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0;background:#f5efe2"><tr>
++${cell("Length", `${sum.days} days`, `${sum.nights} nights`)}
++${cell("Stops", `${sum.stopCount}`, sum.countries.join(" + "))}
++${cell("Dates", sum.start ? day(sum.start) : "Not set", sum.start ? `to ${day(sum.end, true)}${sum.datesLabel ? ` · ${sum.datesLabel.replace("Dates are ", "").replace("Dates ", "")}` : ""}` : (sum.datesLabel || "Needs dates"))}
++<td valign="top" style="padding:10px 12px"><div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#555">Estimate</div><div style="font-size:17px;font-weight:900;${D};line-height:1.2">${money(b.total)}</div><div style="font-size:12px;color:#333">each${sum.people > 1 ? ` · ${money(b.totalAllPeople)} for ${sum.people}` : ""}</div></td>
++</tr></table>`;
++
++  /* ---- stop by stop ---- */
++  const stopCards = sum.stops.map((s, i) => {
++    const when = s.from ? `${day(s.from)} to ${day(s.to)}` : "";
++    const head = s.kind === "allin"
++      ? `${e(s.name)} <span style="font-weight:700">· ${s.days} days · ${money(s.usd)}</span>`
++      : `${e(s.name)}${s.country ? ` <span style="font-weight:700;color:#444">· ${e(s.country)}</span>` : ""}`;
++    const sub = s.kind === "allin"
++      ? `${e(s.route)}`
++      : `${s.nights} ${s.nights === 1 ? "night" : "nights"}${when ? ` · ${e(when)}` : ""} · bed from ${money(s.bedUsd)} a night${s.partner ? " (partner hostel, estimate)" : ""}`;
++    const tours = s.tours.length
++      ? s.tours.map((t) => {
++        const price = t.payOnDay ? "pay on the day" : `${money(t.usd ?? 0)}${t.est ? " est." : ""}`;
++        const dt = t.date ? day(t.date) : t.day ? `day ${t.day}` : "";
++        return `<tr><td valign="top" style="padding:3px 0;font-size:13px;${D}">${t.fits ? "" : `<span style="background:#ffc000;padding:0 4px;font-weight:900;font-size:11px">NO ROOM</span> `}${e(t.name)}</td><td valign="top" align="right" style="padding:3px 0 3px 10px;font-size:13px;white-space:nowrap;${D}">${e(price)}${dt ? `<br><span style="font-size:11px;color:#555">${e(dt)}</span>` : ""}</td></tr>`;
++      }).join("")
++      : (s.kind === "allin" ? "" : `<tr><td colspan="2" style="padding:3px 0;font-size:13px;color:#777">No tours picked</td></tr>`);
++    const next = s.next
++      ? `<tr><td colspan="2" style="padding:8px 0 0 0"><div style="border-top:1px dashed #0a0a0a;padding-top:6px;font-size:12px;${D}"><strong>Then</strong> ${e(s.next.mode)} to ${e(s.next.to)} · ${e(s.next.hours)} · ${money(s.next.usd)}${s.next.overnight ? " · overnight" : ""}${s.next.date ? ` · ${e(day(s.next.date))}` : ""}</div></td></tr>`
++      : "";
++    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 8px 0"><tr>
++<td width="34" valign="top" align="center" style="background:#ccff01;border-right:2px solid #0a0a0a;font-weight:900;font-size:16px;${D};padding:10px 0">${i + 1}</td>
++<td style="padding:10px 12px"><div style="font-size:15px;font-weight:900;text-transform:uppercase;${D}">${head}</div><div style="font-size:12px;color:#333;margin:2px 0 6px 0">${sub}</div>
++<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${tours}${next}</table></td></tr></table>`;
++  }).join("\n");
++
++  /* ---- the money ---- */
++  const mrow = (k: string, val: string, bold = false, note = "") =>
++    `<tr><td style="padding:5px 12px;font-size:13px;${bold ? "font-weight:900;" : ""}${D}">${e(k)}${note ? `<div style="font-size:11px;font-weight:400;color:#555">${e(note)}</div>` : ""}</td><td align="right" style="padding:5px 12px;font-size:13px;white-space:nowrap;${bold ? "font-weight:900;" : ""}${D}">${e(val)}</td></tr>`;
++  const money2 = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0">
++<tr><td colspan="2" style="background:#0a0a0a;color:#ffffff;padding:6px 12px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em">The money · each person, US dollars</td></tr>
++${mrow("Beds", money(b.beds))}${mrow("Tours", money(b.tours))}${mrow("Getting around", money(b.transport))}${b.allIn ? mrow("ALL IN trip", money(b.allIn)) : ""}${b.squadDiscount ? mrow("Squad discount", `-${money(-b.squadDiscount)}`) : ""}
++${mrow("Trip cost", money(b.tripCost), true)}
++${mrow("Their spending money", money(b.spendFund), false, `${money(b.spendPerDay)} a day for food and fun. Theirs to spend, not charged by us.`)}
++${mrow("Estimated total", money(b.total), true)}
++${sum.people > 1 ? mrow(`For all ${sum.people}`, `${money(b.tripCostAllPeople)} trip cost · ${money(b.totalAllPeople)} with spending money`, true) : ""}
++${b.guestBudget ? mrow("Their own budget", `${money(b.guestBudget)} each`, false, b.budgetLeft == null ? "" : b.budgetLeft >= 0 ? `${money(b.budgetLeft)} to spare` : `${money(-b.budgetLeft)} over`) : ""}
++<tr><td colspan="2" style="background:#ccff01;padding:8px 12px;font-size:13px;${D}">Deposit paid <strong>${e(v.deposit)}</strong>${v.suggestedBalance ? ` · suggested balance <strong>${e(v.suggestedBalance)}</strong> <span style="font-size:11px">(trip cost${sum.people > 1 ? ` for ${sum.people}` : ""} less the deposit). You set the final figure when you approve.</span>` : ""}</td></tr>
++</table>`;
++
++  /* ---- heads up ---- */
++  const flags = sum.flags.length
++    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0">
++<tr><td style="background:#ffc000;padding:6px 12px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;${D}">Heads up before you decide</td></tr>
++${sum.flags.map((f) => `<tr><td style="padding:6px 12px;font-size:13px;line-height:1.4;border-top:1px solid #ddd;${D}">${f.level === "warn" ? `<strong style="background:#ffc000;padding:0 5px">!</strong> ` : `<span style="color:#888">&bull;</span> `}${e(f.text)}</td></tr>`).join("")}
++</table>`
++    : "";
++
++  const note = v.notes
++    ? `<div style="margin:0 0 16px 0;padding:12px 14px;border:2px solid #0a0a0a;background:#f5efe2"><div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#555;margin-bottom:4px">${e(first)}'s note</div><div style="font-size:14px;line-height:1.5;white-space:pre-line;${D}">${e(v.notes)}</div></div>`
++    : "";
++
+   const body = [
+-    tbP(`<strong>${e(v.name)}</strong> sent a trip from the trip builder and paid a <strong>${e(v.deposit)}</strong> deposit. Check it and send the balance link (or decline and refund) from Admin &gt; Trip builder.`),
+-    v.holdUntil ? tbP(`They were promised a bed hold until <strong>${e(v.holdUntil)}</strong>. Please hold the nights below.`) : "",
+-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0;font-size:14px;border-collapse:collapse">
+-${row("Ref", v.ref)}${row("Contact", v.contact)}${row("Receipt email", v.guestEmail)}${row("People", String(v.people))}${row("Route", v.route)}${row("Days", String(v.days))}${row("Start", v.startDate)}${row("Dates", v.dates)}${row("Builder estimate", v.estTotal)}${row("Looks like ALL IN", v.allInMatch)}${row("Notes", v.notes)}
+-</table>`,
+-    `<pre style="margin:0 0 16px 0;padding:12px;border:2px solid #0a0a0a;background:#f5efe2;font-size:12px;line-height:1.45;white-space:pre-wrap;font-family:Menlo,Consolas,monospace">${e(v.itinerary)}</pre>`,
+-    `<p style="margin:0 0 8px 0">${tbButton(v.adminUrl, "Open admin")} &nbsp; <a href="${e(v.tripLink)}" style="color:#0a0a0a">Open the trip in the builder</a>${v.guestWhatsapp && v.guestWhatsapp.replace(/\D/g, "").length >= 8 ? ` &nbsp; <a href="https://wa.me/${v.guestWhatsapp.replace(/\D/g, "")}" style="color:#0a0a0a">WhatsApp ${e(v.name)}</a>` : ""}</p>`,
++    actions, who, glance,
++    `<p style="margin:0 0 8px 0;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#555">The trip, stop by stop</p>`,
++    stopCards, `<div style="height:8px"></div>`, money2, flags, note,
++    `<p style="margin:0 0 8px 0;font-size:14px;font-weight:900;${D}">Happy with it?</p>`, actions,
++    `<p style="margin:12px 0 0 0;font-size:13px;line-height:1.7">${v.reviewUrl ? `<a href="${e(v.reviewUrl)}" style="${D}">Open the review page</a> · ` : ""}<a href="${e(v.tripLink)}" style="${D}">Open it in the builder</a> · <a href="${e(v.adminUrl)}" style="${D}">Admin</a></p>`,
+   ].join("\n");
+-  return { subject: `Trip builder: ${v.name} paid a ${v.deposit} deposit · ${v.route}`, html: tbShell("New trip builder request", "New trip to check", body) };
++  return {
++    subject: `Trip to check: ${v.name}${v.people > 1 ? ` + ${v.people - 1}` : ""} · ${sum.headline || v.route} · ${sum.days} days${sum.start ? ` · from ${day(sum.start)}` : ""}`,
++    html: tbShell("New trip to check", "New trip to check", body),
++  };
+ }
+ 
+ /** Guest: checked, here's the final price and the balance link. */
+ export function tripBuilderReadyEmail(v: {
+   firstName: string; ref: string; route: string; balance: string; note: string; payUrl: string; statusUrl: string;
++  /** The checked plan (the crew may have tweaked it), so the guest can see exactly what they're paying for. */
++  planUrl?: string;
+ }): { subject: string; html: string } {
+   const e = escapeHtml;
+   const body = [
+     tbP(`Hey ${e(v.firstName)},`),
+     tbP(`Good news: the crew has checked your trip, <strong>${e(v.route)}</strong>.`),
+     v.note ? `<div style="margin:16px 0;padding:14px;border:2px solid #0a0a0a;background:#ccff01"><div style="font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">From the crew</div><div style="font-size:15px;white-space:pre-line">${e(v.note)}</div></div>` : "",
++    v.planUrl ? tbP(`Have a look at the plan we checked: <a href="${e(v.planUrl)}" style="color:#0a0a0a">see your trip</a>.`) : "",
+     tbP(`The balance to pay is <strong>${e(v.balance)}</strong> (your deposit is already taken off). Pay it to lock in your beds.`),
+     `<p style="margin:18px 0">${tbButton(v.payUrl, "Approve + pay balance")}</p>`,
+     `<p style="margin:0;font-size:13px;color:#555">Want something changed first? Just reply to this email. Reference: <strong>${e(v.ref)}</strong> · <a href="${e(v.statusUrl)}" style="color:#0a0a0a">Trip status</a></p>`,
+diff --git a/supabase/functions/_shared/trip-builder-crew.test.ts b/supabase/functions/_shared/trip-builder-crew.test.ts
+new file mode 100644
+index 0000000..0ea82d0
+--- /dev/null
++++ b/supabase/functions/_shared/trip-builder-crew.test.ts
+@@ -0,0 +1,58 @@
++import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
++import { crewReviewUrl, readSummary, signCrewKey, suggestBalance, verifyCrewKey } from "./trip-builder-crew.ts";
++
++const SECRET = "test-secret";
++const NOW = Date.UTC(2026, 9, 20);
++
++Deno.test("a crew key works for its own trip and nothing else", async () => {
++  const key = await signCrewKey("MM-ABC234", SECRET, NOW);
++  assert(await verifyCrewKey("MM-ABC234", key, SECRET, NOW));
++  assert(!(await verifyCrewKey("MM-ABC235", key, SECRET, NOW)), "another trip's key must fail");
++});
++
++Deno.test("a crew key stops working after 30 days, and not before", async () => {
++  const key = await signCrewKey("MM-ABC234", SECRET, NOW);
++  assert(await verifyCrewKey("MM-ABC234", key, SECRET, NOW + 29 * 86400_000));
++  assert(!(await verifyCrewKey("MM-ABC234", key, SECRET, NOW + 31 * 86400_000)));
++});
++
++Deno.test("tampered, empty and wrong-secret keys fail", async () => {
++  const key = await signCrewKey("MM-ABC234", SECRET, NOW);
++  const [exp, sig] = key.split(".");
++  assert(!(await verifyCrewKey("MM-ABC234", `${exp}.${sig.slice(0, -1)}${sig.endsWith("0") ? "1" : "0"}`, SECRET, NOW)), "one changed character must fail");
++  assert(!(await verifyCrewKey("MM-ABC234", `${(parseInt(exp, 36) + 99999).toString(36)}.${sig}`, SECRET, NOW)), "extending the expiry must fail");
++  assert(!(await verifyCrewKey("MM-ABC234", "", SECRET, NOW)));
++  assert(!(await verifyCrewKey("MM-ABC234", undefined, SECRET, NOW)));
++  assert(!(await verifyCrewKey("MM-ABC234", key, "other-secret", NOW)));
++  assert(!(await verifyCrewKey("MM-ABC234", key, "", NOW)), "no secret configured means no key is accepted");
++});
++
++Deno.test("review links keep the key in the #fragment and open the right panel", () => {
++  const u = crewReviewUrl("https://madmonkeyhostels.com", "MM-ABC234", "k1.sig", "approve");
++  assertEquals(u, "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/crew/MM-ABC234?k=k1.sig&do=approve");
++  assertStringIncludes(crewReviewUrl(null, "MM-ABC234", "k1.sig"), "#/crew/MM-ABC234?k=k1.sig");
++  assert(!crewReviewUrl(null, "MM-ABC234", "k1.sig").includes("&do="));
++});
++
++Deno.test("readSummary cleans what the browser sent, and returns null for old trips", () => {
++  assertEquals(readSummary({ itinerary: "old" }), null);
++  assertEquals(readSummary(null), null);
++  const sum = readSummary({ summary: {
++    headline: "Hanoi → Hoi An", days: 8, people: 99, start: "not a date",
++    stops: [{ kind: "stop", name: "Hanoi", nights: 4, tours: [{ name: "Ninh Binh", usd: 48, date: "2026-11-14" }], next: { to: "Hoi An", mode: "Flight", usd: 65 } }],
++    budget: { tripCostAllPeople: 702, total: 571 }, flags: [{ level: "warn", text: "x" }, { level: "weird", text: "y" }],
++  } });
++  assert(sum);
++  assertEquals(sum.people, 8, "party size is capped");
++  assertEquals(sum.start, "", "bad dates are dropped");
++  assertEquals(sum.stops[0].tours[0].date, "2026-11-14");
++  assertEquals(sum.stops[0].next?.usd, 65);
++  assertEquals(sum.flags.map((f) => f.level), ["warn", "info"]);
++});
++
++Deno.test("suggested balance is the trip cost for everyone less the deposit, never negative", () => {
++  const sum = readSummary({ summary: { stops: [], budget: { tripCostAllPeople: 702 } } });
++  assertEquals(suggestBalance(sum, 100), 602);
++  assertEquals(suggestBalance(sum, 5000), 0);
++  assertEquals(suggestBalance(null, 100), 0);
++});
+diff --git a/supabase/functions/_shared/trip-builder-crew.ts b/supabase/functions/_shared/trip-builder-crew.ts
+new file mode 100644
+index 0000000..e31bcbb
+--- /dev/null
++++ b/supabase/functions/_shared/trip-builder-crew.ts
+@@ -0,0 +1,112 @@
++// Trip builder: the crew review links (Ewan, 20 Oct 2026).
++//
++// The email a crew member gets for a new trip carries three buttons (Approve,
++// Not approved, Edit it). Each opens the trip builder's crew review page, which
++// shows the trip exactly as the guest built it. The page proves it was opened
++// from that email with a key: HMAC-SHA256 of the trip's reference and an expiry,
++// signed with the same secret as the admin tokens (ADMIN_PASSWORD, or
++// TRIP_BUILDER_LINK_SECRET if you would rather rotate them separately).
++//
++// A key only ever works for the one trip it was made for, and runs out after
++// KEY_DAYS. The key travels in the #fragment of the link, so it is never sent to
++// a server or written to a log. Opening the link only READS: nothing is approved,
++// declined or refunded until a person presses the confirm button on the page, so
++// an email scanner that follows the links can't trigger anything.
++
++import { appBase } from "./app-base.ts";
++
++export const KEY_DAYS = 30;
++
++const enc = new TextEncoder();
++const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
++
++async function mac(secret: string, text: string): Promise<string> {
++  const k = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
++  return hex(await crypto.subtle.sign("HMAC", k, enc.encode(text))).slice(0, 40);
++}
++
++export function crewSecret(): string {
++  return Deno.env.get("TRIP_BUILDER_LINK_SECRET") || Deno.env.get("ADMIN_PASSWORD") || "";
++}
++
++/** "<expiry in base 36>.<signature>" for one trip reference. */
++export async function signCrewKey(ref: string, secret = crewSecret(), now = Date.now(), days = KEY_DAYS): Promise<string> {
++  if (!secret) throw new Error("No secret configured for crew links");
++  const exp = Math.floor(now / 1000) + days * 86400;
++  return `${exp.toString(36)}.${await mac(secret, `tbcrew:${ref}:${exp}`)}`;
++}
++
++export async function verifyCrewKey(ref: string, key: unknown, secret = crewSecret(), now = Date.now()): Promise<boolean> {
++  if (!secret || typeof key !== "string" || key.length > 80) return false;
++  const [e, sig] = key.split(".");
++  const exp = parseInt(e ?? "", 36);
++  if (!sig || !Number.isFinite(exp) || exp < Math.floor(now / 1000)) return false;
++  const want = await mac(secret, `tbcrew:${ref}:${exp}`);
++  if (want.length !== sig.length) return false;
++  let diff = 0;
++  for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ sig.charCodeAt(i); // constant time
++  return diff === 0;
++}
++
++export type CrewAction = "review" | "approve" | "decline" | "edit";
++
++/** The link in the email. `do` tells the page which panel to open first. */
++export function crewReviewUrl(origin: string | null, ref: string, key: string, action: CrewAction = "review"): string {
++  const q = `k=${encodeURIComponent(key)}${action === "review" ? "" : `&do=${action}`}`;
++  return `${appBase(origin)}/trip-builder/#/crew/${encodeURIComponent(ref)}?${q}`;
++}
++
++/* ---------- the summary the builder sends (crew.js), made safe to print ---------- */
++
++export type Tour = { name: string; usd: number | null; est: boolean; payOnDay: boolean; date: string; day: number; fits: boolean; includesBeds: boolean };
++export type Next = { to: string; mode: string; hours: string; usd: number; overnight: boolean; date: string };
++export type Stop = {
++  kind: "stop" | "allin"; name: string; country: string; nights: number; days: number; usd: number; from: string; to: string;
++  route: string; bedUsd: number; bedsUsd: number; partner: boolean; tours: Tour[]; next: Next | null;
++};
++export type Budget = {
++  beds: number; tours: number; transport: number; allIn: number; squadDiscount: number; tripCost: number; spendPerDay: number; spendFund: number;
++  total: number; people: number; tripCostAllPeople: number; totalAllPeople: number; guestBudget: number; budgetLeft: number | null;
++};
++export type Summary = {
++  headline: string; days: number; nights: number; stopCount: number; countries: string[]; start: string; end: string; datesLabel: string;
++  people: number; pref: string; stops: Stop[]; budget: Budget; flags: { level: "warn" | "info"; text: string }[];
++};
++
++const s = (v: unknown, max = 300) => (typeof v === "string" ? v.slice(0, max) : "");
++const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
++const isoDay = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
++
++/** Reads `payload.summary` from a saved request. Returns null for older trips that were sent before the summary existed. */
++export function readSummary(payload: unknown): Summary | null {
++  const p = (payload ?? {}) as Record<string, unknown>;
++  const x = p.summary as Record<string, unknown> | undefined;
++  if (!x || typeof x !== "object" || !Array.isArray(x.stops) || typeof x.budget !== "object" || !x.budget) return null;
++  const b = x.budget as Record<string, unknown>;
++  return {
++    headline: s(x.headline), days: n(x.days), nights: n(x.nights), stopCount: n(x.stopCount), countries: (Array.isArray(x.countries) ? x.countries : []).slice(0, 10).map((c) => s(c, 40)),
++    start: isoDay(x.start), end: isoDay(x.end), datesLabel: s(x.datesLabel, 60), people: Math.min(8, Math.max(1, n(x.people) || 1)), pref: s(x.pref, 40),
++    stops: (x.stops as Record<string, unknown>[]).slice(0, 40).map((t) => ({
++      kind: t.kind === "allin" ? "allin" : "stop", name: s(t.name, 80), country: s(t.country, 40), nights: n(t.nights), days: n(t.days), usd: n(t.usd), from: isoDay(t.from), to: isoDay(t.to),
++      route: s(t.route, 200), bedUsd: n(t.bedUsd), bedsUsd: n(t.bedsUsd), partner: t.partner === true,
++      tours: (Array.isArray(t.tours) ? (t.tours as Record<string, unknown>[]) : []).slice(0, 30).map((a) => ({
++        name: s(a.name, 120), usd: a.usd == null ? null : n(a.usd), est: a.est === true, payOnDay: a.payOnDay === true, date: isoDay(a.date), day: n(a.day), fits: a.fits !== false, includesBeds: a.includesBeds === true,
++      })),
++      next: t.next && typeof t.next === "object"
++        ? (() => { const q = t.next as Record<string, unknown>; return { to: s(q.to, 80), mode: s(q.mode, 60), hours: s(q.hours, 20), usd: n(q.usd), overnight: q.overnight === true, date: isoDay(q.date) }; })()
++        : null,
++    })),
++    budget: {
++      beds: n(b.beds), tours: n(b.tours), transport: n(b.transport), allIn: n(b.allIn), squadDiscount: n(b.squadDiscount), tripCost: n(b.tripCost), spendPerDay: n(b.spendPerDay),
++      spendFund: n(b.spendFund), total: n(b.total), people: Math.min(8, Math.max(1, n(b.people) || 1)), tripCostAllPeople: n(b.tripCostAllPeople), totalAllPeople: n(b.totalAllPeople),
++      guestBudget: n(b.guestBudget), budgetLeft: b.budgetLeft == null ? null : n(b.budgetLeft),
++    },
++    flags: (Array.isArray(x.flags) ? (x.flags as Record<string, unknown>[]) : []).slice(0, 16).map((f) => ({ level: f.level === "warn" ? "warn" as const : "info" as const, text: s(f.text, 400) })),
++  };
++}
++
++/** A starting figure for the balance: the trip cost for everyone, less the deposit already paid. Never the guest's own spending money. The crew can change it. */
++export function suggestBalance(sum: Summary | null, deposit: number): number {
++  if (!sum) return 0;
++  return Math.max(0, Math.round(sum.budget.tripCostAllPeople - (Number(deposit) || 0)));
++}
+diff --git a/supabase/functions/_shared/trip-builder-sample.ts b/supabase/functions/_shared/trip-builder-sample.ts
+new file mode 100644
+index 0000000..e5501e4
+--- /dev/null
++++ b/supabase/functions/_shared/trip-builder-sample.ts
+@@ -0,0 +1,281 @@
++// A sample trip for the trip builder's test send (trip-builder-test-emails): the output of the builder's crew.js
++// for a 13-day Cambodia route, with no dates so it never goes stale. Regenerate it by building a trip in the builder
++// and copying payload.summary / payload.crewText from a real request.
++export const SAMPLE_TRIP = {
++ "state": "i=s.phnom-penh.2.zue3d+q7nuc~s.koh-sdach.3.wvilf+6scy7~s.koh-rong.4.annyf+4xpxk~s.kampot.3.msfuq+xijwc&b=700",
++ "route": "Phnom Penh → Koh Sdach → Koh Rong → Kampot",
++ "days": 13,
++ "nights": 12,
++ "stops": [
++  "phnom-penh",
++  "koh-sdach",
++  "koh-rong",
++  "kampot"
++ ],
++ "countries": [
++  "KH"
++ ],
++ "est": 541,
++ "summary": {
++  "v": 1,
++  "headline": "Phnom Penh → Koh Sdach → Koh Rong → Kampot",
++  "days": 13,
++  "nights": 12,
++  "stopCount": 4,
++  "km": 396,
++  "countries": [
++   "Cambodia"
++  ],
++  "start": "",
++  "end": "",
++  "dates": "flex",
++  "datesLabel": "Dates are flexible",
++  "people": 2,
++  "pref": "Smart pick",
++  "crewMates": 0,
++  "stops": [
++   {
++    "kind": "stop",
++    "id": "phnom-penh",
++    "name": "Phnom Penh",
++    "country": "Cambodia",
++    "nights": 2,
++    "from": "",
++    "to": "",
++    "bedUsd": 7,
++    "bedNights": 2,
++    "bedsUsd": 14,
++    "partner": false,
++    "tours": [
++     {
++      "id": "s21-and-killing-fields-tour",
++      "name": "S21 + Killing Fields",
++      "usd": 32,
++      "est": false,
++      "payOnDay": false,
++      "days": 1,
++      "includesBeds": false,
++      "when": "",
++      "day": 1,
++      "date": "",
++      "fits": true
++     },
++     {
++      "id": "sunset-boat-cruise",
++      "name": "Sunset river cruise",
++      "usd": 17,
++      "est": false,
++      "payOnDay": false,
++      "days": 1,
++      "includesBeds": false,
++      "when": "",
++      "day": 1,
++      "date": "",
++      "fits": true
++     }
++    ],
++    "next": {
++     "to": "Koh Sdach",
++     "mode": "Boat",
++     "hours": "5h30",
++     "usd": 24,
++     "overnight": false,
++     "date": "",
++     "pref": "Smart pick",
++     "lastMinuteFare": null,
++     "note": ""
++    }
++   },
++   {
++    "kind": "stop",
++    "id": "koh-sdach",
++    "name": "Koh Sdach",
++    "country": "Cambodia",
++    "nights": 3,
++    "from": "",
++    "to": "",
++    "bedUsd": 9,
++    "bedNights": 3,
++    "bedsUsd": 27,
++    "partner": false,
++    "tours": [
++     {
++      "id": "x-koh-sdach-e-bike-island-loop",
++      "name": "E-bike island loop",
++      "usd": 8,
++      "est": true,
++      "payOnDay": false,
++      "days": 1,
++      "includesBeds": false,
++      "when": "",
++      "day": 4,
++      "date": "",
++      "fits": true
++     },
++     {
++      "id": "x-koh-sdach-island-hopping-sunset-cruise",
++      "name": "Island-hopping sunset cruise",
++      "usd": 20,
++      "est": true,
++      "payOnDay": false,
++      "days": 1,
++      "includesBeds": false,
++      "when": "",
++      "day": 3,
++      "date": "",
++      "fits": true
++     }
++    ],
++    "next": {
++     "to": "Koh Rong",
++     "mode": "Boat",
++     "hours": "4h50",
++     "usd": 44,
++     "overnight": false,
++     "date": "",
++     "pref": "Smart pick",
++     "lastMinuteFare": null,
++     "note": ""
++    }
++   },
++   {
++    "kind": "stop",
++    "id": "koh-rong",
++    "name": "Koh Rong",
++    "country": "Cambodia",
++    "nights": 4,
++    "from": "",
++    "to": "",
++    "bedUsd": 9,
++    "bedNights": 4,
++    "bedsUsd": 36,
++    "partner": false,
++    "tours": [
++     {
++      "id": "volleyball-tournament-koh-rong",
++      "name": "Beach volleyball tournament",
++      "usd": null,
++      "est": false,
++      "payOnDay": true,
++      "days": 1,
++      "includesBeds": false,
++      "when": "Mon, Thu",
++      "day": 6,
++      "date": "",
++      "fits": true
++     },
++     {
++      "id": "x-koh-rong-beach-fire-show-bbq",
++      "name": "Beach fire show + BBQ",
++      "usd": null,
++      "est": false,
++      "payOnDay": true,
++      "days": 1,
++      "includesBeds": false,
++      "when": "",
++      "day": 7,
++      "date": "",
++      "fits": true
++     }
++    ],
++    "next": {
++     "to": "Kampot",
++     "mode": "Boat + Minivan",
++     "hours": "4h30",
++     "usd": 21,
++     "overnight": false,
++     "date": "",
++     "pref": "Smart pick",
++     "lastMinuteFare": null,
++     "note": ""
++    }
++   },
++   {
++    "kind": "stop",
++    "id": "kampot",
++    "name": "Kampot",
++    "country": "Cambodia",
++    "nights": 3,
++    "from": "",
++    "to": "",
++    "bedUsd": 10.5,
++    "bedNights": 3,
++    "bedsUsd": 32,
++    "partner": false,
++    "tours": [
++     {
++      "id": "x-kampot-bokor-hill-station-day-trip",
++      "name": "Bokor Hill Station day trip",
++      "usd": 30,
++      "est": true,
++      "payOnDay": false,
++      "days": 1,
++      "includesBeds": false,
++      "when": "",
++      "day": 11,
++      "date": "",
++      "fits": true
++     },
++     {
++      "id": "x-kampot-pepper-farms-salt-fields",
++      "name": "Pepper farms + salt fields",
++      "usd": 20,
++      "est": true,
++      "payOnDay": false,
++      "days": 1,
++      "includesBeds": false,
++      "when": "",
++      "day": 12,
++      "date": "",
++      "fits": true
++     }
++    ],
++    "next": null
++   }
++  ],
++  "budget": {
++   "beds": 109,
++   "tours": 127,
++   "transport": 89,
++   "allIn": 0,
++   "squadDiscount": 0,
++   "tripCost": 325,
++   "spendPerDay": 18,
++   "spendFund": 216,
++   "total": 541,
++   "people": 2,
++   "tripCostAllPeople": 650,
++   "totalAllPeople": 1082,
++   "toursPaidOnTheDay": 2,
++   "hasEstimates": true,
++   "guestBudget": 700,
++   "budgetLeft": 159
++  },
++  "flags": [
++   {
++    "level": "info",
++    "text": "No start date yet. Help them pick one so the beds can be held."
++   },
++   {
++    "level": "info",
++    "text": "Close to ALL IN Cambodia (14 days, $600). Next departure Thu 22 Oct. Worth offering."
++   },
++   {
++    "level": "info",
++    "text": "2 tours are paid on the day, so not in the total."
++   },
++   {
++    "level": "info",
++    "text": "Some tour prices are estimates. Check them before quoting."
++   }
++  ],
++  "allInMatch": {
++   "id": "cambodia",
++   "name": "Cambodia",
++   "days": 14,
++   "usd": 600,
++   "nextDeparture": "2026-10-22"
++  }
++ },
++ "crewText": "TRIP TO CHECK\nCharlie (sample) · party of 2 · from Leeds\nContact: Email ewan@madmonkeyhostels.com\n\nTHE TRIP\nPhnom Penh → Koh Sdach → Koh Rong → Kampot\n13 days · 12 nights · 4 stops · Cambodia\nDates: not decided yet\nTravel style: Smart pick\n\nSTOP BY STOP\n\n1. PHNOM PENH (Cambodia) · 2 nights\n   Bed from $7 a night\n   - S21 + Killing Fields · $32 · day 1\n   - Sunset river cruise · $17 · day 1\n   Then: Boat to Koh Sdach · 5h30 · $24\n\n2. KOH SDACH (Cambodia) · 3 nights\n   Bed from $9 a night\n   - E-bike island loop · $8 (est.) · day 4\n   - Island-hopping sunset cruise · $20 (est.) · day 3\n   Then: Boat to Koh Rong · 4h50 · $44\n\n3. KOH RONG (Cambodia) · 4 nights\n   Bed from $9 a night\n   - Beach volleyball tournament · pay on the day · day 6\n   - Beach fire show + BBQ · pay on the day · day 7\n   Then: Boat + Minivan to Kampot · 4h30 · $21\n\n4. KAMPOT (Cambodia) · 3 nights\n   Bed from $11 a night\n   - Bokor Hill Station day trip · $30 (est.) · day 11\n   - Pepper farms + salt fields · $20 (est.) · day 12\n\nMONEY (per person, US dollars)\nBeds             $109\nTours            $127\nTravel           $89\nTrip cost        $325  (x2 = $650)\nSpending money   $216 ($18 a day, their own, not charged)\nEstimated total  $541  (x2 = $1,082)\nTheir budget     $700 ($159 to spare)\n\nHEADS UP\n- No start date yet. Help them pick one so the beds can be held.\n- Close to ALL IN Cambodia (14 days, $600). Next departure Thu 22 Oct. Worth offering.\n- 2 tours are paid on the day, so not in the total.\n- Some tour prices are estimates. Check them before quoting.\n\nTHEIR NOTE\nThis is a sample trip so you can try the Approve, Not approved and Edit it buttons. Nothing here is a real booking.\n\nOPEN IT EXACTLY AS THEY BUILT IT\nhttps://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.phnom-penh.2.zue3d+q7nuc~s.koh-sdach.3.wvilf+6scy7~s.koh-rong.4.annyf+4xpxk~s.kampot.3.msfuq+xijwc&b=700"
++} as const;
+diff --git a/supabase/functions/_shared/trip-builder.ts b/supabase/functions/_shared/trip-builder.ts
+index e00d387..2702b34 100644
+--- a/supabase/functions/_shared/trip-builder.ts
++++ b/supabase/functions/_shared/trip-builder.ts
+@@ -14,11 +14,18 @@ import {
+   tripBuilderOpsEmail,
+   TRIP_BUILDER_CONTACT,
+ } from "./email.ts";
++import { crewReviewUrl, readSummary, signCrewKey, suggestBalance } from "./trip-builder-crew.ts";
+ 
+ // Trip builder enquiries are Ewan's (Charlie, 19 Oct 2026): every alert goes to
+ // him and every guest email replies to him, not the ALL IN ops list or cs@.
+ const EWAN = TRIP_BUILDER_CONTACT;
+ 
++/** Anyone else who should get the new-trip email, e.g. TRIP_BUILDER_TEAM_EMAILS="sam@madmonkeyhostels.com, jo@madmonkeyhostels.com". Optional. */
++export function teamCc(): string[] | undefined {
++  const list = (Deno.env.get("TRIP_BUILDER_TEAM_EMAILS") ?? "").split(",").map((x) => x.trim()).filter((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) && x.toLowerCase() !== EWAN.toLowerCase());
++  return list.length ? list : undefined;
++}
++
+ export const DEPOSIT_PER_PERSON_USD = 50;
+ export const HOLD_HOURS = 48;
+ export const MAX_PEOPLE = 8;
+@@ -89,6 +96,10 @@ export async function handleTripBuilderPaid(sb: SupabaseClient, session: Stripe.
+       await sendEmail({ to: guestEmail, subject: m.subject, html: m.html, replyTo: EWAN, templateName: "trip_builder_deposit" }).catch((e) => console.warn("trip builder guest email failed", e));
+     }
+     const contact = row.contact_via === "whatsapp" ? `WhatsApp ${row.whatsapp ?? ""}` : `Email ${row.email ?? ""}`;
++    // The whole trip as the guest built it (payload.summary), and three one-tap links into the crew review page. Older trips have no summary: the email falls back to the plain itinerary.
++    const summary = readSummary(row.payload);
++    const key = await signCrewKey(row.ref);
++    const origin = meta.origin || null;
+     const ops = tripBuilderOpsEmail({
+       ref: row.ref, name: String(row.name), contact, guestEmail: guestEmail ?? "", guestWhatsapp: row.contact_via === "whatsapp" ? String(row.whatsapp ?? "") : "",
+       people: Number(row.party_size ?? 1),
+@@ -96,8 +107,12 @@ export async function handleTripBuilderPaid(sb: SupabaseClient, session: Stripe.
+       estTotal: row.est_total_usd != null ? `${usd(Number(row.est_total_usd))} (builder estimate)` : "",
+       deposit, allInMatch: String(row.all_in_match ?? ""), notes: String(row.notes ?? ""), itinerary: String(row.itinerary ?? ""),
+       tripLink: String(row.trip_link ?? ""), adminUrl: `${APP_URL}/admin`, holdUntil: fmtDayTime(holdUntil),
++      summary,
++      reviewUrl: crewReviewUrl(origin, row.ref, key), approveUrl: crewReviewUrl(origin, row.ref, key, "approve"),
++      declineUrl: crewReviewUrl(origin, row.ref, key, "decline"), editUrl: crewReviewUrl(origin, row.ref, key, "edit"),
++      suggestedBalance: summary ? usd(suggestBalance(summary, Number(row.deposit_amount))) : "",
+     });
+-    await sendEmail({ to: EWAN, subject: ops.subject, html: ops.html, replyTo: guestEmail ?? undefined, templateName: "trip_builder_ops" }).catch((e) => console.warn("trip builder ops email failed", e));
++    await sendEmail({ to: EWAN, cc: teamCc(), subject: ops.subject, html: ops.html, replyTo: guestEmail ?? undefined, templateName: "trip_builder_ops" }).catch((e) => console.warn("trip builder ops email failed", e));
+     return;
+   }
+ 
+diff --git a/supabase/functions/trip-builder-admin/index.ts b/supabase/functions/trip-builder-admin/index.ts
+index ff805a4..4215538 100644
+--- a/supabase/functions/trip-builder-admin/index.ts
++++ b/supabase/functions/trip-builder-admin/index.ts
+@@ -6,12 +6,20 @@
+ //   decline    {ref, note?, refund}   can't make it work; refunds the deposit when refund=true
+ //   booked     {ref, note?}           paid some other way: mark it done
+ //   note       {ref, note}            save the crew note only
++//   view       {ref}                  one request, with the trip summary and a suggested balance (the crew review page)
++//   revise     {ref, trip, summary, crewText, note}   the crew's edited version of the guest's trip (Edit it)
++//   link       {ref}                  a fresh signed link to the crew review page (admin only)
++//
++// Two ways in. The admin token / password can do everything. A crew key (from the link in the
++// new-trip email, see _shared/trip-builder-crew.ts) can do everything EXCEPT list and link, and only
++// for the one trip it was made for, and only while that trip is still being checked.
+ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import Stripe from "https://esm.sh/stripe@18.5.0";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import { adminAuthHeaderToken, verifyAdminToken } from "../_shared/admin-auth.ts";
+ import { sendEmail, TRIP_BUILDER_CONTACT, tripBuilderDeclinedEmail, tripBuilderReadyEmail } from "../_shared/email.ts";
+ import { builderStatusUrl, usd } from "../_shared/trip-builder.ts";
++import { crewReviewUrl, readSummary, signCrewKey, suggestBalance, verifyCrewKey } from "../_shared/trip-builder-crew.ts";
+ 
+ const json = (body: unknown, status = 200) =>
+   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+@@ -32,11 +40,16 @@ Deno.serve(async (req) => {
+     const pw = typeof body.password === "string" ? body.password.trim() : "";
+     authed = !!pw && pw === adminPassword;
+   }
+-  if (!authed) return json({ error: "Unauthorized" }, 401);
++  // The key in a crew review link: good for one trip only.
++  const bodyRef = typeof body.ref === "string" ? body.ref.trim().toUpperCase() : "";
++  const keyed = !authed && /^MM-[A-Z0-9]{6}$/.test(bodyRef) && await verifyCrewKey(bodyRef, body.key);
++  if (!authed && !keyed) return json({ error: typeof body.key === "string" ? "This link has expired or isn't valid. Open the trip from Admin > Trip builder instead." : "Unauthorized" }, 401);
+ 
+   const sb = createClient(url, key);
+   const action = typeof body.action === "string" ? body.action : "list";
+ 
++  if (keyed && (action === "list" || action === "link")) return json({ error: "Unauthorized" }, 401);
++
+   if (action === "list") {
+     const { data, error } = await sb
+       .from("trip_builder_requests")
+@@ -51,6 +64,30 @@ Deno.serve(async (req) => {
+   const { data: row, error: rErr } = await sb.from("trip_builder_requests").select("*").eq("ref", ref).maybeSingle();
+   if (rErr) return json({ error: rErr.message }, 500);
+   if (!row) return json({ error: `No trip ${ref}` }, 404);
++  // A crew link only works while the trip is still being checked. After that it is read-only.
++  const OPEN = ["submitted", "checking", "ready"];
++  if (keyed && action !== "view" && !OPEN.includes(String(row.status))) {
++    return json({ error: `This trip is already ${row.status === "approved" ? "booked" : row.status}, so there is nothing left to action here.` }, 409);
++  }
++
++  if (action === "view") {
++    const sum = readSummary(row.payload);
++    const VIEW = ["ref", "status", "name", "contact_via", "email", "whatsapp", "guest_email", "from_place", "party_size", "dates_flex", "start_date", "route", "days", "nights", "est_total_usd",
++      "all_in_match", "trip_link", "itinerary", "notes", "campaign_ref", "from_hostel", "deposit_amount", "deposit_paid_at", "hold_until", "balance_amount", "balance_url", "balance_paid_at",
++      "refunded_at", "crew_note", "created_at", "updated_at"];
++    const request: Record<string, unknown> = {};
++    for (const k of VIEW) request[k] = (row as Record<string, unknown>)[k] ?? null;
++    const pl = (row.payload ?? {}) as Record<string, unknown>;
++    const orig = pl.original as { trip?: Record<string, unknown> } | undefined;
++    const original = orig?.trip ? { trip: { route: String(orig.trip.route ?? "").slice(0, 400), days: Number(orig.trip.days) || 0, estTotalUsd: orig.trip.estTotalUsd == null ? null : Number(orig.trip.estTotalUsd), link: String(orig.trip.link ?? "").slice(0, 2000) } } : null;
++    return json({ ok: true, request, summary: sum, suggestedBalance: suggestBalance(sum, Number(row.deposit_amount)), revision: pl.revision ?? null, original, canAct: OPEN.includes(String(row.status)) });
++  }
++  if (action === "link") {
++    const k = await signCrewKey(row.ref);
++    return json({ ok: true, url: crewReviewUrl(LIVE_ORIGIN, row.ref, k), approveUrl: crewReviewUrl(LIVE_ORIGIN, row.ref, k, "approve"),
++      declineUrl: crewReviewUrl(LIVE_ORIGIN, row.ref, k, "decline"), editUrl: crewReviewUrl(LIVE_ORIGIN, row.ref, k, "edit") });
++  }
++
+   const note = typeof body.note === "string" ? body.note.trim().slice(0, 4000) : (row.crew_note ?? "");
+   const now = new Date().toISOString();
+   const first = String(row.name ?? "").trim().split(/\s+/)[0] || "there";
+@@ -71,6 +108,35 @@ Deno.serve(async (req) => {
+       await save({ status: "checking", crew_note: note || null });
+       return json({ ok: true });
+     }
++    if (action === "revise") {
++      // The crew's edited version of the guest's trip (the builder's "Edit it" bar). The guest's own version is kept in payload.original.
++      if (!row.deposit_paid_at) return json({ error: "The deposit isn't paid yet." }, 400);
++      if (!["submitted", "checking"].includes(String(row.status))) {
++        return json({ error: "The balance link has already gone out. Save a note instead, or use Approve to send a new link." }, 409);
++      }
++      const t = (body.trip ?? {}) as Record<string, unknown>;
++      const sum = readSummary({ summary: body.summary });
++      const link = typeof t.link === "string" ? t.link.trim().slice(0, 2000) : "";
++      const route = typeof t.route === "string" ? t.route.trim().slice(0, 400) : "";
++      const days = Math.round(Number(t.days) || 0);
++      if (!/^https?:\/\/[^\s]+#\/build\//.test(link) || !route || days < 1) return json({ error: "That edited trip didn't come through properly. Open it from the email again and retry." }, 400);
++      const strs = (v: unknown, n: number) => (Array.isArray(v) ? v.map((x) => String(x).trim().slice(0, 60)).filter(Boolean).slice(0, n) : []);
++      const payload = ((row.payload ?? {}) as Record<string, unknown>);
++      const original = payload.original ?? { trip: { link: row.trip_link, route: row.route, days: row.days, nights: row.nights, stops: row.stops, start: row.start_date, estTotalUsd: row.est_total_usd }, summary: payload.summary ?? null };
++      const crewText = typeof body.crewText === "string" ? body.crewText.slice(0, 20_000) : "";
++      const revision = { at: now, note: note || null, route, days, estTotalUsd: Number.isFinite(Number(t.estTotalUsd)) ? Number(t.estTotalUsd) : null };
++      await save({
++        trip_link: link, route, days, nights: Math.round(Number(t.nights) || 0) || null,
++        stops: strs(t.stops, 40), countries: strs(t.countries, 10),
++        start_date: typeof t.start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.start) ? t.start : null,
++        est_total_usd: Number.isFinite(Number(t.estTotalUsd)) ? Number(t.estTotalUsd) : row.est_total_usd,
++        itinerary: crewText || (typeof body.itinerary === "string" ? body.itinerary.slice(0, 20_000) : row.itinerary),
++        crew_note: note || row.crew_note || null,
++        status: "checking",
++        payload: { ...payload, ...(sum ? { summary: body.summary } : {}), ...(crewText ? { crewText } : {}), original, revision },
++      });
++      return json({ ok: true, suggestedBalance: suggestBalance(sum, Number(row.deposit_amount)) });
++    }
+     if (action === "booked") {
+       await save({ status: "approved", crew_note: note || null });
+       return json({ ok: true });
+@@ -104,7 +170,7 @@ Deno.serve(async (req) => {
+       await save({ status: "ready", balance_amount: amount, balance_session_id: session.id, balance_url: session.url, crew_note: note || null });
+       let emailed = false;
+       if (to) {
+-        const m = tripBuilderReadyEmail({ firstName: first, ref: row.ref, route: row.route ?? "your trip", balance: usd(amount), note, payUrl: session.url ?? statusUrl, statusUrl });
++        const m = tripBuilderReadyEmail({ firstName: first, ref: row.ref, route: row.route ?? "your trip", balance: usd(amount), note, payUrl: session.url ?? statusUrl, statusUrl, planUrl: (row.trip_link as string | null) || undefined });
+         await sendEmail({ to, subject: m.subject, html: m.html, replyTo: TRIP_BUILDER_CONTACT, templateName: "trip_builder_ready" });
+         emailed = true;
+       }
+diff --git a/supabase/functions/trip-builder-request/index.ts b/supabase/functions/trip-builder-request/index.ts
+index d5c666a..4504ccc 100644
+--- a/supabase/functions/trip-builder-request/index.ts
++++ b/supabase/functions/trip-builder-request/index.ts
+@@ -80,7 +80,8 @@ Deno.serve(async (req) => {
+       est_total_usd: Number.isFinite(Number(trip.estTotalUsd)) ? Number(trip.estTotalUsd) : null,
+       all_in_match: str(trip.allInMatch, 40) || null,
+       trip_link: str(trip.link, 2000) || null,
+-      itinerary: str(p.itinerary, 20_000) || null,
++      // crewText is the stop-by-stop brief for the team (builder crew.js); older builders only send the day-by-day itinerary.
++      itinerary: str(p.crewText, 20_000) || str(p.itinerary, 20_000) || null,
+       notes: str(contact.notes, 2000) || null,
+       campaign_ref: str(p.ref, 60) || null,
+       from_hostel: str(p.fromHostel, 60) || null,
+diff --git a/supabase/functions/trip-builder-test-emails/index.ts b/supabase/functions/trip-builder-test-emails/index.ts
+index e6062ce..b94541e 100644
+--- a/supabase/functions/trip-builder-test-emails/index.ts
++++ b/supabase/functions/trip-builder-test-emails/index.ts
+@@ -2,6 +2,12 @@
+ // sees exactly what he and the guests get. It can only ever email Ewan, the
+ // content is fixed sample data, and it runs at most once every 5 minutes.
+ // POST, no body.
++//
++// The new-trip email's Approve / Not approved / Edit it buttons open the crew
++// review page for a real (but sample) request, MM-SAMPLE, which this function
++// creates or resets each time. It shows up in Admin > Trip builder as "Charlie
++// (sample)". Approving it sends the sample guest, who is Ewan, a real payment
++// link; just don't pay it. Declining it clears it from the To do list.
+ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import {
+@@ -13,6 +19,8 @@ import {
+   tripBuilderOpsEmail,
+   tripBuilderReadyEmail,
+ } from "../_shared/email.ts";
++import { crewReviewUrl, readSummary, signCrewKey, suggestBalance } from "../_shared/trip-builder-crew.ts";
++import { SAMPLE_TRIP } from "../_shared/trip-builder-sample.ts";
+ 
+ const json = (body: unknown, status = 200) =>
+   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+@@ -27,6 +35,24 @@ Deno.serve(async (req) => {
+   if ((count ?? 0) > 0) return json({ error: "Test emails went out in the last 5 minutes. Try again shortly." }, 429);
+ 
+   const ref = "MM-DDYYVA";
++  // A real sample request, so the buttons in the new-trip email open something that works. Reset every time.
++  const SAMPLE_REF = "MM-SAMPLE";
++  const nowIso = new Date().toISOString();
++  const SAMPLE = {
++    ref: SAMPLE_REF, status: "submitted", name: "Charlie (sample)", contact_via: "email", email: TRIP_BUILDER_CONTACT, whatsapp: null, guest_email: TRIP_BUILDER_CONTACT,
++    from_place: "Leeds", party_size: 2, dates_flex: "flex", start_date: null, route: SAMPLE_TRIP.route, days: SAMPLE_TRIP.days, nights: SAMPLE_TRIP.nights,
++    stops: [...SAMPLE_TRIP.stops], countries: [...SAMPLE_TRIP.countries], est_total_usd: SAMPLE_TRIP.est, all_in_match: "cambodia",
++    trip_link: `https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/${SAMPLE_TRIP.state}`, itinerary: SAMPLE_TRIP.crewText,
++    notes: "This is a sample trip so you can try the Approve, Not approved and Edit it buttons. Nothing here is a real booking.",
++    deposit_amount: 100, deposit_paid_at: nowIso, deposit_payment_intent: null, deposit_session_id: null, deposit_url: null, hold_until: null,
++    balance_amount: null, balance_session_id: null, balance_url: null, balance_payment_intent: null, balance_paid_at: null, refund_id: null, refunded_at: null,
++    crew_note: null, updated_at: nowIso,
++    payload: { v: 1, source: "trip-builder-sample", summary: SAMPLE_TRIP.summary, crewText: SAMPLE_TRIP.crewText },
++  };
++  const { error: sampleErr } = await sb.from("trip_builder_requests").upsert(SAMPLE, { onConflict: "ref" });
++  if (sampleErr) return json({ error: `Couldn't set up the sample trip: ${sampleErr.message}` }, 500);
++  const sampleSummary = readSummary(SAMPLE.payload);
++  const sampleKey = await signCrewKey(SAMPLE_REF);
+   const route = "Phnom Penh → Koh Sdach → Koh Rong → Kampot";
+   const statusUrl = `https://madmonkeyhostels.com/all-in-trips/trip-builder/#/trip/${ref}`;
+   const itinerary = [
+@@ -42,10 +68,13 @@ Deno.serve(async (req) => {
+   ].join("\n");
+   const emails = [
+     { tpl: "trip_builder_test_ops", m: tripBuilderOpsEmail({
+-      ref, name: "Charlie (test)", contact: "WhatsApp +44 7495 794060", guestEmail: "charlieboyy02+tripbuilder-test@gmail.com",
+-      guestWhatsapp: "+447495794060", people: 2, route, days: 13, startDate: "", dates: "fixed", estTotal: "$612 (builder estimate)",
+-      deposit: "$100", allInMatch: "cambodia", notes: "Test send: this is what lands in your inbox when a guest pays a deposit.", itinerary,
+-      tripLink: statusUrl, adminUrl: "https://madmonkeyhostels.com/all-in-trips/admin", holdUntil: "",
++      ref: SAMPLE_REF, name: "Charlie (sample)", contact: `Email ${TRIP_BUILDER_CONTACT}`, guestEmail: TRIP_BUILDER_CONTACT,
++      guestWhatsapp: "", people: 2, route: SAMPLE_TRIP.route, days: SAMPLE_TRIP.days, startDate: "", dates: "flex", estTotal: `$${SAMPLE_TRIP.est} (builder estimate)`,
++      deposit: "$100", allInMatch: "cambodia", notes: SAMPLE.notes, itinerary: SAMPLE_TRIP.crewText,
++      tripLink: SAMPLE.trip_link, adminUrl: "https://madmonkeyhostels.com/all-in-trips/admin", holdUntil: "",
++      summary: sampleSummary, reviewUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey), approveUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey, "approve"),
++      declineUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey, "decline"), editUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey, "edit"),
++      suggestedBalance: `$${suggestBalance(sampleSummary, 100)}`,
+     }) },
+     { tpl: "trip_builder_test_deposit", m: tripBuilderDepositEmail({
+       firstName: "Charlie", ref, route, days: 13, startDate: "", deposit: "$100", people: 2, holdUntil: "", statusUrl,
+-- 
+2.39.5 (Apple Git-154)
+

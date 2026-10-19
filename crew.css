@@ -1,0 +1,90 @@
+/* ============================================================
+   CREW REVIEW PAGE (ui-crew.js): what the team sees when a trip arrives.
+   Same brand rules as the rest of the builder: 3px outlines, hard-offset shadows, poster colours.
+   ============================================================ */
+.crew .wrap{max-width:1120px}
+.crew__top h2{font-size:clamp(34px,6vw,68px);margin:var(--s-3) 0 var(--s-2)}
+.crew__sub{font-weight:600;font-size:16px;color:var(--ink-dim);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.cpill{display:inline-block;border:var(--bw) solid var(--black);background:var(--paper);padding:1px 10px;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--black)}
+.cpill--new{background:var(--pink)} .cpill--chk{background:var(--orange)} .cpill--rdy{background:var(--yellow)} .cpill--ok{background:var(--lime)} .cpill--off{background:var(--black);color:var(--paper)} .cpill--edit{background:var(--cyan)}
+.cbanner{margin:var(--s-4) 0 0;padding:12px 16px;border:var(--bw) solid var(--black);background:var(--yellow);font-weight:600}
+.cbanner--ok{background:var(--lime)}
+
+/* the three decisions */
+.crew__acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-3);margin:var(--s-5) 0 var(--s-4)}
+.crew__act{border:var(--bw) solid var(--black);box-shadow:4px 4px 0 var(--black);padding:18px 10px 16px;font-family:inherit;font-weight:900;font-size:clamp(15px,2.4vw,22px);letter-spacing:.04em;text-transform:uppercase;text-align:center;color:var(--black);cursor:pointer;transition:transform .08s,box-shadow .08s}
+.crew__act small{display:block;margin-top:5px;font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:none;line-height:1.3}
+.crew__act--yes{background:var(--lime)} .crew__act--no{background:var(--pink)} .crew__act--edit{background:var(--orange)}
+.crew__act:hover:not([disabled]){transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--black)}
+.crew__act[aria-expanded="true"]{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--black);outline:var(--bw) solid var(--black);outline-offset:3px}
+.crew__act[disabled]{opacity:.38;cursor:not-allowed}
+.crew__orange{background:var(--orange)}
+
+.cpanel{border:var(--bw) solid var(--black);background:var(--paper);box-shadow:6px 6px 0 var(--black);padding:var(--s-5);margin:0 0 var(--s-5);display:flex;flex-direction:column;gap:var(--s-3);scroll-margin-top:calc(var(--hdr) + 12px)}
+.cpanel h3{font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
+.cpanel--yes{border-top:14px solid var(--lime)} .cpanel--no{border-top:14px solid var(--pink)} .cpanel--edit{border-top:14px solid var(--orange)}
+.cpanel .btn{align-self:flex-start} .cpanel textarea.input{min-height:96px}
+.cdim{font-size:12.5px;font-weight:500;color:var(--ink-dim);line-height:1.45}
+.cerr{background:var(--pink);border:var(--bw) solid var(--black);padding:8px 12px;font-weight:700;font-size:14px}
+.cerr[hidden]{display:none}
+
+/* the trip */
+.crew__grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:var(--s-5);align-items:start;margin-top:var(--s-4)}
+.crew__h{font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);margin:var(--s-5) 0 var(--s-2)}
+.cglance{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:var(--bw) solid var(--black);background:var(--bone);box-shadow:4px 4px 0 var(--black)}
+.cglance>div{padding:10px 12px;border-right:var(--bw) solid var(--black);min-width:0} .cglance>div:last-child{border-right:0}
+.cglance span{display:block;font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim)}
+.cglance b{display:block;font-size:19px;font-weight:900;line-height:1.2} .cglance i{display:block;font-style:normal;font-size:12px;font-weight:500;color:#333}
+
+.cbox{border:var(--bw) solid var(--black);background:var(--paper);padding:var(--s-4);margin:var(--s-4) 0 0}
+.crew__side .cbox:first-child{margin-top:0}
+.cbox h3{font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);margin:0 0 var(--s-2)}
+.cbox p{font-size:14px;font-weight:500;line-height:1.5;margin:0 0 var(--s-2)}
+.cbox--flags{padding:0;background:var(--paper)} .cbox--flags h3{background:var(--yellow);color:var(--black);margin:0;padding:8px 14px}
+.cbox--flags ul{list-style:none;margin:0;padding:0} .cbox--flags li{padding:8px 14px;border-top:1px solid #ddd;font-size:14px;font-weight:500;line-height:1.4}
+.cbox--flags li:first-child{border-top:0} .cbox--flags li.info{color:#333}
+.cbox--flags li b{display:inline-block;background:var(--yellow);border:2px solid var(--black);padding:0 6px;margin-right:4px}
+.cbox--note{background:var(--bone)}
+
+.cstop{display:grid;grid-template-columns:44px minmax(0,1fr);border:var(--bw) solid var(--black);background:var(--paper);margin:0 0 var(--s-2)}
+.cstop__n{background:var(--lime);border-right:var(--bw) solid var(--black);font-weight:900;font-size:20px;display:flex;justify-content:center;padding-top:12px}
+.cstop__b{padding:12px 14px;min-width:0}
+.cstop h4{font-size:16px;font-weight:900;text-transform:uppercase;margin:0} .cstop h4 small{font-size:13px;font-weight:700;color:#444;text-transform:none}
+.cstop__b>p{font-size:12.5px;font-weight:500;color:#333;margin:2px 0 8px}
+.cstop ul{list-style:none;margin:0;padding:0} .cstop li{display:flex;justify-content:space-between;gap:14px;font-size:14px;font-weight:500;padding:4px 0}
+.cstop li>span:last-child{text-align:right;white-space:nowrap} .cstop li i{display:block;font-style:normal;font-size:11.5px;color:var(--ink-dim)}
+.cstop li.none{color:#777} .cstop li em{font-style:normal;font-weight:900;font-size:10.5px;background:var(--yellow);padding:0 5px;border:2px solid var(--black);text-transform:uppercase}
+.cstop__next{margin-top:8px;padding-top:8px;border-top:2px dashed var(--black);font-size:13px;font-weight:500}
+
+.cmoney{width:100%;border-collapse:collapse;border:var(--bw) solid var(--black);background:var(--paper);margin:var(--s-4) 0 0;font-size:14px}
+.cmoney caption{background:var(--black);color:var(--paper);text-align:left;padding:8px 14px;font-size:11px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+.cmoney td{padding:7px 14px;vertical-align:top} .cmoney td:last-child{text-align:right;white-space:nowrap} .cmoney tr.b td{font-weight:900}
+.cmoney td i{display:block;font-style:normal;font-size:11.5px;font-weight:500;color:var(--ink-dim);white-space:normal;max-width:34em}
+.cmoney tfoot td{background:var(--lime);padding:10px 14px;text-align:left!important;white-space:normal} .cmoney tfoot i{display:inline;font-size:12px;color:var(--black)}
+
+.cwho{font-size:16px!important} .clinks{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.cdl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:var(--s-3) 0 0;font-size:13px} .cdl dt{font-weight:900;color:var(--ink-dim)} .cdl dd{margin:0;font-weight:500;word-break:break-word}
+
+/* the edit bar that shows in the builder */
+.crewbar{position:fixed;left:0;right:0;bottom:0;z-index:400;background:var(--black);color:var(--paper);border-top:var(--bw) solid var(--orange);padding:10px 16px;--shadow-on:var(--orange)}
+.crewbar__in{max-width:1120px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.crewbar__who{display:flex;flex-direction:column;line-height:1.2} .crewbar__who .over{color:var(--orange)} .crewbar__who b{font-size:13px}
+.crewbar .input{flex:1 1 220px;min-width:0;padding:8px 10px;font-size:14px;box-shadow:3px 3px 0 var(--orange)}
+.crewbar .btn--ghost{color:var(--paper)}
+body.crewing{padding-bottom:96px}
+
+@media (max-width:900px){
+  .crew__grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:620px){
+  .crew__acts{grid-template-columns:minmax(0,1fr)}
+  .crew__act{display:flex;flex-direction:column;align-items:center;padding:14px 10px}
+  .cglance{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cglance>div:nth-child(2){border-right:0} .cglance>div:nth-child(-n+2){border-bottom:var(--bw) solid var(--black)}
+  .cpanel{padding:var(--s-4)} .cpanel .btn{align-self:stretch}
+  .crewbar__who{flex:1 0 100%}
+}
+@media print{.crewbar,.crew__acts,.cpanel{display:none!important}}
+
+/* the review page is a work screen: no marketing footer under it */
+body[data-view="crew"] .foot{display:none}

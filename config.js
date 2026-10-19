@@ -25,6 +25,10 @@ window.MM_CONFIG = {
   // Only promise what ops can honour: the hold itself happens on YOUR side when the lead arrives.
   HOLD_HOURS: 48,
 
+  // Optional. The crew review page (#/crew/<ref>, opened from the buttons in the new-trip email) calls this: POST JSON { action, ref, key, ... }.
+  // With the ALL IN backend it is the trip-builder-admin function. Blank = derived from STATUS_ENDPOINT, or the page says it isn't switched on.
+  CREW_ENDPOINT: '',
+
   // Optional. GET <url>?ref=MM-XXXXXX -> { status: 'submitted'|'checking'|'ready'|'approved', note?, payLink? } powers the trip status page.
   STATUS_ENDPOINT: '',
 
