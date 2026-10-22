@@ -58,7 +58,7 @@
 
   MM.chat.helpText = 'I can do short instructions: "remove Hoi An", "add Bangkok for 3 nights", "swap Hanoi for Bangkok", "move Hoi An to the start", "2 more nights in Hanoi", "add the cooking class in Hoi An", "start on 3 March", "cheapest way", "budget $1500". Or tap Undo any time.';
 
-  MM.chat.local = function (text, state, today) {
+  function localOne(text, state, today) {
     var S = JSON.parse(JSON.stringify(state || MM.defaultState())), raw = String(text || ''), n = norm(raw), pad = ' ' + n + ' ';
     var men = E.mentions(raw), inTrip = men.filter(function (m) { return idxOf(S, m.id) > -1; }), outTrip = men.filter(function (m) { return idxOf(S, m.id) < 0; });
     function R(reply, extra) { var o = { reply: reply }; for (var k in extra) o[k] = extra[k]; return o; }
@@ -135,6 +135,7 @@
       var stops = inTrip.length ? [idxOf(S, inTrip[0].id)] : S.items.map(function (_, i) { return i; }), tr = findTour(n, stops, S, true);
       if (tr && tr.id) return go([{ op: 'remove_tour', stop: tr.i + 1, tour: tr.id }]);
       if (tr && tr.ambiguous) return R('More than one of your tours matches that. Which one?');
+      if (inTrip.length > 1) return R('I take out one stop at a time, so there\'s no mix-up. Say "remove ' + pname(inTrip[0].id) + '" and then "remove ' + pname(inTrip[1].id) + '".');
       var rk = target(); if (rk >= 0 && S.items[rk]) return go([{ op: 'remove_stop', stop: rk + 1 }]);
       if (!S.items.length) return R('Your trip is empty, so there is nothing to remove.');
       if (outTrip.length) return R(pname(outTrip[0].id) + ' isn\'t in your trip.');
@@ -150,6 +151,7 @@
         var np = outTrip[0].id, pos = null, ref = inTrip[0] ? idxOf(S, inTrip[0].id) : -1;
         if (has(/ (first|start|beginning|front|top) /) && ref < 0) pos = 1;
         else if (ref > -1 && has(/ after /)) pos = ref + 2; else if (ref > -1 && has(/ before /)) pos = ref + 1;
+        if (outTrip.length > 1 && !pos && !N) return go(outTrip.map(function (m) { return { op: 'add_stop', place: m.id }; }));      // "add Bangkok and Chiang Mai"
         var op = { op: 'add_stop', place: np }; if (N) op.nights = N; if (pos) op.position = pos;
         return go([op]);
       }
@@ -170,6 +172,18 @@
     if (has(/ (smart|balanced|best value) /)) return go([{ op: 'set_style', style: 'smart' }]);
 
     return R('I didn\'t catch that. ' + MM.chat.helpText);
+  }
+
+  // "swap Hoi An for Bangkok and 2 more nights in Hanoi": several instructions in one message are done in order, but only when every one of them is understood
+  // (otherwise nothing is half done: the whole message is read as one instruction).
+  MM.chat.local = function (text, state, today) {
+    var parts = String(text || '').split(/\s*(?:[,;]|\b(?:and then|and also|and|then|also|plus)\b)\s*/i).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (parts.length > 1 && parts.length <= 6) {
+      var st = state || MM.defaultState(), changes = [], all = true;
+      for (var i = 0; i < parts.length && all; i++) { var r = localOne(parts[i], st, today); if (r.state) { st = r.state; changes = changes.concat(r.changes); } else all = false; }
+      if (all) return { reply: 'Done. ' + changes.join('. ') + '. ' + totalsLine(st), state: st, changes: changes };
+    }
+    return localOne(text, state, today);
   };
 
   /* ---------- the AI conversation ---------- */

@@ -86,6 +86,6 @@ The chat sends the traveller's messages and their trip (stops, tours, dates, bud
 
 ### Tests
 
-- `npm test` runs `test/chat.test.js` (70 checks: the quick helper, the conversation loop against a scripted model, failure handling, the spec).
+- `npm test` runs `test/chat.test.js` (74 checks: the quick helper, the conversation loop against a scripted model, failure handling, the spec).
 - In the ALL IN repo: the function's checks are `supabase/functions/_shared/trip-builder-chat.test.ts` (Deno), and `handoff/all-in-backend/e2e/run.sh <repo>` runs the real builder code against the real function against a fake Claude on localhost (37 checks).
 - Not tested: a real call to Claude. Nothing here has talked to the live API, so the first real conversation is the first real test. Try a few messages with the key set before telling anyone.

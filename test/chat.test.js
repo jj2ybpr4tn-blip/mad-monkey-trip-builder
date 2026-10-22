@@ -41,6 +41,10 @@ ok('"start over" clears the trip', say('start over').state.items.length === 0);
 eq('"undo" asks the screen to undo', say('undo').action, 'undo');
 ok('every edit comes back with a sentence that says what changed and what it cost', /Removed Hoi An\. That is \d+ days now, about \$\d+ a person\./.test(say('remove Hoi An').reply));
 
+eq('two instructions in one message are both done, in order', names(say('swap Hoi An for Bangkok and 2 more nights in Hanoi').state), 'hanoi:6,bangkok:4,saigon:3');
+eq('"add Bangkok and Chiang Mai" adds both', names(say('add Bangkok and Chiang Mai').state), 'hanoi:4,hoi-an:4,saigon:3,bangkok:3,chiang-mai:3');
+eq('a comma and "then" work as well as "and"', names(say('remove Saigon, then add Kampot').state), 'hanoi:4,hoi-an:4,kampot:2');
+ok('removing two stops in one go is declined, with how to do it', (function () { var r = say('remove Hoi An and Hanoi'); return !r.state && /one stop at a time/.test(r.reply); })());
 var withTours = E.apply(trip(), [{ op: 'add_tour', stop: 2, tour: 'cooking-class' }, { op: 'add_tour', stop: 2, tour: 'sunset-river-cruise' }]).state;
 ok('"delete the cooking class in Hoi An" removes the tour, not the stop', (function () { var r = say('delete the cooking class in Hoi An', withTours); return r.state && r.state.items.length === 3 && r.state.items[1].acts.indexOf('cooking-class') < 0 && r.state.items[1].acts.indexOf('sunset-river-cruise') > -1; })());
 ok('"add the basket boats in Hoi An" adds that tour', (function () { var r = say('add the basket boats in Hoi An'); return r.state && r.state.items[1].acts.indexOf('basket-boats') > -1; })());
