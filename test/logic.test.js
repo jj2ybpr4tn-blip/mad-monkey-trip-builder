@@ -3,6 +3,7 @@
 var MM = require('../logic.js');
 require('../extras.js');
 require('../crew.js');
+require('../edit.js');
 
 var pass = 0, fail = 0, pending = [];
 function ok(name, cond, extra) { if (cond) { pass++; console.log('PASS  ' + name); } else { fail++; console.log('FAIL  ' + name + (extra ? '  -> ' + extra : '')); } }
@@ -369,6 +370,74 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   global.window = { MM_CONFIG: { ALLIN_BASE: '../' } }; var rel = MM.allInUrl('cambodia'); delete global.window;
   ok('...and use the live copy\'s relative base when configured', rel === '../cambodia');
   ok('ALL IN prices follow the ALL IN site (Cambodia $650, Indonesia $700, Laos $400) and Thailand stays link-only', MM.ALL_IN.filter(function (t) { return t.id === 'cambodia'; })[0].usd === 650 && MM.ALL_IN.filter(function (t) { return t.id === 'indonesia'; })[0].usd === 700 && MM.ALL_IN.filter(function (t) { return t.id === 'laos'; })[0].usd === 400 && !MM.ALL_IN.some(function (t) { return t.id === 'thailand'; }));
+})();
+
+/* ---------- editing: one set of operations for the screen controls, the day-by-day editor and the AI ---------- */
+(function () {
+  var E = MM.edit;
+  function trip() { var s = MM.defaultState(); s.items = [E.newStop('hanoi', 4), E.newStop('hoi-an', 4), E.newStop('saigon', 3)]; s.start = '2027-02-10'; return s; }
+  function apply(ops, s) { return E.apply(s || trip(), ops); }
+  var base = trip(), snapshotBefore = JSON.stringify(base);
+
+  var r1 = apply([{ op: 'add_stop', place: 'kampot', nights: 2, position: 2 }]);
+  ok('add_stop puts a stop exactly where asked, with starter tours', r1.ok && r1.state.items.map(function (i) { return i.p; }).join() === 'hanoi,kampot,hoi-an,saigon' && r1.state.items[1].n === 2 && r1.state.items[1].acts.length >= 1 && /Added Kampot/.test(r1.changes[0]));
+  ok('...without touching the state it was given', JSON.stringify(base) === snapshotBefore);
+  ok('names work as well as ids ("Ho Chi Minh", "Gili T")', E.place('Ho Chi Minh').id === 'saigon' && E.place('Gili T').id === 'gili-trawangan' && E.place('hoi an').id === 'hoi-an' && !!E.place('Atlantis').error);
+
+  var bad = apply([{ op: 'remove_stop', stop: 2 }, { op: 'set_nights', stop: 9, nights: 3 }, { op: 'bogus' }]);
+  ok('all or nothing: one bad change means no change at all, and every reason is listed', !bad.ok && bad.state && JSON.stringify(bad.state) === snapshotBefore && bad.errors.length === 2 && /no stop 9/.test(bad.errors[0]) && /unknown change/.test(bad.errors[1]));
+  ok('an empty or oversized batch is refused', !apply([]).ok && !apply(new Array(21).fill({ op: 'clear' })).ok);
+
+  var r2 = apply([{ op: 'remove_stop', stop: 2 }, { op: 'move_stop', stop: 2, to: 1 }, { op: 'set_nights', stop: 1, nights: 6 }]);
+  ok('remove, move and set nights work in order, and number stops the way the traveller sees them', r2.ok && r2.state.items.map(function (i) { return i.p + i.n; }).join() === 'saigon6,hanoi4');
+  ok('swap_stop keeps the nights and gives the new place its own tours', (function () { var r = apply([{ op: 'swap_stop', stop: 1, place: 'siem-reap' }]); return r.ok && r.state.items[0].p === 'siem-reap' && r.state.items[0].n === 4 && r.state.items[0].acts.every(function (id) { return MM.ACTS[id].p === 'siem-reap'; }); })());
+  ok('a stop can\'t go past 14 stops, nights stay between 1 and 30', !apply([{ op: 'set_nights', stop: 1, nights: 31 }]).ok && !apply(new Array(12).fill({ op: 'add_stop', place: 'hanoi' })).ok);
+
+  var ab = trip(); ab.items = [{ kind: 'allin', trip: 'vietnam' }, E.newStop('saigon', 2)];
+  ok('a packaged ALL IN trip can be moved or removed but its nights and tours are fixed', apply([{ op: 'set_nights', stop: 1, nights: 3 }], ab).errors[0].indexOf('packaged') > -1 && apply([{ op: 'add_tour', stop: 1, tour: 'x' }], ab).errors[0].indexOf('ALL IN') > -1 && apply([{ op: 'move_stop', stop: 1, to: 2 }], ab).ok);
+
+  var cook = MM.actsAt('hoi-an').filter(function (a) { return /cooking/i.test(a.n); })[0], sun = MM.actsAt('hoi-an').filter(function (a) { return a.id === 'sunset-river-cruise'; })[0];
+  var bike = MM.actsAt('hoi-an').filter(function (a) { return /bike/i.test(a.n); })[0];
+  var r3 = apply([{ op: 'add_tour', stop: 2, tour: 'bike tour' }]);   // the cooking class and sunset cruise are already the starter tours
+  ok('add_tour finds a tour by what you call it, only at that stop\'s place', r3.ok && r3.state.items[1].acts.indexOf(bike.id) > -1 && !apply([{ op: 'add_tour', stop: 1, tour: 'basket-boats' }]).ok);
+  ok('add_tour twice is refused, remove_tour takes it out again', !apply([{ op: 'add_tour', stop: 2, tour: sun.id }], r3.state).ok && !apply([{ op: 'add_tour', stop: 2, tour: 'bike tour' }], r3.state).ok && apply([{ op: 'remove_tour', stop: 2, tour: sun.id }], r3.state).state.items[1].acts.indexOf(sun.id) < 0);
+
+  // putting a tour on a day
+  var pl0 = MM.plan(r3.state), stay = pl0.days.filter(function (d) { return d.si === 1 && d.kind === 'stay'; }), target = stay[stay.length - 1];
+  var r4 = apply([{ op: 'move_tour', stop: 2, tour: cook.id, day: target.n }], r3.state);
+  var onDay = r4.ok && MM.plan(r4.state).days[target.n - 1].acts.some(function (x) { return x.id === cook.id; });
+  ok('move_tour puts the tour on exactly that trip day (the planner honours it)', onDay, JSON.stringify(r4.errors));
+  ok('...and says which day in words', r4.ok && new RegExp('day ' + target.n).test(r4.changes[0]));
+  ok('a day outside that stop is refused', !apply([{ op: 'move_tour', stop: 2, tour: cook.id, day: 1 }], r3.state).ok);
+  ok('the day survives the share link', (function () { var back = MM.decodeState(MM.encodeState(r4.state)); return JSON.stringify(back.items[1].pins) === JSON.stringify(r4.state.items[1].pins) && back.items[1].pins[cook.id] > 0; })());
+  ok('old links without days still open', MM.decodeState('i=s.hanoi.3~s.hoi-an.4').items.length === 2);
+  ok('removing the tour or cutting the nights drops its day', (function () { var a = apply([{ op: 'remove_tour', stop: 2, tour: cook.id }], r4.state).state.items[1]; var b = apply([{ op: 'set_nights', stop: 2, nights: 1 }], r4.state).state.items[1]; return !a.pins && !b.pins; })());
+  ok('unpin_tour hands the tour back to the planner', !apply([{ op: 'unpin_tour', stop: 2, tour: cook.id }], r4.state).state.items[1].pins);
+  var wd = pl0.days.filter(function (d) { return d.si === 1 && d.kind === 'stay' && d.date && sun.dows.indexOf(d.date.getUTCDay()) < 0 && d.n !== stay[0].n; })[0];
+  var rw = apply([{ op: 'move_tour', stop: 2, tour: sun.id, day: wd.n }], r3.state);
+  ok('putting a tour on a day it doesn\'t run is allowed, with a warning that says so', rw.ok && MM.plan(rw.state).warnings.some(function (w) { return /Sunset river cruise runs/.test(w.m); }));
+
+  ok('set_start checks the date, and clears', apply([{ op: 'set_start', date: '2027-03-01' }]).state.start === '2027-03-01' && !apply([{ op: 'set_start', date: '3 March' }]).ok && !apply([{ op: 'set_start', date: '2001-01-01' }]).ok && apply([{ op: 'set_start', date: '' }]).state.start === '');
+  ok('set_style, set_spending and set_budget set what they say', (function () { var s = apply([{ op: 'set_style', style: 'cheapest' }, { op: 'set_spending', per_day: 30 }, { op: 'set_budget', amount: 1200 }]).state; return s.pref === 'cheap' && s.fund === 30 && s.budget === 1200; })() && !apply([{ op: 'set_style', style: 'posh' }]).ok);
+  ok('set_travel picks a journey option that exists and refuses one that doesn\'t', (function () { var good = apply([{ op: 'set_travel', stop: 1, mode: 'cheapest' }]); return good.ok && good.state.legPick[0] === 'cheap' && /\$/.test(good.changes[0]); })());
+  ok('clear empties the trip', apply([{ op: 'clear' }]).state.items.length === 0);
+
+  var d1 = E.describe(trip(), r2.state).join(' | ');
+  ok('describe says what changed in plain words', /Removed Hoi An/.test(d1) && /Saigon: 3 nights to 6 nights/.test(d1) && /Ho Chi Minh/.test(E.describe(trip(), apply([{ op: 'remove_stop', stop: 3 }]).state).join('|')) === false || /Removed Ho Chi Minh City/.test(E.describe(trip(), apply([{ op: 'remove_stop', stop: 3 }]).state).join('|')));
+  ok('describe notices a reorder, a new tour, a new date and a new style', /order/.test(E.describe(trip(), apply([{ op: 'move_stop', stop: 1, to: 3 }]).state)[0]) && /Added Countryside bike tour/.test(E.describe(trip(), r3.state).join('|')) && /Start date/.test(E.describe(trip(), apply([{ op: 'set_start', date: '2027-05-05' }]).state).join('|')) && /Cheapest/.test(E.describe(trip(), apply([{ op: 'set_style', style: 'cheapest' }]).state).join('|')));
+
+  var snap = E.snapshot(r4.state);
+  ok('the snapshot gives the AI every id and number it needs', /1\. Hanoi \(id hanoi\)/.test(snap) && new RegExp('\\[' + cook.id + '\\]').test(snap) && /on day \d+/.test(snap) && /then .* to Hoi An/.test(snap) && /about \$\d+ per person/.test(snap) && /Start date: 2027-02-10/.test(snap));
+  ok('an empty trip says so', /EMPTY/.test(E.snapshot(MM.defaultState())));
+
+  var tp = E.run('search_places', { query: 'surf' }, trip()).result;
+  ok('search_places finds real hostels and only real ones', tp.count > 0 && tp.places.every(function (p) { return MM.PLACES[p.id] && p.dorm_from_usd > 0; }));
+  ok('search_tours lists a place\'s tours with prices and the days they run', (function () { var t = E.run('search_tours', { place: 'Hoi An', query: 'cooking' }, trip()).result; return t.count >= 1 && t.tours[0].price && t.tours[0].runs; })() && !!E.run('search_tours', { place: 'Atlantis' }, trip()).result.error);
+  ok('get_travel gives real options with times and prices', (function () { var t = E.run('get_travel', { from: 'hanoi', to: 'hoi-an' }, trip()).result; return t.options.length >= 1 && t.options.every(function (o) { return o.takes && o.usd > 0; }); })());
+  var et = E.run('edit_trip', { ops: [{ op: 'add_stop', place: 'kampot' }] }, trip());
+  ok('edit_trip returns the new trip, what changed, and what it did to the price', et.result.ok && et.state.items.length === 4 && et.result.changes.length === 1 && et.result.total_usd > et.result.was_usd && /Kampot/.test(et.result.trip));
+  var ef = E.run('edit_trip', { ops: [{ op: 'remove_stop', stop: 8 }] }, trip());
+  ok('a failed edit_trip changes nothing and tells the AI why', ef.result.ok === false && ef.state.items.length === 3 && ef.result.errors.length === 1 && /Nothing was changed/.test(ef.result.note));
 })();
 
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

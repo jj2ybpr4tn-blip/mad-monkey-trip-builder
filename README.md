@@ -34,6 +34,7 @@ npm run build-pages   # the pages for Google (see docs/SEO.md)
 | **Photos + trust** | Real photo strips + lightbox for every hostel (127 photos), the published 4.9/5 from 53,000+ travellers and the three named quotes. No hostel-level reviews are published, so none are shown (drop real ones into `MM.REVIEWS`). |
 | **Human review + bed hold** | "Hold my beds + get it checked": the trip goes to a real crew member, beds are held while they check, the guest gets a reference and a status page, and approves before paying. Highlighted across the site. See [docs/LEADS.md](docs/LEADS.md). |
 | **Pay your way** | After the crew approves a trip, the deposit already paid counts and the guest chooses how to pay the rest: all now, a week before they leave, or in instalments when they leave 60+ days out. See [docs/PAYMENTS.md](docs/PAYMENTS.md). |
+| **Edit it your way + AI chat** | After the quiz a traveller can remove, add, swap, reorder and re-time anything, and undo it all (Cmd/Ctrl+Z too). **Chat to change it** opens a panel where they say what they want and an AI makes the edits (a quick built-in helper takes over when the AI isn't switched on). See [docs/CHAT.md](docs/CHAT.md). |
 | **Crew review** | What the team receives when a trip is sent: the whole trip as the guest built it (stops, tours, travel, money, heads-up) in the email, with **Approve / Not approved / Edit it** buttons that open a review page. See [docs/CREW-REVIEW.md](docs/CREW-REVIEW.md). |
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
 | **USD / GBP** | Fixed indicative rate (1.27). Real conversion belongs to the booking engine. |
@@ -112,6 +113,7 @@ assets/logo/        the official wordmarks (downloaded, never redrawn) + favicon
 docs/LEADS.md       lead payload for whoever builds the endpoint
 docs/CREW-REVIEW.md the crew email + review page, and the endpoint it talks to
 docs/PAYMENTS.md    deposit, approval, then the rest your way (now / a week before / instalments)
+docs/CHAT.md        editing your trip, and the AI chat (how it works, switching it on, cost)
 test/               logic tests (node, no dependencies)
 ```
 

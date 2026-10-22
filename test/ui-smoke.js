@@ -11,7 +11,7 @@
     // What is drawn on screen, not the address: an action that changes the address but leaves the screen as it was is a dead button.
     var mapView = (document.querySelector('#bmap svg') || {}).getAttribute ? (document.querySelector('#bmap svg').getAttribute('viewBox') || '') : '';
     return [a ? djb(a.innerHTML) : 0, mapView, document.querySelectorAll('.modal').length, document.querySelectorAll('.toast').length, Math.round(window.scrollY / 40),
-      document.body.getAttribute('data-view')].join('|');
+      document.body.getAttribute('data-view'), document.body.classList.contains('chat-open')].join('|');
   }
   var TRIP = '#/build/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10&f=20&b=1500';
   var SCENES = [
@@ -30,8 +30,9 @@
   }
   function targets() {
     return Array.prototype.slice.call(document.querySelectorAll('#app [data-act], #app [data-go], #app button[data-focus], #app [data-pref], #app .nextchip, body > .toast-root [data-act]'))
-      .filter(function (el) { return !el.disabled && el.tagName !== 'A' && !SKIP[el.getAttribute('data-act')] && el.offsetParent !== null; });
+      .filter(function (el) { return !el.disabled && el.tagName !== 'A' && el.tagName !== 'SELECT' && !SKIP[el.getAttribute('data-act')] && el.offsetParent !== null; });
   }
+  // (a dropdown does nothing until its value changes, so pressing it proves nothing: the day-by-day dropdowns are checked by changing them, see the editing tests)
   function label(el) { return (el.getAttribute('data-act') || el.getAttribute('data-go') || el.className) + ' "' + el.textContent.replace(/\s+/g, ' ').trim().slice(0, 36) + '"'; }
   window.__smoke = async function () {
     var report = [], dead = [], errors = [];

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Guest-facing build-your-own-trip funnel for Mad Monkey",
   "scripts": {
-    "test": "node test/logic.test.js && node test/server.test.js && node test/pages.test.js",
+    "test": "node test/logic.test.js && node test/server.test.js && node test/pages.test.js && node test/chat.test.js",
     "start": "python3 -m http.server 8000",
     "server": "node server/server.mjs",
     "mirror-photos": "node scripts/mirror-photos.mjs",
