@@ -1,10 +1,8 @@
 /* ============================================================
-   TRIP EDITING: one set of validated operations that the screen controls, the day-by-day editor and the AI chat all use.
+   TRIP EDITING: one set of validated operations behind the screen controls and the day-by-day editor.
 
      MM.edit.apply(state, ops)         -> { ok, state, changes[], errors[] }   all-or-nothing; the input state is never touched
      MM.edit.describe(before, after)   -> ["Removed Hoi An", "Hanoi: 4 -> 5 nights", ...]   what changed, in words
-     MM.edit.snapshot(state)           -> plain text of the trip (what the AI is told, with the ids it needs)
-     MM.edit.run(name, input, state)   -> { result, state }   the tools the AI can call (lookups + edit_trip)
      MM.edit.newStop(place, nights)    -> a stop with sensible starter tours
 
    Stop and day numbers are the ones the traveller sees (1-based): "stop 2", "day 6". Places and tours are ids.
@@ -41,18 +39,6 @@
     return { error: 'No tour like "' + q + '" at ' + P()[placeId].n + '. Use search_tours.' };
   }
   MM.edit = { place: place, tour: tour };
-  // The places named in a bit of free text ("swap Hanoi for Ha Noi / Bangkok"), in the order they come up: [{ id, at }]. Longest names win, so "Gili Trawangan" isn't read as "Gili".
-  MM.edit.mentions = function (text) {
-    var t = ' ' + norm(text) + ' ', names = {}, found = [];
-    Object.keys(P()).forEach(function (id) { names[norm(P()[id].n)] = id; names[norm(id)] = id; });
-    Object.keys(ALIAS).forEach(function (a) { if (P()[ALIAS[a]]) names[a] = ALIAS[a]; });
-    Object.keys(names).sort(function (a, b) { return b.length - a.length; }).forEach(function (ph) {
-      var at = t.indexOf(' ' + ph + ' '); if (at < 0) return;
-      found.push({ id: names[ph], at: at }); t = t.slice(0, at + 1) + new Array(ph.length + 1).join('#') + t.slice(at + 1 + ph.length);
-    });
-    found.sort(function (a, b) { return a.at - b.at; });
-    return found.filter(function (f, i) { return found.findIndex(function (g) { return g.id === f.id; }) === i; });
-  };
 
   /* ---------- a new stop ---------- */
   function newStop(p, n) {
@@ -207,60 +193,6 @@
     if ((a && a.pref) !== (b && b.pref)) out.push('Travel style: ' + (STYLE_NAME[b.pref] || b.pref));
     if (!out.length && JSON.stringify(a) !== JSON.stringify(b)) out.push('Changed your trip');
     return out.slice(0, 6);
-  };
-
-  /* ---------- the trip as text (what the AI is told) ---------- */
-  MM.edit.snapshot = function (state) {
-    var pl = MM.plan(state), T = pl.totals, L = [];
-    if (!state.items.length) return 'THE TRIP IS EMPTY. No stops yet.';
-    L.push('THE TRIP NOW: ' + T.days + ' days, ' + pl.places.length + ' stops, ' + pl.countries.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + ') + ', about ' + money(T.total) + ' per person (beds ' + money(T.beds) + ', tours ' + money(T.acts) + ', travel ' + money(T.transport) + ', spending money ' + money(T.fund) + ').');
-    L.push('Start date: ' + (state.start || 'not set') + '. Travel style: ' + (STYLE_NAME[state.pref] || 'Smart pick') + '. Spending money: ' + money(state.fund || 0) + ' a day. Budget target: ' + (state.budget ? money(state.budget) : 'none') + '.');
-    pl.segs.forEach(function (sg, i) {
-      var ds = pl.days.filter(function (d) { return d.si === i && (d.kind === 'stay' || d.kind === 'epic' || d.kind === 'block'); }), first = ds[0], last = ds[ds.length - 1];
-      var span = first ? 'days ' + first.n + (last && last.n !== first.n ? ' to ' + last.n : '') + (first.dateLabel ? ' (' + first.dateLabel + ')' : '') : '';
-      if (sg.kind === 'allin') { L.push((i + 1) + '. ALL IN ' + sg.trip.n + ' (id ' + sg.trip.id + '), ' + span + ', packaged: fixed route and tours.'); }
-      else {
-        var tours = (sg.acts || []).map(function (a) { var at = pl.days.filter(function (d) { return d.si === i && (d.acts || []).some(function (x) { return x.id === a.id; }); })[0]; return a.n + ' [' + a.id + ']' + (a.usd == null ? ' (pay on the day)' : ' ' + money(a.usd)) + (at ? ' on day ' + at.n : ''); });
-        L.push((i + 1) + '. ' + P()[sg.p].n + ' (id ' + sg.p + '), ' + plural(sg.n, 'night') + ', ' + span + '. Tours: ' + (tours.length ? tours.join('; ') : 'none') + '.');
-      }
-      var leg = pl.legs.filter(function (l) { return l.index === i; })[0];
-      if (leg) L.push('   then ' + leg.chosen.label.toLowerCase() + ' ' + leg.chosen.modeLabel.toLowerCase() + ' to ' + P()[leg.to].n + ': ' + U.hoursLabel(leg.chosen.h) + ', ' + money(leg.u) + (leg.ovn ? ', overnight' : '') + '. Other options: ' + (leg.options.filter(function (o) { return o.key !== leg.key; }).map(function (o) { return o.label.toLowerCase() + ' ' + o.modeLabel.toLowerCase() + ' ' + U.hoursLabel(o.h) + ' ' + money(o.u); }).join('; ') || 'none') + '.');
-    });
-    var warn = pl.warnings.filter(function (w) { return w.t === 'warn'; }).slice(0, 4).map(function (w) { return w.m; });
-    if (warn.length) L.push('Warnings: ' + warn.join(' | '));
-    return L.join('\n');
-  };
-
-  /* ---------- the tools the AI can call ---------- */
-  function placeCard(id) { var p = P()[id]; return { id: id, name: p.n, country: MM.COUNTRIES[p.c].n, dorm_from_usd: p.bed, suggested_nights: p.sug, vibes: p.tags, about: p.hook, partner_hostel: !!p.partner, goes_well_with: (p.next || []).slice(0, 5) }; }
-  function tourCard(a) { return { id: a.id, name: a.n, usd: a.usd, price: a.usd == null ? 'pay on the day' : (a.est ? 'about ' : '') + money(a.usd), takes: a.slot === 'full' ? 'a full day' : a.slot === 'half' ? 'half a day' : a.slot === 'eve' ? 'an evening' : a.slot, runs: a.when || 'every day', days_long: a.multi && a.multi.d > 1 ? a.multi.d : 1, top_pick: !!a.star, tags: a.tags }; }
-  MM.edit.run = function (name, input, state) {
-    input = input || {};
-    if (name === 'get_trip') return { result: MM.edit.snapshot(state), state: state };
-    if (name === 'search_places') {
-      var q = norm(input.query), c = norm(input.country), v = norm(input.vibe), ids = Object.keys(P()).filter(function (id) {
-        var p = P()[id], hay = norm(p.n + ' ' + id + ' ' + p.hook + ' ' + p.tags.join(' '));
-        return (!q || q.split(' ').every(function (w) { return hay.indexOf(w) > -1; })) && (!c || norm(MM.COUNTRIES[p.c].n).indexOf(c) > -1 || p.c.toLowerCase() === c) && (!v || p.tags.some(function (t) { return norm(t).indexOf(v) > -1; }));
-      });
-      return { result: { count: ids.length, places: ids.slice(0, 10).map(placeCard) }, state: state };
-    }
-    if (name === 'search_tours') {
-      var pl = place(input.place); if (pl.error) return { result: { error: pl.error }, state: state };
-      var qq = norm(input.query), list = MM.actsAt(pl.id).filter(function (a) { return !qq || qq.split(' ').every(function (w) { return norm(a.n + ' ' + a.tags.join(' ')).indexOf(w) > -1; }); });
-      return { result: { place: P()[pl.id].n, count: list.length, tours: list.slice(0, 14).map(tourCard) }, state: state };
-    }
-    if (name === 'get_travel') {
-      var a = place(input.from), b = place(input.to); if (a.error || b.error) return { result: { error: a.error || b.error }, state: state };
-      var opts = MM.legOptions(a.id, b.id); if (!opts.length) return { result: { error: 'There is no route between ' + P()[a.id].n + ' and ' + P()[b.id].n + '.' }, state: state };
-      return { result: { from: P()[a.id].n, to: P()[b.id].n, options: opts.map(function (o) { return { style: o.label, how: o.modeLabel, takes: U.hoursLabel(o.h), usd: Math.round(o.u), overnight: !!o.ovn }; }) }, state: state };
-    }
-    if (name === 'edit_trip') {
-      var before = MM.plan(state).totals, res = MM.edit.apply(state, input.ops);
-      if (!res.ok) return { result: { ok: false, errors: res.errors, note: 'Nothing was changed. Fix these and try again.' }, state: state };
-      var after = MM.plan(res.state).totals;
-      return { result: { ok: true, changes: res.changes, days: after.days + ' days (was ' + before.days + ')', total_usd: after.total, was_usd: before.total, trip: MM.edit.snapshot(res.state) }, state: res.state };
-    }
-    return { result: { error: 'Unknown tool ' + name }, state: state };
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = MM;

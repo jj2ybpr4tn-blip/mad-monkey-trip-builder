@@ -922,37 +922,43 @@ a.navbtn{text-decoration:none;display:inline-flex;align-items:center}
 body[data-view="build"] #toast-root{bottom:88px}
 @media (min-width:1001px){body[data-view="build"] #toast-root{bottom:24px}}
 
-/* ---------- trip chat: a panel beside the trip (wide screens) or a sheet over the bottom of it (phones, tablets) ---------- */
-.chat,.chatfab{display:none}
-body[data-view="build"] .chatfab{display:inline-flex;position:fixed;right:14px;bottom:84px;z-index:70}
-body[data-view="build"] .chat:not([hidden]){display:flex}
-body[data-view="build"].chat-open .chatfab{display:none}
-.chat{position:fixed;z-index:120;left:0;right:0;bottom:0;height:min(74vh,640px);flex-direction:column;background:var(--bone);color:var(--black);border-top:var(--bw) solid var(--black);box-shadow:0 -6px 0 var(--pink)}
-.chat__hd{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--s-3);padding:12px 16px 10px;background:var(--lime);border-bottom:var(--bw) solid var(--black)}
-.chat__hd h2{font-size:26px} .chat__sub{margin:6px 0 0;font-size:12px;font-weight:700}
-.chat__tools{display:flex;gap:8px;align-items:center;flex:none}
-.chat__log{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-.cmsg{max-width:90%;padding:10px 14px;border:var(--bw) solid var(--black);font-size:14.5px;line-height:1.45;overflow-wrap:anywhere}
-.cmsg--me{align-self:flex-end;background:var(--black);color:var(--paper)}
-.cmsg--bot{align-self:flex-start;background:var(--paper);box-shadow:3px 3px 0 var(--pink)}
-.cmsg--note{align-self:center;border:0;background:transparent;color:var(--ink-dim);font-size:12.5px;text-align:center;padding:2px 8px}
-.cmsg--typing{display:flex;gap:5px;padding:14px 16px} .cmsg--typing i{width:8px;height:8px;border-radius:50%;background:var(--black);animation:cdot 1s infinite ease-in-out} .cmsg--typing i:nth-child(2){animation-delay:.15s} .cmsg--typing i:nth-child(3){animation-delay:.3s}
-@keyframes cdot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
-@media (prefers-reduced-motion:reduce){.cmsg--typing i{animation:none;opacity:.6}}
-.cchg{align-self:flex-start;max-width:92%;background:var(--lime);border:var(--bw) solid var(--black);padding:10px 14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
-.cchg ul{margin:0;padding-left:18px;font-weight:700;font-size:13.5px;line-height:1.4} .cchg__done{font-weight:900;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
-.chat__chips{display:flex;gap:8px;overflow-x:auto;padding:0 16px 8px;flex:none;scrollbar-width:none} .chat__chips:empty{display:none} .chat__chips .chip{flex:none;cursor:pointer;min-height:36px} .chat__chips .chip:hover,.chat__chips .chip:focus-visible{background:var(--lime)}
-.chat__form{display:flex;gap:8px;align-items:flex-end;padding:10px 16px 6px;border-top:var(--bw) solid var(--black);flex:none}
-.chat__form textarea{flex:1;min-width:0;min-height:46px;max-height:120px;resize:none;line-height:1.35}
-.chat__note{margin:0;padding:0 16px 12px;font-size:11.5px;color:var(--ink-dim);line-height:1.35;flex:none} .chat__note a{color:inherit}
-@media (max-width:1000px){.chat__form .btn{min-height:46px}}
-@media (min-width:1001px){body[data-view="build"] .chatfab{right:24px;bottom:24px}}
-@media (min-width:1200px){
-  .chat{left:auto;top:var(--hdr);width:400px;height:auto;border-top:0;border-left:var(--bw) solid var(--black);box-shadow:-6px 0 0 var(--pink)}
-  body[data-view="build"].chat-open .bld{margin-right:400px}
-  body[data-view="build"].chat-open .bsum__ctl{grid-template-columns:1fr}          /* the trip column is narrower with the chat beside it */
-}
-/* the chat sheet covers the bottom of the screen on a phone, so messages go to the top while it is open */
-@media (max-width:1199px){body[data-view="build"].chat-open #toast-root{bottom:auto;top:calc(var(--hdr) + 8px);flex-direction:column}}
-@media (max-width:1000px){body[data-view="build"] #toast-root{left:14px;transform:none;align-items:flex-start;max-width:calc(100vw - 150px)}}
-@media print{.chat,.chatfab{display:none!important}}
+/* ---------- removing and adding stops: worded buttons where the stop is, not a row of unlabelled icons ---------- */
+.stopc__acts{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);padding:0 var(--s-3) var(--s-3)}
+.stopc__acts .btn{box-shadow:3px 3px 0 var(--shadow-on)}
+.stopc__rm{--shadow-on:var(--pink);border-color:var(--black)} .stopc__rm:hover{background:var(--pink)}
+.stopc__move{display:inline-flex;align-items:center;gap:5px;margin-left:auto}
+.stopc__movelbl{font-size:10.5px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim)}
+.stopc__picks .pick{cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:var(--lime);border:2px solid var(--black);color:var(--black);padding:3px 10px;min-height:30px;font-family:inherit;font-weight:700}
+.stopc__picks .pick b{font-size:14px;line-height:1} .stopc__picks .pick:hover,.stopc__picks .pick:focus-visible{background:var(--pink)}
+.blockc__rm{background:transparent;color:var(--paper);border-color:var(--paper);box-shadow:none} .blockc__rm:hover{background:var(--pink);color:var(--black);border-color:var(--pink);box-shadow:none;transform:none}
+.addbar__btn{align-self:flex-start}
+.addstop{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;margin-top:var(--s-4);padding:var(--s-4) var(--s-3);background:transparent;border:var(--bw) dashed var(--black);color:var(--black);cursor:pointer;text-align:center;font-family:inherit}
+.addstop b{font-weight:900;font-size:16px;letter-spacing:.08em;text-transform:uppercase} .addstop span{font-size:13px;font-weight:500;color:var(--ink-dim);max-width:34em}
+.addstop:hover,.addstop:focus-visible{background:var(--lime);border-style:solid}
+.legc__add{border-bottom-width:3px;font-size:12px;min-height:44px}
+/* the home page offers the trip you were building */
+.resume{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-3);margin-top:var(--s-5);padding:var(--s-3) var(--s-4);border:var(--bw) solid var(--lime);color:var(--paper);max-width:560px}
+.resume>div{display:flex;flex-direction:column;gap:2px;min-width:0} .resume .over{color:var(--lime)} .resume b{font-weight:900;font-size:15px;overflow-wrap:anywhere} .resume .fine{color:var(--ink-dim-on-black)}
+@media (max-width:560px){.stopc__move{margin-left:0;width:100%}.stopc__acts .btn{flex:1 1 140px}.stopc__picks .pick{min-height:44px}}
+
+/* ---------- quick tour ---------- */
+.linkbtn{background:none;border:0;padding:0 0 0 4px;font:inherit;font-weight:900;text-decoration:underline;color:inherit;cursor:pointer;min-height:44px}
+.tour{position:fixed;inset:0;z-index:300;pointer-events:none}
+.tour__dim{position:absolute;inset:0;background:rgba(10,10,10,.62);pointer-events:auto}
+.tour__ring{position:fixed;border:3px solid var(--lime);box-shadow:0 0 0 9999px rgba(10,10,10,.62);pointer-events:none;transition:left .25s,top .25s,width .25s,height .25s}
+.tour__card{position:fixed;pointer-events:auto;background:var(--bone);color:var(--black);border:var(--bw) solid var(--black);box-shadow:8px 8px 0 var(--pink);padding:var(--s-4) var(--s-4) var(--s-3);max-height:calc(100vh - 24px);overflow:auto}
+.tour__card h2{font-size:26px;margin:4px 0 8px} .tour__card p{margin:0 0 10px;font-size:14.5px;line-height:1.5} .tour__n{color:var(--ink-dim)}
+.tour__wait{font-weight:700;background:var(--lime);border:2px solid var(--black);padding:6px 10px}
+.tour__off{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;margin:0 0 10px;min-height:32px} .tour__off input{width:18px;height:18px;accent-color:var(--black)}
+.tour__btns{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
+.tour__skip{margin-left:auto;background:none;border:0;font:inherit;font-weight:700;font-size:13px;text-decoration:underline;cursor:pointer;color:var(--ink-dim);min-height:44px;padding:0 6px}
+@media (prefers-reduced-motion:reduce){.tour__ring{transition:none}}
+@media (max-width:699px){.tour__card{box-shadow:5px 5px 0 var(--pink)} .tour__card h2{font-size:22px} .tour__off{min-height:44px}}
+@media print{.tour{display:none!important}}
+
+/* ---------- changing a trip you already sent ---------- */
+.revbar{display:flex;flex-wrap:wrap;gap:var(--s-3);align-items:center;justify-content:space-between;padding:var(--s-3) var(--s-4);background:var(--pink);color:var(--black);border:var(--bw) solid var(--black);box-shadow:5px 5px 0 var(--black)}
+.revbar__t{display:flex;flex-direction:column;gap:3px;flex:1 1 260px;min-width:0} .revbar__t b{font-weight:900;font-size:15px} .revbar__t .fine{color:var(--black);font-size:12.5px}
+.revbar__b{display:flex;gap:var(--s-2);flex-wrap:wrap} .revbar .btn--ghost{border-color:var(--black);color:var(--black)} .revbar .btn--ghost:hover{background:var(--black);color:var(--paper)}
+.revbar .btn--pink{background:var(--lime)} .revbar .btn[disabled]{opacity:.5}
+.revchg{background:var(--lime);border:var(--bw) solid var(--black);padding:10px 14px;margin:var(--s-3) 0} .revchg ul{margin:6px 0 0;padding-left:18px;font-weight:700;font-size:14px;line-height:1.45}

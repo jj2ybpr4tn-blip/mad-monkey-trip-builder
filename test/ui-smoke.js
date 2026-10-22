@@ -11,7 +11,7 @@
     // What is drawn on screen, not the address: an action that changes the address but leaves the screen as it was is a dead button.
     var mapView = (document.querySelector('#bmap svg') || {}).getAttribute ? (document.querySelector('#bmap svg').getAttribute('viewBox') || '') : '';
     return [a ? djb(a.innerHTML) : 0, mapView, document.querySelectorAll('.modal').length, document.querySelectorAll('.toast').length, Math.round(window.scrollY / 40),
-      document.body.getAttribute('data-view'), document.body.classList.contains('chat-open')].join('|');
+      document.body.getAttribute('data-view'), document.body.classList.contains('touring')].join('|');
   }
   var TRIP = '#/build/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10&f=20&b=1500';
   var SCENES = [

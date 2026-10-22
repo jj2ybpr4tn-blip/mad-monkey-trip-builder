@@ -12,7 +12,7 @@ const iso = (d = new Date()) => d.toISOString().slice(0, 10);
 
 const H: Record<string, (r: Request) => Promise<Response>> = {};
 async function load(name: string) { let h; Deno.serve = (x) => { h = x; return {}; }; await import(`./functions/${name}/index.ts`); H[name] = h; }
-for (const n of ["trip-builder-request", "trip-builder-admin", "trip-builder-status", "trip-builder-pay", "charge-trip-builder-payments"]) await load(n);
+for (const n of ["trip-builder-request", "trip-builder-admin", "trip-builder-status", "trip-builder-pay", "charge-trip-builder-payments", "trip-builder-revise"]) await load(n);
 
 let pass = 0, fail = 0;
 const ok = (name: string, c: unknown, extra = "") => { if (c) { pass++; console.log("PASS  " + name); } else { fail++; console.log("FAIL  " + name + (extra ? "  -> " + extra : "")); } };
@@ -30,7 +30,7 @@ const text = (m) => (m ? m.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") : 
 
 async function newTrip(startIn: number, email: string, card = true) {
   const p = JSON.parse(JSON.stringify(base)); p.trip.start = iso(new Date(Date.now() + startIn * 86400000)); p.contact.email = email;
-  const r = await send("trip-builder-request", p); const ref = r.b.ref;
+  const r = await send("trip-builder-request", p); const ref = r.b.ref; globalThis.__guestKey = r.b.key;
   await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_deposit", ref, origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_dep_" + ref, customer: card ? "cus_test_1" : null, customer_details: { email } });
   if (!card) { row(ref).stripe_payment_method_id = null; row(ref).stripe_customer_id = null; }
   return ref;
@@ -198,6 +198,78 @@ async function approve(ref: string, amount: number) {
   const [a, b] = await Promise.all([send("trip-builder-pay", { ref, k: key, plan: "later" }), send("trip-builder-pay", { ref, k: key, plan: "later" })]);
   const after = outbox().filter((m) => /booked/i.test(m.subject) && m.to.includes("double@example.com")).length;
   ok("two taps at once both succeed but the booking email goes out once", a.s === 200 && b.s === 200 && a.b.booked && b.b.booked && after - before === 1, `emails: ${after - before}`);
+}
+
+/* ---- 8. the guest changes the trip after sending it ---- */
+{
+  setDay(0);
+  const SITE = "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/";
+  const LINK = (n: number) => SITE + "i=s.hanoi.4~s.hoi-an.4&d=2027-03-01&n=" + n;
+  const ewan = () => outbox().filter((m) => m.to.includes("ewan@madmonkeyhostels.com")).pop();
+  const change = (ref: string, key: unknown, n: number, extra: Record<string, unknown> = {}) => send("trip-builder-revise", {
+    ref, k: key, note: "Dropped Saigon.", changes: ["Removed Ho Chi Minh City", "Hoi An: 4 nights"],
+    trip: { ...base.trip, link: LINK(n), route: "Hanoi → Hoi An", days: 9, nights: 8, stops: ["hanoi", "hoi-an"], estTotalUsd: 420, start: "2027-03-01" },
+    summary: base.summary, crewText: "CREW TEXT v" + n, itinerary: "ITIN " + n, ...extra });
+  const ref = await newTrip(120, "rev@example.com"), key = globalThis.__guestKey;
+  const oldRoute = row(ref).route, oldDays = row(ref).days, dep = row(ref).deposit_amount;
+  ok("sending a trip hands the guest their key, and the deposit email links to their trip page with it", !!key && new RegExp("#/trip/" + ref + "\\?k=").test(last("rev@example.com").html.replace(/&amp;/g, "&")));
+  ok("a wrong, missing or CREW key can't change the trip", (await change(ref, key + "x", 1)).s === 401 && (await change(ref, undefined, 1)).s === 401
+    && (await change(ref, new URL((await send("trip-builder-admin", { action: "link", ref, password: "test-admin-pw" })).b.url.replace("#", "")).searchParams.get("k"), 1)).s === 401);
+  ok("a link to someone else's site is refused", (await change(ref, key, 1, { trip: { ...base.trip, link: "https://evil.example/#/build/i=s.hanoi.4" } })).s === 400);
+  ok("a trip with no stops is refused", (await change(ref, key, 1, { trip: { ...base.trip, link: LINK(1), route: "", days: 0 } })).s === 400);
+  ok("nothing changed while those were refused", row(ref).route === oldRoute && !row(ref).payload.rev);
+
+  const n0 = outbox().length, c = await change(ref, key, 1);
+  ok("changing a trip the crew is yet to look at replaces it on the SAME request", c.s === 200 && c.b.ok && c.b.rev === 1 && c.b.status === "submitted" && row(ref).route === "Hanoi → Hoi An" && row(ref).days === 9 && row(ref).trip_link === LINK(1) && row(ref).start_date === "2027-03-01" && row(ref).est_total_usd === 420);
+  ok("same reference, same deposit, still paid, no second row", __db.trip_builder_requests.filter((r) => r.ref === ref).length === 1 && row(ref).deposit_amount === dep && !!row(ref).deposit_paid_at);
+  ok("the crew's text and itinerary are the new version", /CREW TEXT v1/.test(row(ref).itinerary) && row(ref).payload.rev === 1 && row(ref).payload.history.length === 1 && row(ref).payload.history[0].was.route === oldRoute);
+  const upd = ewan();
+  ok("the crew gets ONE UPDATED email that says what moved, what it was before, the guest's note, and has the approve buttons",
+    outbox().length - n0 === 2 && /^UPDATED \(v1\)/.test(upd.subject) && /Removed Ho Chi Minh City/.test(text(upd)) && text(upd).includes(oldRoute) && /Dropped Saigon/.test(text(upd)) && /changed their plan after sending it/.test(text(upd)) && /#\/crew\/MM-/.test(upd.html) && /do=approve/.test(upd.html.replace(/&amp;/g, "&")), upd && upd.subject);
+  ok("the guest is told we've got their changes, with a link back to their trip page", /We've got your changes/.test(last("rev@example.com").subject) && /Removed Ho Chi Minh City/.test(text(last("rev@example.com"))) && /\?k=/.test(last("rev@example.com").html));
+  const n1 = outbox().length; const same = await change(ref, key, 1, { note: "" });
+  ok("sending the very same trip again changes nothing and emails nobody", same.s === 200 && same.b.unchanged === true && outbox().length === n1 && row(ref).payload.rev === 1);
+
+  const st = await send("trip-builder-status", { ref, k: key }, "GET"), stn = await send("trip-builder-status", { ref }, "GET");
+  ok("the status page says they can edit (with their key), what version it is, and the party size; no key, no editing", st.b.canEdit === true && st.b.rev === 1 && st.b.people === 2 && stn.b.canEdit === false && stn.b.keyed === false);
+  const ak = new URL((await send("trip-builder-admin", { action: "link", ref, password: "test-admin-pw" })).b.url.replace("#", "")).searchParams.get("k");
+  const view = await send("trip-builder-admin", { action: "view", ref, key: ak });
+  ok("the crew's review page is told the version and what the guest changed", view.b.rev === 1 && view.b.guestRevision.rev === 1 && view.b.guestRevision.changes.length === 2 && view.b.guestRevision.note === "Dropped Saigon." && view.b.guestRevision.was.route === oldRoute);
+  const stale = await send("trip-builder-admin", { action: "balance", ref, key: ak, amount: 300, rev: 0 });
+  ok("approving a version the guest has since changed is refused, so nobody approves a plan they haven't seen", stale.s === 409 && stale.b.stale === true && row(ref).status === "submitted");
+  const good = await send("trip-builder-admin", { action: "balance", ref, key: ak, amount: 300, rev: 1 });
+  ok("approving the current version works", good.s === 200 && row(ref).status === "ready" && row(ref).balance_amount === 300);
+
+  // changing it after the crew approved: the approval and the price are withdrawn
+  const n2 = outbox().length, w = await change(ref, key, 2, { note: "One more tweak.", changes: ["Hanoi: 5 nights"] });
+  ok("changing an approved trip puts it back to 'checking' and withdraws the price", w.s === 200 && w.b.withdrawn === true && w.b.status === "checking" && row(ref).status === "checking" && row(ref).balance_amount === null && row(ref).pay_plan === null && row(ref).payload.rev === 2);
+  ok("the crew is told the approval is withdrawn; the guest is told nothing is due", /withdrawn/.test(text(ewan())) && /UPDATED \(v2\)/.test(ewan().subject) && /nothing is due|Nothing is due/.test(text(last("rev@example.com"))) && outbox().length - n2 === 2);
+  ok("the guest can't pay the withdrawn price", (await send("trip-builder-pay", { ref, k: key, plan: "now" })).s === 409);
+
+  // a crew edit is replaced by the guest's new version
+  const ck = ak;
+  await send("trip-builder-admin", { action: "revise", ref, key: ck, note: "We tweaked it.", trip: { link: "https://x.test/#/build/i=s.hanoi.5", route: "Hanoi", days: 6 }, summary: base.summary });
+  ok("(a crew edit exists)", !!row(ref).payload.revision);
+  await change(ref, key, 3);
+  ok("and the guest's next version replaces the crew's edit", !row(ref).payload.revision && !row(ref).payload.original && row(ref).payload.rev === 3 && row(ref).trip_link === LINK(3));
+
+  // booked and declined trips can't be changed here
+  row(ref).status = "approved"; const bk = await change(ref, key, 4);
+  ok("a booked trip can't be changed here: it tells them to message the crew", bk.s === 409 && bk.b.locked === true && /booked/.test(bk.b.error) && row(ref).trip_link === LINK(3));
+  row(ref).status = "declined"; ok("a declined trip can't be changed", (await change(ref, key, 5)).s === 409);
+  ok("a booked trip shows no 'edit' on the status page", (row(ref).status = "approved", (await send("trip-builder-status", { ref, k: key }, "GET")).b.canEdit === false));
+  row(ref).status = "checking";
+
+  // a runaway script
+  row(ref).payload.rev = 30; ok("after 30 changes it stops, so the crew isn't emailed forever", (await change(ref, key, 6)).s === 409);
+
+  // before the deposit is paid, nobody has seen the trip: replace it quietly, and the crew's first email is the new one
+  const p = JSON.parse(JSON.stringify(base)); p.trip.start = iso(new Date(Date.now() + 120 * 86400000)); p.contact.email = "unpaid@example.com";
+  const un = await send("trip-builder-request", p), uref = un.b.ref, n3 = outbox().length;
+  const uc = await change(uref, un.b.key, 7);
+  ok("before the deposit is paid the trip is replaced quietly: nobody is emailed", uc.s === 200 && row(uref).status === "pending_payment" && row(uref).route === "Hanoi → Hoi An" && outbox().length === n3);
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_deposit", ref: uref, origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_dep_" + uref, customer: "cus_test_1", customer_details: { email: "unpaid@example.com" } });
+  ok("when the deposit lands the crew's first email is the changed version, not the old one", /Hanoi → Hoi An/.test(ewan().subject + text(ewan())) && !/^UPDATED/.test(ewan().subject));
 }
 
 console.log(`\n${pass}/${pass + fail} checks passed`);
