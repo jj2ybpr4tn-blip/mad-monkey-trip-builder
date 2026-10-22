@@ -13,9 +13,16 @@ grep -rl "npm:@supabase/supabase-js@2/cors" "$TMP/functions" | while read -r f; 
   sed -i.bak "s#npm:@supabase/supabase-js@2/cors#$rel#" "$f" && rm -f "$f.bak"
 done
 cp "$HERE"/*.ts "$HERE"/guest-payload.json "$HERE"/seed.json "$TMP"/
+[ -d "$REPO/public/trip-builder" ] && cp -R "$REPO/public/trip-builder" "$TMP/builder"     # the real builder code, for the chat check
 cat > "$TMP/import_map.json" <<JSON
 { "imports": { "https://esm.sh/@supabase/supabase-js@2.45.0": "$TMP/supabase-fake.ts", "https://esm.sh/stripe@18.5.0": "$TMP/stripe-fake.ts" } }
 JSON
 cd "$TMP"
 MOCK_TAG=-pay ADMIN_PASSWORD=test-admin-pw STRIPE_SECRET_KEY=sk_test_fake SUPABASE_URL=http://fake.supabase.test SUPABASE_SERVICE_ROLE_KEY=fake-key RESEND_API_KEY=re_fake \
   deno run --no-check --no-lock -A --import-map=import_map.json e2e.ts
+# The AI trip chat: the real builder code -> the real Edge Function -> a fake Claude on localhost.
+if [ -f "$TMP/functions/trip-builder-chat/index.ts" ] && [ -f "$TMP/builder/chat.js" ]; then
+  echo; echo "== AI trip chat =="
+  MOCK_TAG=-chat ADMIN_PASSWORD=test-admin-pw SUPABASE_URL=http://fake.supabase.test SUPABASE_SERVICE_ROLE_KEY=fake-key \
+    deno run --no-check --no-lock -A --import-map=import_map.json chat-e2e.ts
+fi

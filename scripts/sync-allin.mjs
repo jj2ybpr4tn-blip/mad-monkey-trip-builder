@@ -17,7 +17,7 @@ if (!target) { console.error('usage: node scripts/sync-allin.mjs <path to mm-squ
 const DEST = path.join(path.resolve(target), 'public', 'trip-builder');
 if (!fs.existsSync(DEST)) { console.error('No public/trip-builder in ' + target); process.exit(2); }
 
-const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'styles.css', 'crew.css'];
+const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'chat.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-chat.js', 'styles.css', 'crew.css'];
 const DATA = fs.readdirSync(path.join(ROOT, 'data')).filter((f) => f.endsWith('.js')).map((f) => 'data/' + f);
 const changes = [];
 function put(rel, text) {
@@ -45,7 +45,7 @@ const aroot = path.join(ROOT, 'assets');
 
 // config.js: add any key the live copy doesn't have yet, never touch the ones it has
 const cfgPath = path.join(DEST, 'config.js'), live = fs.readFileSync(cfgPath, 'utf8'), mine = fs.readFileSync(path.join(ROOT, 'config.js'), 'utf8');
-const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '50' };
+const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", CHAT_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-chat'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '50' };
 let cfg = live;
 const missingKeys = Object.keys(ALLIN_DEFAULTS).filter((k) => !new RegExp('^\\s*' + k + '\\s*:', 'm').test(cfg));
 if (missingKeys.length) {
@@ -61,6 +61,13 @@ if (missingKeys.length) {
   try { new Function('window', cfg); } catch (e) { console.error('config.js would not parse after the change: ' + e.message); process.exit(4); }
 }
 if (cfg !== live && !check) fs.writeFileSync(cfgPath, cfg);
+
+// The AI chat's system prompt and tools live with its Edge Function (the browser never gets them): keep that copy identical to chat-spec.json
+const FN_SPEC = path.join(path.resolve(target), 'supabase', 'functions', 'trip-builder-chat', 'chat-spec.json');
+if (fs.existsSync(path.dirname(FN_SPEC))) {
+  const text = fs.readFileSync(path.join(ROOT, 'chat-spec.json'), 'utf8'), prev = fs.existsSync(FN_SPEC) ? fs.readFileSync(FN_SPEC, 'utf8') : null;
+  if (prev !== text) { changes.push((prev === null ? 'new      ' : 'changed  ') + 'supabase/functions/trip-builder-chat/chat-spec.json'); if (!check) fs.writeFileSync(FN_SPEC, text); }
+}
 
 // every asset index.html asks for must exist there
 const missing = [...html.matchAll(/(?:src|href)="((?!https?:|\/\/|#|data:|\.\.\/)[^"?]+\.(?:js|css|png|jpg|svg))/g)].map((m) => m[1]).filter((f) => !fs.existsSync(path.join(DEST, f)) && !changes.some((c) => c.endsWith(f)));

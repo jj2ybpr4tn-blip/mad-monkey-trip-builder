@@ -36,7 +36,13 @@
     try { (window.dataLayer = window.dataLayer || []).push({ event: 'mm_' + name, props: props || {} }); } catch (e) { /* analytics is optional */ }
     if (C.EVENT_ENDPOINT && navigator.sendBeacon) { try { navigator.sendBeacon(C.EVENT_ENDPOINT, new Blob([JSON.stringify({ n: name, p: props || {}, s: SID })], { type: 'application/json' })); } catch (e) { /* ignore */ } }
   }
-  function toast(msg) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; toastRoot.appendChild(t); setTimeout(function () { t.remove(); }, 2400); }
+  // A message at the bottom of the screen. With {undo: true} it carries an Undo button and stays a little longer.
+  function toast(msg, o) {
+    var t = document.createElement('div'), m = document.createElement('span'); t.className = 'toast' + (o && o.undo ? ' toast--act' : ''); m.textContent = msg; t.appendChild(m);
+    if (o && o.undo) { var b = document.createElement('button'); b.type = 'button'; b.setAttribute('data-act', 'undo'); b.textContent = 'Undo'; t.appendChild(b); }
+    while (toastRoot.children.length > 2) toastRoot.removeChild(toastRoot.firstChild);   // never more than three at once
+    toastRoot.appendChild(t); setTimeout(function () { t.remove(); }, o && o.undo ? 6500 : 2400);
+  }
   function copy(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function () { return true; }, fallback);
     return Promise.resolve(fallback());
@@ -51,12 +57,41 @@
   app.rerender = function () { if (app.view === 'build') refreshBuilder(); else if (app.view === 'home') renderHome(); };
 
   /* ---------- state ---------- */
-  function persist() { store('mm-trip', { state: app.state, cur: app.cur }); if (app.view === 'build') history.replaceState(null, '', '#/build/' + MM.encodeState(app.state)); }
+  /* ---------- undo / redo: every change to the trip keeps the version before it, so anything can be taken back (the AI's changes, "Start over", a surprise...) ---------- */
+  var HIST_MAX = 60, H = app.hist = { past: [], future: [], cur: null, busy: false };
+  function snapState(st) { return JSON.stringify({ items: st.items, start: st.start, pref: st.pref, legPick: st.legPick, fund: st.fund, crew: st.crew, budget: st.budget, month: st.month }); }
+  function recordHist() {
+    var sn = snapState(app.state); if (H.cur === null) { H.cur = sn; return; } if (sn === H.cur) return;
+    if (!H.busy) { H.past.push(H.cur); if (H.past.length > HIST_MAX) H.past.shift(); H.future = []; }
+    H.cur = sn;
+  }
+  function syncHist() { var sn = snapState(app.state); if (sn !== H.cur) { H.cur = sn; H.past = []; H.future = []; } }   // a trip opened from a link starts with a clean history
+  function stepHist(dir) {
+    var from = dir < 0 ? H.past : H.future, to = dir < 0 ? H.future : H.past; if (!from.length || app.view !== 'build') return null;
+    var was = H.cur, next = from.pop(); to.push(was); H.busy = true; var back = JSON.parse(next);
+    app.state = Object.assign(MM.defaultState(), back); app.auto = false; persist(); H.cur = next; H.busy = false; refreshBuilder();
+    return MM.edit.describe(JSON.parse(was), back);
+  }
+  app.undo = function () { var d = stepHist(-1); toast(d ? 'Undone' + (d.length ? ': ' + d[0] : '') : 'Nothing to undo'); return !!d; };
+  // Take back several steps at once (a chat turn can make more than one change) and say so once.
+  app.undoMany = function (n) {
+    var was = H.cur, k = 0; while (k < n && stepHist(-1)) k++;
+    var d = k ? MM.edit.describe(JSON.parse(was), JSON.parse(H.cur)) : null; toast(k ? 'Undone' + (d && d.length ? ': ' + d[0] : '') : 'Nothing to undo'); return k;
+  };
+  app.redo = function () { var d = stepHist(1); toast(d ? 'Redone' + (d.length ? ': ' + d[0] : '') : 'Nothing to redo'); return !!d; };
+  // Replace the trip with an edited one (from the controls or the AI) and offer an Undo.
+  app.commit = function (state, msg, quiet) { app.state = state; app.auto = false; persist(); refreshBuilder(); if (!quiet) toast(msg, { undo: true }); };
+  function applyEdit(ops) {
+    var res = MM.edit.apply(app.state, ops); if (!res.ok) { toast(res.errors[0].replace(/^Change \d+ \([a-z_]+\): /, '')); return false; }
+    app.commit(res.state, res.changes[0]); return true;
+  }
+  app.applyEdit = applyEdit;
+  function persist() { recordHist(); store('mm-trip', { state: app.state, cur: app.cur }); if (app.view === 'build') history.replaceState(null, '', '#/build/' + MM.encodeState(app.state)); }
   function defaultActs(p, n) {
     var list = MM.actsAt(p).filter(function (a) { return a.star && !(a.multi); });
     return list.slice(0, n >= 3 ? 2 : 1).map(function (a) { return a.id; });
   }
-  function stopFor(p, n) { n = n || P[p].sug; return { kind: 'stop', p: p, n: n, acts: defaultActs(p, n) }; }
+  function stopFor(p, n) { return MM.edit.newStop(p, n); }
   function mutate(fn, opts) { app.auto = false; fn(app.state); persist(); refreshBuilder(opts); }
 
   /* ============================================================
@@ -82,6 +117,7 @@
       if (r.rest) { var st = MM.decodeState(r.rest); if (st.items.length || r.rest.indexOf('i=') === 0) app.state = st; }
       else { var saved = store('mm-trip'); if (saved && saved.state && !app.state.items.length) app.state = Object.assign(MM.defaultState(), saved.state); }
     }
+    if (r.view === 'build') syncHist();
     app.view = r.view; document.body.setAttribute('data-view', r.view);
     if (r.view === 'build' && app.state.items.length) history.replaceState(null, '', '#/build/' + MM.encodeState(app.state));
     $$('.navbtn[data-go]').forEach(function (b) { b.setAttribute('aria-current', b.getAttribute('data-go') === r.view ? 'true' : 'false'); });
@@ -331,7 +367,9 @@
       Object.keys(groups).map(function (c) { return '<optgroup label="' + MM.COUNTRIES[c].n + '">' + groups[c].map(function (id) { return '<option value="' + id + '">' + esc(P[id].n) + (P[id].partner ? ' (partner)' : '') + (P[id].opens ? ' (opens ' + P[id].opens.slice(8) + '/' + P[id].opens.slice(5, 7) + ')' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></div></div>' +
       nextBar(pl.segs[pl.segs.length - 1].last, 'Mad Monkey guests go next') + tweakRow() + '</div>';
 
-    /* itinerary */
+    /* edit bar + itinerary */
+    h += '<div class="editbar" role="toolbar" aria-label="Edit your trip"><button class="btn btn--sm btn--paper" data-act="undo" type="button"' + (H.past.length ? '' : ' disabled') + '>↶ Undo</button><button class="btn btn--sm btn--paper" data-act="redo" type="button"' + (H.future.length ? '' : ' disabled') + '>↷ Redo</button>' +
+      '<button class="btn btn--sm btn--pink" data-act="chat" type="button">Chat to change it</button><button class="btn btn--sm btn--paper" data-act="insertat" data-i="0" type="button">+ Stop at the start</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>';
     h += '<div class="itin">';
     pl.segs.forEach(function (sg, i) {
       h += sg.kind === 'allin' ? blockCard(sg, i, pl) : stopCard(sg, i, pl);
@@ -419,7 +457,7 @@
     var now = {}; (app._miss || []).forEach(function (x) { now[x.k] = x; });
     var prev = app._missSeen; app._missSeen = now; if (!prev) return;
     var fresh = Object.keys(now).filter(function (k) { return !prev[k] && now[k].kind === 'place'; })[0];
-    if (fresh) { var w = now[fresh].why.replace(/\.$/, ''); toast('Heads up: ' + w.charAt(0).toLowerCase() + w.slice(1) + '. Take a look below.'); }
+    if (fresh) { var w = now[fresh].why.replace(/\.$/, ''); toast('Heads up. ' + w + '. Take a look below.'); }
   }
 
   // optional extras (ui-extras.js), so the builder still renders if it fails to load
@@ -521,7 +559,7 @@
     var h = '<div class="stopc" id="stop' + i + '" data-seg="' + i + '" data-c="' + p.c + '"><div class="stopc__head"><div class="stopc__thumb photo">' + photo(MM.hostelImg(p.id)).replace('class="photo ', 'class="photo ').replace('<div', '<div style="width:100%;height:100%"') + '<span class="stopc__num">' + (i + 1) + '</span></div>' +
       '<div><h3><span class="dotc" data-c="' + p.c + '"></span>' + esc(p.n) + (p.partner ? ' ' + chip('Partner', 'pill--yellow') : '') + '</h3><div class="stopc__sub">' + sub.join(' · ') + '</div></div>' +
       '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
-      '<div class="stopc__tools"><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" type="button"></button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + '" type="button">×</button></div></div></div>';
+      '<div class="stopc__tools"><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" type="button"></button><button class="iconbtn" data-act="swapat" data-i="' + i + '" aria-label="Swap ' + esc(p.n) + ' for another stop" title="Swap for another stop" type="button">⇄</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + '" type="button">×</button></div></div></div>';
     if (chosen.length && !open) h += '<div class="stopc__picks">' + chosen.slice(0, 4).map(function (a) { return '<span class="pill pill--sm">' + esc(a.n) + '</span>'; }).join('') + (chosen.length > 4 ? '<span class="pill pill--sm pill--paper">+' + (chosen.length - 4) + ' more</span>' : '') + '</div>';
     h += galleryStrip(p.id) + reviewLine(p.id) + X('local', sg, i);
     h += '<button class="stopc__more" data-act="toggle" data-k="acts' + i + '" aria-expanded="' + open + '" type="button"><span>Things to do at ' + esc(p.n) + '</span><span class="count"><span class="pill pill--sm pill--paper">' + chosen.length + ' picked</span><b>' + (open ? '−' : '+') + '</b></span></button>';
@@ -549,7 +587,7 @@
 
   function legCard(leg) {
     var from = P[leg.from].n, to = P[leg.to].n, ex = MM.explainLeg(leg), whyOpen = !!app.open['why' + leg.index];
-    var h = '<div class="legc" id="leg' + leg.index + '"><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
+    var h = '<div class="legc" id="leg' + leg.index + '"><button class="legc__add" data-act="insertat" data-i="' + (leg.index + 1) + '" type="button">+ Add a stop in between</button><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
     leg.options.forEach(function (o) {
       h += '<button class="legopt" type="button" data-act="leg" data-i="' + leg.index + '" data-k="' + o.key + '" aria-pressed="' + (o.key === leg.key) + '">' + legIcon(leg, o) +
         '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.fare ? '<i class="live-pill">fare for your date</i>' : o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span>' + (o.fare && o.fare.max > o.fare.min ? '<span class="nt">Fares that day: ' + money(o.fare.min) + ' to ' + money(o.fare.max) + '. We have used the lowest.</span>' : '') + '</div><div class="tm">' + (o.fare ? '' : '~') + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
@@ -604,7 +642,12 @@
       if (d.kind === 'block') { var rr = routeLineFor(d.blockTrip, d._bk); title = 'ALL IN ' + d.blockTrip.n + (rr ? ' · ' + rr[1] : ''); if (rr && (d._bk === 1 || routeLineFor(d.blockTrip, d._bk - 1) !== rr)) extra = '<div class="note">' + esc(rr[2]) + '</div>'; }
       var travel = '';
       if (d.travel && (d.kind === 'stay' || d.kind === 'move')) { var l = d.travel, c = l.chosen; travel = '<div class="trv">' + MM.modeIcon(c.main) + esc(P[l.from].n) + ' → ' + esc(P[l.to].n) + ' · ' + esc(c.modeLabel) + ' · ' + hours(c.h) + ' · ' + (c.fare ? 'from ' : '~') + money(c.u) + '</div>'; }
-      var acts = (d.acts || []).map(function (x) { var a = MM.ACTS[x.id]; return '<li><b>' + x.part + '</b><span>' + esc(a.n) + (a.usd != null ? ' <span class="dim">(' + (a.est ? '~' : '') + money(a.usd) + ')</span>' : '') + '</span></li>'; }).join('');
+      var sg0 = pl.segs[d.si], editable = d.kind === 'stay' && sg0 && sg0.kind === 'stop';
+      var acts = (d.acts || []).map(function (x) {
+        var a = MM.ACTS[x.id], mv = editable && !(a.multi && a.multi.d > 1);
+        return '<li><b>' + x.part + '</b><span>' + esc(a.n) + (a.usd != null ? ' <span class="dim">(' + (a.est ? '~' : '') + money(a.usd) + ')</span>' : '') + '</span>' +
+          (mv ? '<span class="day__ctl"><select class="mvday" data-act="mvday" data-i="' + d.si + '" data-a="' + x.id + '" aria-label="Move ' + esc(a.n) + ' to another day">' + dayOptions(pl, d.si, d.n) + '</select><button class="iconbtn iconbtn--sm" data-act="dayrm" data-i="' + d.si + '" data-a="' + x.id + '" aria-label="Remove ' + esc(a.n) + ' from your trip" type="button">×</button></span>' : '') + '</li>';
+      }).join('') + (editable ? addTourRow(pl, d, sg0) : '');
       var ev = (d.notes || []).map(function (n) { return '<span class="ev">' + esc(n) + '</span>'; }).join('');
       var epic = d.epic ? '<div class="note">' + esc(d.epic.note || 'Multi-day experience, everything included in the tour price.') + '</div>' : '';
       h += '<div class="day day--' + d.kind + '"><div class="day__n"><b>' + d.n + '</b><span>day</span></div><div><h4>' + esc(title) + '</h4>' + (d.dateLabel ? '<div class="dl">' + d.dateLabel + '</div>' : '') + travel + (acts ? '<ul>' + acts + '</ul>' : '') + extra + epic + (d.note ? '<div class="note">' + esc(d.note) + '</div>' : '') + ev + '</div></div>';
@@ -621,6 +664,42 @@
     h += '<div class="costs__tot" style="margin-top:var(--s-3)"><span>Estimated total</span><span>~' + money(t.total) + '</span></div>' +
       '<p class="fine" style="margin-top:var(--s-2)">' + (t.est ? 'Includes estimated activity prices (marked est.). ' : '') + (t.payOnDay ? t.payOnDay + ' free-or-pay-on-the-day nights out not counted. ' : '') + 'Flights to and from Asia, insurance and visas are not included.' + (t.coveredBed ? ' Surf-camp packages cover ' + plural(t.coveredBed, 'bed night') + '.' : '') + '</p></div></div>';
     return h;
+  }
+
+  /* ============================================================
+     EDITING HELPERS: the day plan's controls and the "add / swap a stop" picker
+     ============================================================ */
+  function dayOptions(pl, si, cur) {
+    return pl.days.filter(function (d) { return d.si === si && d.kind === 'stay'; }).map(function (d) { return '<option value="' + d.n + '"' + (d.n === cur ? ' selected' : '') + '>Day ' + d.n + (d.dateLabel ? ' · ' + d.dateLabel : '') + '</option>'; }).join('');
+  }
+  function addTourRow(pl, d, sg) {
+    var have = (sg.acts || []).map(function (a) { return a.id; }), opts = MM.actsAt(sg.p).filter(function (a) { return have.indexOf(a.id) < 0 && !(a.multi && a.multi.d > 1); });
+    if (!opts.length) return '';
+    return '<li class="addrow"><select class="mvday addday" data-act="addtourday" data-i="' + d.si + '" data-d="' + d.n + '" aria-label="Add a tour on day ' + d.n + '"><option value="">+ Add a tour on this day…</option>' +
+      opts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.n) + (a.usd != null ? ' (' + (a.est ? '~' : '') + money(a.usd) + ')' : '') + '</option>'; }).join('') + '</select></li>';
+  }
+  // The places on either side of a gap in the trip (0 = before the first stop).
+  function nearFor(i) { var a = i > 0 && plan.segs[i - 1] ? plan.segs[i - 1].last : null, b = plan.segs[i] ? plan.segs[i].first : null; return [a, b]; }
+  // What it adds to the journey to visit `id` between the two places in `near`.
+  function detour(near, id) {
+    var a = near[0], b = near[1], ra = a ? MM.route(a, id, 'balanced') : null, rb = b ? MM.route(id, b, 'balanced') : null, rab = a && b ? MM.route(a, b, 'balanced') : null;
+    if ((a && !ra) || (b && !rb)) return null;
+    return { h: Math.max(0, (ra ? ra.h : 0) + (rb ? rb.h : 0) - (rab ? rab.h : 0)), u: Math.round((ra ? ra.u : 0) + (rb ? rb.u : 0) - (rab ? rab.u : 0)) };
+  }
+  function openPicker(o) {
+    var rows = MM.PLACE_ORDER.filter(function (id) { return !(o.exclude && o.exclude.indexOf(id) > -1); }).map(function (id) { return { id: id, d: o.near ? detour(o.near, id) : null }; });
+    // closest to the way first; places already in the trip go last (adding the same place twice is rarely what anyone wants)
+    var have = app.state.items.map(function (it) { return it.p; });
+    if (o.near && (o.near[0] || o.near[1])) rows.sort(function (x, y) { var nx = have.indexOf(x.id) > -1 ? 1000 : 0, ny = have.indexOf(y.id) > -1 ? 1000 : 0; return (nx + (x.d ? x.d.h : 999)) - (ny + (y.d ? y.d.h : 999)); });
+    var hint = o.near && (o.near[0] || o.near[1]) ? (o.near[0] && o.near[1] ? 'Closest to the way from ' + P[o.near[0]].n + ' to ' + P[o.near[1]].n + ' first, with what each adds to the journey.' : 'Easiest to get to first.') : 'Every Mad Monkey. They keep their nights, you pick the tours.';
+    openModal('<div class="modal__hd"><div><div class="over">Your trip</div><h2 class="disp">' + esc(o.title) + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd"><p class="qhelp" style="margin-bottom:var(--s-3)">' + hint + '</p>' +
+      '<div class="field"><label for="pksearch">Search</label><input class="input" id="pksearch" type="search" placeholder="a place or a country" autocomplete="off"></div>' +
+      '<ul class="picker">' + rows.map(function (r) {
+        var p = P[r.id], ex = o.near && r.d ? ' · adds ' + (r.d.h < 1 ? 'under an hour' : hours(r.d.h)) + ' and ' + money(Math.max(0, r.d.u)) : '';
+        return '<li data-q="' + esc((p.n + ' ' + MM.COUNTRIES[p.c].n).toLowerCase()) + '"><button class="picker__b" type="button" data-act="pickplace" data-p="' + r.id + '"' + (o.swap != null ? ' data-swap="' + o.swap + '"' : ' data-pos="' + o.position + '"') + '><i class="dotc" data-c="' + p.c + '"></i><span><b>' + esc(p.n) + (p.partner ? ' <em>partner</em>' : '') + '</b><small>' + esc(MM.COUNTRIES[p.c].n) + ' · dorm from ' + money(p.bed) + '/night · ' + p.sug + ' nights suggested' + ex + '</small></span></button></li>';
+      }).join('') + '</ul></div>', function (m) {
+        var q = $('#pksearch', m); q.addEventListener('input', function () { var v = q.value.trim().toLowerCase(); $$('.picker li', m).forEach(function (li) { li.hidden = !!v && li.getAttribute('data-q').indexOf(v) < 0; }); });
+      });
   }
 
   /* ============================================================
@@ -756,13 +835,19 @@
       case 'nmoff': { app.nmOff[el.getAttribute('data-k')] = 1; store('mm-nmoff', app.nmOff); track('miss_no', { k: el.getAttribute('data-k') }); refreshBuilder(); break; }
       case 'nights': mutate(function (s2) { var it = s2.items[i]; it.n = Math.max(1, Math.min(30, it.n + (+el.getAttribute('data-d')))); }); break;
       case 'move': { var d = +el.getAttribute('data-d'), j = i + d; if (j >= 0 && j < S.items.length) mutate(function (s2) { var tmp = s2.items[i]; s2.items[i] = s2.items[j]; s2.items[j] = tmp; s2.legPick = {}; }); break; }
-      case 'remove': mutate(function (s2) { s2.items.splice(i, 1); s2.legPick = {}; }); break;
+      case 'remove': { var nm = S.items[i] ? (S.items[i].kind === 'allin' ? 'ALL IN trip' : P[S.items[i].p].n) : 'stop'; mutate(function (s2) { s2.items.splice(i, 1); s2.legPick = {}; }); toast('Removed ' + nm, { undo: true }); break; }
+      case 'undo': app.undo(); { var tt = el.closest('.toast'); if (tt) tt.remove(); } break;
+      case 'redo': app.redo(); break;
+      case 'insertat': openPicker({ title: 'Add a stop', position: i + 1, near: nearFor(i) }); break;
+      case 'swapat': openPicker({ title: 'Swap ' + (S.items[i] && S.items[i].p ? P[S.items[i].p].n : 'this stop') + ' for…', swap: i, exclude: [S.items[i] && S.items[i].p] }); break;
+      case 'pickplace': { var pid = el.getAttribute('data-p'), sw = el.getAttribute('data-swap'), pos = +el.getAttribute('data-pos'); closeModal(); if (sw !== null && sw !== '') applyEdit([{ op: 'swap_stop', stop: +sw + 1, place: pid }]); else if (applyEdit([{ op: 'add_stop', place: pid, position: pos }])) { var nc = document.getElementById('stop' + (pos - 1)); if (nc) nc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } break; }
+      case 'dayrm': applyEdit([{ op: 'remove_tour', stop: i + 1, tour: el.getAttribute('data-a') }]); break;
       case 'toggle': { var key = el.getAttribute('data-k'); app.open[key] = !app.open[key]; refreshBuilder(); break; }
       case 'act': { var aid = el.getAttribute('data-a'); mutate(function (s2) { var arr = s2.items[i].acts, ix2 = arr.indexOf(aid); if (ix2 > -1) arr.splice(ix2, 1); else arr.push(aid); }); break; }
       case 'leg': mutate(function (s2) { s2.legPick = s2.legPick || {}; s2.legPick[i] = el.getAttribute('data-k'); }); break;
       case 'pref': mutate(function (s2) { s2.pref = el.getAttribute('data-v'); s2.legPick = {}; }); break;
       case 'crew': mutate(function (s2) { s2.crew = Math.max(0, Math.min(8, (s2.crew || 0) + (+el.getAttribute('data-d')))); }); break;
-      case 'reset': if (confirm('Clear this trip and start over?')) { app.state = MM.defaultState(); app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); } break;
+      case 'reset': { app.state = MM.defaultState(); app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); toast('Cleared your trip', { undo: true }); break; }
       case 'lead': if (app.review) app.review.open(); break;
       case 'share': openShare(); break;
       case 'story': openStory(); break;
@@ -784,6 +869,9 @@
     if (t.id === 'recodays') { app.recoDays = Math.max(4, Math.min(45, parseInt(t.value, 10) || 14)); autoReco(); if (app.auto) persist(); refreshBuilder(); }
     if (t.id === 'passport') { app.passport = t.value; store('mm-passport', t.value); refreshBuilder(); }
     if (t.id === 'addsel' && t.value) { var v = t.value; t.value = ''; addStop(v); }
+    var da = t.getAttribute && t.getAttribute('data-act');
+    if (da === 'mvday' && t.value) applyEdit([{ op: 'move_tour', stop: +t.getAttribute('data-i') + 1, tour: t.getAttribute('data-a'), day: +t.value }]);
+    if (da === 'addtourday' && t.value) { var si1 = +t.getAttribute('data-i') + 1; applyEdit([{ op: 'add_tour', stop: si1, tour: t.value }, { op: 'move_tour', stop: si1, tour: t.value, day: +t.getAttribute('data-d') }]); }
   });
   document.addEventListener('input', function (e) {
     if (e.target.id === 'budget') { var bv = +e.target.value; app.state.budget = bv; var bl = $('label[for=budget]'); if (bl) bl.textContent = 'Budget target: ' + (bv ? money(bv) : 'not set'); clearTimeout(app._bt); app._bt = setTimeout(function () { persist(); refreshBuilder(); }, 160); }
@@ -813,6 +901,11 @@
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modalRoot.firstChild) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    var k = (e.key || '').toLowerCase(); if (!(e.metaKey || e.ctrlKey) || (k !== 'z' && k !== 'y') || app.view !== 'build') return;
+    var tg = e.target; if (tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.tagName === 'SELECT' || tg.isContentEditable)) return;   // typing keeps its own undo
+    e.preventDefault(); if (k === 'y' || e.shiftKey) app.redo(); else app.undo();
+  });
 
   app.util = { addStop: function (id) { addStop(id); }, ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
   var navAllIn = $('#nav-allin'); if (navAllIn && MM.allInBase) navAllIn.href = MM.allInBase();   // the ALL IN site, wherever this copy lives

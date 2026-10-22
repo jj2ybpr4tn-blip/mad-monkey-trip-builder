@@ -270,6 +270,19 @@
         var rx = (x.multi ? 0 : x.dows ? 1 : x.slot === 'full' ? 2 : x.slot === 'half' ? 3 : 4), ry = (y.multi ? 0 : y.dows ? 1 : y.slot === 'full' ? 2 : y.slot === 'half' ? 3 : 4);
         return rx - ry;
       });
+      // Tours the traveller has put on a day go first, wherever that day is; everything else flows around them.
+      var pins = (items[s.idx] && items[s.idx].pins) || {};
+      var pinned = order.filter(function (a) { return pins[a.id] && !(a.multi && a.multi.d > 1) && days[pins[a.id] - 1]; });
+      order = order.filter(function (a) { return pinned.indexOf(a) < 0; });
+      pinned.forEach(function (a) {
+        var d = days[pins[a.id] - 1], sl = d.slots, part = 'Full day', free = true;
+        if (a.slot === 'full') { free = sl.am && sl.pm; sl.am = sl.pm = false; }
+        else if (a.slot === 'half') { if (sl.pm) { part = 'Afternoon'; sl.pm = false; } else if (sl.am) { part = 'Morning'; sl.am = false; } else { part = 'Afternoon'; free = false; } }
+        else { part = 'Evening'; free = sl.eve; sl.eve = false; }
+        d.acts.push({ id: a.id, part: part, pinned: true });
+        if (!free) out.warnings.push({ t: 'warn', p: s.p, m: a.n + ' is on day ' + d.n + ', which is already taken up by travel or another plan. Move one of them for a lighter day.' });
+        if (start && a.dows && d.date && a.dows.indexOf(d.date.getUTCDay()) < 0) out.warnings.push({ t: 'warn', p: s.p, m: a.n + ' runs ' + a.when + ', but day ' + d.n + ' is a ' + DOWN[d.date.getUTCDay()] + '. Pick a day it runs.' });
+      });
       order.forEach(function (a) {
         var placed = false;
         function tryDay(d, needDow) {
@@ -983,7 +996,7 @@
     if (!codeOf) buildCodes();
     var parts = (st.items || []).map(function (it) {
       if (it.kind === 'allin') return 'a.' + it.trip;
-      return 's.' + it.p + '.' + it.n + (it.acts && it.acts.length ? '.' + it.acts.map(function (id) { return codeOf[id] || encodeURIComponent(id); }).join('+') : '');
+      return 's.' + it.p + '.' + it.n + (it.acts && it.acts.length ? '.' + it.acts.map(function (id) { return (codeOf[id] || encodeURIComponent(id)) + (it.pins && it.pins[id] ? '@' + it.pins[id] : ''); }).join('+') : '');
     });
     var q = ['i=' + parts.join('~')];
     if (st.start) q.push('d=' + st.start);
@@ -1006,8 +1019,14 @@
       else if (f[0] === 's' && P()[f[1]]) {
         var n = Math.max(1, Math.min(30, parseInt(f[2], 10) || 2));
         if (!idOf) buildCodes();
-        var acts = (f[3] ? f[3].split('+').map(function (tok) { return idOf[tok] || decodeURIComponent(tok); }) : []).filter(function (id) { return MM.ACTS[id] && MM.ACTS[id].p === f[1]; });
-        st.items.push({ kind: 'stop', p: f[1], n: n, acts: acts });
+        var pins = {}, acts = (f[3] ? f[3].split('+').map(function (tok) {
+          var at = tok.split('@'), id = idOf[at[0]] || decodeURIComponent(at[0]), d = parseInt(at[1], 10);   // "code@3": pinned to the 3rd day of the stop
+          if (d >= 1 && d <= n) pins[id] = d;
+          return id;
+        }) : []).filter(function (id) { return MM.ACTS[id] && MM.ACTS[id].p === f[1]; });
+        Object.keys(pins).forEach(function (id) { if (acts.indexOf(id) < 0) delete pins[id]; });
+        var item = { kind: 'stop', p: f[1], n: n, acts: acts }; if (Object.keys(pins).length) item.pins = pins;
+        st.items.push(item);
       }
     });
     if (map.d && parseDate(map.d)) st.start = map.d;

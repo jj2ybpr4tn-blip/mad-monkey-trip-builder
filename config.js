@@ -54,6 +54,10 @@ window.MM_CONFIG = {
   // Optional. The Mad Monkey app: App Store / Google Play / smart link. When set, trip packs and the crew-checked page show a "Get the app" card.
   APP_URL: '',
 
+  // Optional. The AI trip chat ("Chat to change it"): POST { messages } -> { content, stop_reason }. With the ALL IN backend it is the trip-builder-chat function.
+  // Blank = the quick helper, which understands short instructions ("remove Hoi An") without any AI. See docs/CHAT.md.
+  CHAT_ENDPOINT: '',
+
   // Optional privacy link shown under the lead form.
   PRIVACY_URL: ''
 };
