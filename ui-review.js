@@ -23,6 +23,8 @@
   var subs = function () { return u.store('mm-subs') || []; };
   var saveRec = function (rec) { var l = subs().filter(function (s) { return s.ref !== rec.ref; }); l.unshift(rec); u.store('mm-subs', l.slice(0, 20)); };
   var payEndpoint = function () { return C.PAY_ENDPOINT || (C.STATUS_ENDPOINT ? C.STATUS_ENDPOINT.replace(/trip-builder-status/, 'trip-builder-pay') : ''); };
+  var reviseEndpoint = function () { return C.REVISE_ENDPOINT || (C.STATUS_ENDPOINT ? C.STATUS_ENDPOINT.replace(/trip-builder-status/, 'trip-builder-revise') : ''); };
+  var EDITABLE = ['pending_payment', 'submitted', 'checking', 'ready'];
   function steps() {
     return [
       { k: 'submitted', t: 'You send it', d: deposit() ? 'A ' + usd(per()) + ' deposit per person holds your beds and sends your plan to the crew.' : 'Your whole plan lands with the crew.' },
@@ -41,6 +43,7 @@
 
   /* ---------- the modal ---------- */
   function open() {
+    if (A.revise) return openRevise();
     var plan = u.getPlan();
     if (!plan || !plan.totals.days) { u.toast('Add a stop first'); return; }
     var q = u.store('mm-lead') || {}, hasDate = !!A.state.start, live = !!C.LEAD_ENDPOINT, dep = deposit();
@@ -90,7 +93,7 @@
     function record(data, demo) {
       var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
         hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: !!demo, name: v.name, email: ct.email, whatsapp: ct.whatsapp, via: ct.via,
-        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '' };
+        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || '', people: people, datesFlex: v.flex || '' };
       saveRec(rec); return rec;
     }
     if (!C.LEAD_ENDPOINT) return setTimeout(function () { A._lastLead = payload; success(record(null, true), payload); }, 400);
@@ -115,6 +118,65 @@
       '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><a class="btn btn--sm" href="#/trip/' + esc(rec.ref) + '" data-act="close">Track my trip</a>' + (wa ? '<a class="btn btn--sm btn--pink" href="' + wa + '" target="_blank" rel="noopener">Message the crew on WhatsApp</a>' : '') +
       '<button class="btn btn--sm btn--paper" data-act="copylead" type="button">Copy review card</button><button class="btn btn--sm btn--ghost" data-act="close" type="button">Done</button></div><input type="hidden" id="statusurl" value="' + esc(statusUrl) + '"></div>');
   }
+
+  /* ---------- changing a trip after sending it ----------
+     The guest opens their trip page, presses "Change my trip", edits it in the builder and presses "Send my changes". That REPLACES the trip on the same
+     request (same reference, same deposit, same held beds), so the crew only ever checks their latest plan. Possible until the trip is booked. */
+  function stateOf(link) { var i = String(link || '').indexOf('#/build/'); return i < 0 ? '' : String(link).slice(i + 8); }
+  function startRevise(x, key) {
+    var enc = stateOf(x.link), st = enc ? MM.decodeState(enc) : null;
+    if (!st || !st.items.length) { u.toast('That trip has no plan to open.'); return; }
+    A.state = st; A.auto = false; A.focus = []; A.open = {}; A.tourPending = false;
+    A.revise = { ref: x.ref, k: key || x.key || '', base: MM.encodeState(st), route: x.route || '', days: x.days || 0, status: x.status, people: x.people || 1, datesFlex: x.datesFlex || '', name: x.name || '', via: x.via || 'email', email: x.email || '', whatsapp: x.whatsapp || '' };
+    u.store('mm-revise', A.revise); u.persist(); u.track('revise_start', { status: x.status }); u.go('build', MM.encodeState(st));
+  }
+  function endRevise() { A.revise = null; u.store('mm-revise', null); }
+  function changesNow() { return A.revise ? MM.edit.describe(MM.decodeState(A.revise.base), A.state) : []; }
+  // The strip at the top of the builder while someone is changing a trip they sent.
+  A.reviseBar = function () {
+    var R = A.revise, n = changesNow().length, same = MM.encodeState(A.state) === R.base;
+    return '<div class="revbar" role="region" aria-label="Changing a trip you sent"><div class="revbar__t"><span class="over">Changing trip ' + esc(R.ref) + '</span><b>' + (same ? 'This is the trip the crew has. Change what you like.' : 'You have changed it. Send your changes when you\'re happy.') + '</b>' +
+      '<span class="fine">Your changes replace what the crew is checking, so they only ever look at your latest plan.' + (R.status === 'ready' ? ' They already approved the version you sent, so they\'ll check this one again and send you a new price.' : '') + '</span></div>' +
+      '<div class="revbar__b"><button class="btn btn--sm btn--pink" data-act="lead" type="button"' + (same ? ' disabled' : '') + '>Send my changes' + (n ? ' (' + n + (n >= 6 ? '+' : '') + ')' : '') + '</button><button class="btn btn--sm btn--ghost" data-act="reviseCancel" type="button">Discard my changes</button></div></div>';
+  };
+  function openRevise() {
+    var R = A.revise, plan = u.getPlan(); if (!plan || !plan.totals.days) { u.toast('Add a stop first'); return; }
+    var ch = changesNow(), same = MM.encodeState(A.state) === R.base;
+    u.openModal('<div class="modal__hd"><div><div class="over">Trip ' + esc(R.ref) + '</div><h2 class="disp">Send your changes.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
+      '<p style="font-weight:500">This <b>replaces</b> the trip you sent. Same reference, same deposit, your beds stay held, and the crew checks this version instead.</p>' +
+      (same ? '<div class="humans" style="margin-top:0"><b>You haven\'t changed anything yet.</b> Close this and change your trip first.</div>' : '<div class="revchg"><div class="over">What you changed</div><ul>' + (ch.length ? ch.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') : '<li>Your plan</li>') + '</ul></div>') +
+      (R.status === 'ready' ? '<div class="demo" style="background:var(--yellow)">The crew already approved the version you sent. Because the plan has changed they\'ll check this one again and send you a new price. Nothing is due in the meantime.</div>' : '') +
+      '<form id="revf" novalidate><div class="field"><label for="rv-note">Anything the crew should know? (optional)</label><textarea class="input" id="rv-note" maxlength="1000" placeholder="why you changed it, anything they should look at first…"></textarea></div>' +
+      '<div id="reverr" class="warn" style="display:none;margin-top:var(--s-3)"><i>!</i><span></span></div>' +
+      '<div style="display:flex;gap:var(--s-2);margin-top:var(--s-4);flex-wrap:wrap"><button class="btn btn--pink" type="submit" id="rv-go"' + (same ? ' disabled' : '') + '>Send my changes</button><button class="btn btn--ghost" data-act="close" type="button">Keep editing</button></div>' +
+      (!reviseEndpoint() ? '<div class="demo" style="margin-top:var(--s-3)">DEMO MODE: nothing is sent. Set <code>STATUS_ENDPOINT</code> (or <code>REVISE_ENDPOINT</code>) in config.js and this replaces the trip the crew has.</div>' : '') + '</form></div>', function (m) {
+        $('#revf', m).addEventListener('submit', function (e) { e.preventDefault(); submitRevise(m, ch, ($('#rv-note', m).value || '').trim()); });
+      });
+  }
+  function submitRevise(m, ch, note) {
+    var R = A.revise, plan = u.getPlan(), btn = $('#rv-go', m), err = $('#reverr', m), label = btn.textContent;
+    function show(msg) { err.style.display = 'grid'; $('span', err).textContent = msg; btn.disabled = false; btn.textContent = label; }
+    btn.disabled = true; btn.textContent = 'Sending…'; err.style.display = 'none';
+    var payload = MM.leadPayload(A.state, plan, { name: R.name, via: R.via, email: R.email, whatsapp: R.whatsapp, from: '', partySize: R.people || 1, dates: R.datesFlex, notes: note }, { link: u.shareLink() });
+    var body = { ref: R.ref, k: R.k, note: note, changes: ch.slice(0, 8), trip: payload.trip, summary: payload.summary, crewText: payload.crewText, itinerary: payload.itinerary };
+    function done(d) {
+      var rec = subs().filter(function (x) { return x.ref === R.ref; })[0];
+      if (rec) { rec.route = payload.trip.route; rec.days = payload.trip.days; rec.link = payload.trip.link; if (d && d.status) rec.status = d.status; else if (rec.status === 'ready') rec.status = 'checking'; saveRec(rec); }
+      var back = R.ref + (R.k ? '?k=' + encodeURIComponent(R.k) : ''), withdrawn = d && d.withdrawn;
+      endRevise(); u.closeModal(); u.track('revise_sent', { changes: ch.length }); u.go('trip', back);
+      u.toast(withdrawn ? 'Changes sent. The crew will check it again.' : d && d.unchanged ? 'That\'s the trip the crew already has.' : 'Changes sent. The crew will check this version.');
+    }
+    if (!reviseEndpoint()) return setTimeout(function () { done({}); }, 400);
+    fetch(reviseEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || d.ok === false) { var e = new Error(d.error || ('Something went wrong (' + res.status + ')')); e.locked = !!d.locked; throw e; } return d; }); })
+      .then(done)
+      .catch(function (e) { show(e.message + (e.locked ? '' : ' Nothing was sent. Try again, or message the crew' + (C.CREW_EMAIL ? ' at ' + C.CREW_EMAIL : '') + '.')); });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act="reviseCancel"]'); if (!b || !A.revise) return;
+    var back = A.revise.ref + (A.revise.k ? '?k=' + encodeURIComponent(A.revise.k) : '');
+    endRevise(); u.go('trip', back); u.toast('Discarded. The trip the crew has is as it was.');
+  });
 
   /* ---------- how to pay the rest ---------- */
   // options: [{ plan: 'now'|'later'|'instalments', count, amount, items: [{ amount, due }] }] from the status endpoint (the rules live on the server).
@@ -147,6 +209,7 @@
   A.views.trip = function (restArg) {
     var pr = parseRef(restArg), r = pr.ref, key = pr.k;
     var root = document.getElementById('app'), rec = subs().filter(function (s) { return s.ref === r; })[0], polls = 0, wait = null, busy = false;
+    if (!key && rec && rec.key) key = rec.key;       // sent from this browser: it already has the guest's key
     try { var pg = (sessionStorage.getItem('mm-paying') || '').split(':'); if (pg[0] === r) wait = pg[1] || 'pending_payment'; } catch (x) { /* private mode */ }
     var sel = null;
     function paint(x, note) {
@@ -168,6 +231,7 @@
         (x.status === 'approved' && !bal.paid && depMode ? '<div class="humans" style="margin-top:0;background:var(--lime)"><b>You\'re booked.</b> Your beds are locked in. The rest is paid the way you chose, below.</div>' : '') +
         (x.status === 'approved' ? scheduleHTML(x) : '') +
         (x.hold && (x.status === 'submitted' || x.status === 'checking') ? '<div class="humans" style="background:var(--yellow)"><b>Beds held</b> until ' + fmtDT(x.hold.until) + ' while we check it.</div>' : '') +
+        changeHTML(x, demo) +
         '<div class="qnav"><a class="btn" href="' + esc(x.link) + '">Open my trip</a>' + (x.status === 'declined' ? '' : '<a class="btn btn--paper" href="' + esc(String(x.link).replace('#/build/', '#/pack/')) + '">Open my trip pack</a>') +
         (x.status === 'pending_payment' && x.payLink && !waiting ? '<a class="btn btn--pink" href="' + esc(x.payLink) + '">Pay ' + usd(dep.amount) + ' deposit</a>' : '') +
         (C.WHATSAPP && x.status !== 'pending_payment' ? '<a class="btn btn--paper" href="https://wa.me/' + C.WHATSAPP + '?text=' + encodeURIComponent('Hi Mad Monkey, it\'s about my trip ' + x.ref + ': ' + x.route + '. ' + u.baseUrl() + '#/trip/' + x.ref) + '" target="_blank" rel="noopener">Message the crew on WhatsApp</a>' : '') +
@@ -176,11 +240,19 @@
         (demo ? '<div class="demo" style="margin-top:var(--s-5)">DEMO: move it along to see each state. <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' + steps().map(function (s) { return '<button class="chip" data-act="demostatus" data-s="' + s.k + '" type="button">' + s.t + '</button>'; }).join('') + '</div></div>' : '') +
         '</div></div></section>' + u.footer();
     }
+    // Changing the trip they sent: possible until it's booked.
+    function changeHTML(x, demo) {
+      var can = demo ? EDITABLE.indexOf(x.status) > -1 : !!x.canEdit;
+      if (x.status === 'approved') return '<div class="humans" style="margin-top:0"><b>Want to change something?</b> Your trip is booked, so message the crew and we\'ll sort it with you.</div>';
+      if (x.status === 'declined' || x.status === 'pending_payment' && !demo && !x.canEdit) return '';
+      if (can) return '<div class="humans" style="margin-top:0"><b>Changed your mind about something?</b> Edit your trip and send your changes. They replace this version, so the crew only ever checks your latest plan.' + (x.status === 'ready' ? ' They\'ve already approved this one, so they\'ll check the new one and send you a new price.' : '') + ' <button class="btn btn--sm btn--pink" data-act="reviseStart" type="button" style="margin-top:8px">Change my trip</button></div>';
+      return EDITABLE.indexOf(x.status) > -1 ? '<div class="humans" style="margin-top:0"><b>Want to change your trip?</b> Open this page from the link in your confirmation email, so we know it\'s you.</div>' : '';
+    }
     function fetchStatus() {
       if (!C.STATUS_ENDPOINT) return;
       fetch(C.STATUS_ENDPOINT + (C.STATUS_ENDPOINT.indexOf('?') > -1 ? '&' : '?') + 'ref=' + encodeURIComponent(r) + (key ? '&k=' + encodeURIComponent(key) : '')).then(function (res) { return res.json(); }).then(function (d) {
         if (!d || !d.status) { var h = root.querySelector('.disp'); if (!rec && h) h.textContent = 'Can\'t find that trip.'; return; }
-        rec = Object.assign(rec || {}, { ref: r, status: d.status, route: d.route || (rec && rec.route) || '', days: d.days || (rec && rec.days) || 0, start: d.start || '', link: d.link || (rec && rec.link) || '#/build',
+        rec = Object.assign(rec || {}, { ref: r, key: key || (rec && rec.key) || '', canEdit: !!d.canEdit, people: d.people || (rec && rec.people) || 1, datesFlex: d.datesFlex || (rec && rec.datesFlex) || '', status: d.status, route: d.route || (rec && rec.route) || '', days: d.days || (rec && rec.days) || 0, start: d.start || '', link: d.link || (rec && rec.link) || '#/build',
           payLink: d.payLink || '', hold: d.hold ? { until: d.hold.until } : null, deposit: d.deposit || {}, balance: d.balance || {}, pay: d.pay || null, schedule: d.schedule || [], owing: d.owing || [], plan: d.plan || null, demo: false });
         saveRec(Object.assign({}, rec, { pay: null, schedule: [], owing: [] }));
         // Back from Stripe before the payment webhook has landed: check again for up to 30 seconds.
@@ -207,6 +279,7 @@
       var b = e.target.closest('[data-act]'); if (!b || !rec) return; var act = b.getAttribute('data-act');
       if (act === 'demostatus') { rec.status = b.getAttribute('data-s'); saveRec(rec); paint(rec, rec.status === 'ready' ? 'Everything checks out. Here\'s your confirmed plan: have a look and change what you like.' : ''); }
       if (act === 'approve') { u.toast('Demo: choosing how to pay would open here'); }
+      if (act === 'reviseStart') startRevise(rec, key);
       if (act === 'paygo') { var chk = root.querySelector('input[name="payplan"]:checked'); choose(chk ? chk.value : (rec.pay && rec.pay.options[0].plan)); }
       if (act === 'payowing') choose('due');
     }

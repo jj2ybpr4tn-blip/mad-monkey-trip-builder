@@ -372,7 +372,7 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('ALL IN prices follow the ALL IN site (Cambodia $650, Indonesia $700, Laos $400) and Thailand stays link-only', MM.ALL_IN.filter(function (t) { return t.id === 'cambodia'; })[0].usd === 650 && MM.ALL_IN.filter(function (t) { return t.id === 'indonesia'; })[0].usd === 700 && MM.ALL_IN.filter(function (t) { return t.id === 'laos'; })[0].usd === 400 && !MM.ALL_IN.some(function (t) { return t.id === 'thailand'; }));
 })();
 
-/* ---------- editing: one set of operations for the screen controls, the day-by-day editor and the AI ---------- */
+/* ---------- editing: one set of operations behind the screen controls and the day-by-day editor ---------- */
 (function () {
   var E = MM.edit;
   function trip() { var s = MM.defaultState(); s.items = [E.newStop('hanoi', 4), E.newStop('hoi-an', 4), E.newStop('saigon', 3)]; s.start = '2027-02-10'; return s; }
@@ -425,19 +425,6 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   var d1 = E.describe(trip(), r2.state).join(' | ');
   ok('describe says what changed in plain words', /Removed Hoi An/.test(d1) && /Saigon: 3 nights to 6 nights/.test(d1) && /Ho Chi Minh/.test(E.describe(trip(), apply([{ op: 'remove_stop', stop: 3 }]).state).join('|')) === false || /Removed Ho Chi Minh City/.test(E.describe(trip(), apply([{ op: 'remove_stop', stop: 3 }]).state).join('|')));
   ok('describe notices a reorder, a new tour, a new date and a new style', /order/.test(E.describe(trip(), apply([{ op: 'move_stop', stop: 1, to: 3 }]).state)[0]) && /Added Countryside bike tour/.test(E.describe(trip(), r3.state).join('|')) && /Start date/.test(E.describe(trip(), apply([{ op: 'set_start', date: '2027-05-05' }]).state).join('|')) && /Cheapest/.test(E.describe(trip(), apply([{ op: 'set_style', style: 'cheapest' }]).state).join('|')));
-
-  var snap = E.snapshot(r4.state);
-  ok('the snapshot gives the AI every id and number it needs', /1\. Hanoi \(id hanoi\)/.test(snap) && new RegExp('\\[' + cook.id + '\\]').test(snap) && /on day \d+/.test(snap) && /then .* to Hoi An/.test(snap) && /about \$\d+ per person/.test(snap) && /Start date: 2027-02-10/.test(snap));
-  ok('an empty trip says so', /EMPTY/.test(E.snapshot(MM.defaultState())));
-
-  var tp = E.run('search_places', { query: 'surf' }, trip()).result;
-  ok('search_places finds real hostels and only real ones', tp.count > 0 && tp.places.every(function (p) { return MM.PLACES[p.id] && p.dorm_from_usd > 0; }));
-  ok('search_tours lists a place\'s tours with prices and the days they run', (function () { var t = E.run('search_tours', { place: 'Hoi An', query: 'cooking' }, trip()).result; return t.count >= 1 && t.tours[0].price && t.tours[0].runs; })() && !!E.run('search_tours', { place: 'Atlantis' }, trip()).result.error);
-  ok('get_travel gives real options with times and prices', (function () { var t = E.run('get_travel', { from: 'hanoi', to: 'hoi-an' }, trip()).result; return t.options.length >= 1 && t.options.every(function (o) { return o.takes && o.usd > 0; }); })());
-  var et = E.run('edit_trip', { ops: [{ op: 'add_stop', place: 'kampot' }] }, trip());
-  ok('edit_trip returns the new trip, what changed, and what it did to the price', et.result.ok && et.state.items.length === 4 && et.result.changes.length === 1 && et.result.total_usd > et.result.was_usd && /Kampot/.test(et.result.trip));
-  var ef = E.run('edit_trip', { ops: [{ op: 'remove_stop', stop: 8 }] }, trip());
-  ok('a failed edit_trip changes nothing and tells the AI why', ef.result.ok === false && ef.state.items.length === 3 && ef.result.errors.length === 1 && /Nothing was changed/.test(ef.result.note));
 })();
 
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

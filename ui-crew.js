@@ -60,12 +60,13 @@
 
   function paint(root, q, d, open, banner) {
     var r = d.request, sum = d.summary || derive(r), first = firstName(r.name), st = STATUS[r.status] || [r.status, 'off'], can = !!d.canAct, dep = usd(r.deposit_amount);
-    var enc = stateOf(r.trip_link), canEdit = can && r.status !== 'ready', rev = d.revision;
-    setSess({ ref: r.ref, k: q.k, name: r.name, first: first, people: r.party_size, dates: r.dates_flex, from: r.from_place, notes: r.notes, editing: false });
+    var enc = stateOf(r.trip_link), canEdit = can && r.status !== 'ready', rev = d.revision, gr = d.guestRevision;
+    setSess({ ref: r.ref, k: q.k, name: r.name, first: first, people: r.party_size, dates: r.dates_flex, from: r.from_place, notes: r.notes, editing: false, rev: d.rev });
 
     var h = '<section class="quiz crew"><div class="wrap">' +
       '<div class="crew__top"><span class="over">Crew review · ' + esc(r.ref) + '</span><h2 class="disp">' + esc(r.name) + '\'s trip</h2>' +
-      '<p class="crew__sub">' + esc(r.route || '') + ' · ' + (r.days || 0) + ' days' + (r.start_date ? ' · from ' + esc(day(r.start_date, true)) : '') + ' <span class="cpill cpill--' + st[1] + '">' + esc(st[0]) + '</span>' + (rev ? ' <span class="cpill cpill--edit">Edited by the crew</span>' : '') + '</p></div>' +
+      '<p class="crew__sub">' + esc(r.route || '') + ' · ' + (r.days || 0) + ' days' + (r.start_date ? ' · from ' + esc(day(r.start_date, true)) : '') + ' <span class="cpill cpill--' + st[1] + '">' + esc(st[0]) + '</span>' + (rev ? ' <span class="cpill cpill--edit">Edited by the crew</span>' : '') + (gr ? ' <span class="cpill cpill--upd">Changed by ' + esc(first) + ' · v' + gr.rev + '</span>' : '') + '</p></div>' +
+      (gr ? guestChangeHTML(gr, first) : '') +
       (banner ? '<div class="cbanner cbanner--ok" role="status">' + banner + '</div>' : '') +
       (!can ? '<div class="cbanner">' + (r.status === 'approved' ? 'This trip is booked. Nothing left to action.' : r.status === 'declined' ? 'This trip was declined' + (r.refunded_at ? ' and the deposit refunded' : '') + '.' : r.status === 'pending_payment' ? 'The deposit isn\'t paid yet, so there is nothing to action.' : 'Nothing to action.') + '</div>' : '') +
       '<div class="crew__acts" role="group" aria-label="Decide about this trip">' +
@@ -120,6 +121,16 @@
       '<tfoot><tr><td colspan="2">Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (s.people > 1 ? ' for ' + s.people : '') + ' less the deposit)</i></td></tr></tfoot></table>';
     if (r.notes) h += '<div class="cbox cbox--note"><h3>' + esc(firstName(r.name)) + '\'s note</h3><p>' + esc(r.notes).replace(/\n/g, '<br>') + '</p></div>';
     return h;
+  }
+
+  // The guest changed a trip they had already sent: what moved, what it replaced, and what that does to an approval.
+  function guestChangeHTML(g, first) {
+    var w = g.was || {};
+    return '<div class="cbanner cbanner--upd" role="status"><b>' + esc(first) + ' changed this trip after sending it</b> (version ' + g.rev + (g.at ? ', ' + esc(when(g.at)) : '') + '). What you see below is their latest plan.' +
+      (g.changes && g.changes.length ? '<ul>' + g.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '') +
+      (g.note ? '<p>“' + esc(g.note) + '”</p>' : '') +
+      '<p class="cdim">Before: ' + esc(w.route || '') + (w.days ? ' · ' + w.days + ' days' : '') + (w.estTotalUsd != null ? ' · ' + usd(w.estTotalUsd) + ' est.' : '') + (w.link ? ' · <a href="' + esc(w.link) + '">open it</a>' : '') + '</p>' +
+      (g.wasStatus === 'ready' ? '<p><b>You had approved the earlier version.</b> That approval and the balance are withdrawn, so nothing is waiting for ' + esc(first) + ' to pay. Approve this one when you\'re happy.</p>' : '') + '</div>';
   }
 
   function guestHTML(r, first, enc) {
@@ -191,13 +202,13 @@
       if (which === 'approve') {
         var amt = Math.round(parseFloat($('#cbal', root).value) * 100) / 100;
         if (!(amt >= 1 && amt <= 50000)) return fail(new Error('Enter the balance in US dollars, after the deposit.'));
-        call({ action: 'balance', ref: q.ref, key: q.k, amount: amt, note: noteV }).then(function (res) {
+        call({ action: 'balance', ref: q.ref, key: q.k, amount: amt, note: noteV, rev: d.rev }).then(function (res) {
           setSess(null);
           load(root, q, '', 'Sent. ' + esc(first) + ' can now choose how to pay the <b>' + usd(amt) + '</b>' + (res.emailed ? ', by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(res.url || '') + '">choose how to pay</a>.'));
         }).catch(fail);
       } else {
         var refund = !!($('#cref', root) && $('#cref', root).checked);
-        call({ action: 'decline', ref: q.ref, key: q.k, note: noteV, refund: refund }).then(function (res) {
+        call({ action: 'decline', ref: q.ref, key: q.k, note: noteV, refund: refund, rev: d.rev }).then(function (res) {
           setSess(null);
           load(root, q, '', 'Declined. ' + esc(first) + ' has been emailed' + (res.refunded ? ' and ' + usd(res.refunded) + ' is on its way back to their card.' : '.'));
         }).catch(fail);
@@ -224,7 +235,7 @@
       if (!pl.totals.days) return u.toast('Add a stop first');
       var link = u.baseUrl() + '#/build/' + MM.encodeState(st), sum = MM.crewSummary(st, pl, { people: cur.people, dates: cur.dates });
       b.disabled = true; b.textContent = 'Saving…';
-      call({ action: 'revise', ref: cur.ref, key: cur.k, note: document.getElementById('crewnote').value,
+      call({ action: 'revise', ref: cur.ref, key: cur.k, rev: cur.rev, note: document.getElementById('crewnote').value,
         trip: { link: link, state: MM.encodeState(st), route: MM.routeLine(pl), days: pl.totals.days, nights: pl.totals.nights, stops: pl.places, countries: pl.countries, start: st.start || '', estTotalUsd: pl.totals.total },
         summary: sum, crewText: MM.crewText(sum, { name: cur.name, from: cur.from, notes: cur.notes, link: link }) })
         .then(function () { cur.editing = false; setSess(cur); removeBar(); u.toast('Saved. Now approve it, or send it back.'); location.hash = '#/crew/' + cur.ref + '?k=' + encodeURIComponent(cur.k) + '&do=approve'; })

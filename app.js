@@ -30,7 +30,9 @@
     before: function () { return dep() ? 'before you pay the rest' : 'before you pay anything'; }
   };
   var plural = function (n, w, ws) { return n + ' ' + (n === 1 ? w : (ws || w + 's')); };
+  app.revise = null;      // set while a guest is changing a trip they already sent (ui-review.js): { ref, k, base, ... }
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
+  app.revise = store('mm-revise');
   var SID = (function () { try { var s = sessionStorage.getItem('mm-sid'); if (!s) { s = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('mm-sid', s); } return s; } catch (e) { return 'x'; } })();
   function track(name, props) {
     try { (window.dataLayer = window.dataLayer || []).push({ event: 'mm_' + name, props: props || {} }); } catch (e) { /* analytics is optional */ }
@@ -73,7 +75,7 @@
     return MM.edit.describe(JSON.parse(was), back);
   }
   app.undo = function () { var d = stepHist(-1); toast(d ? 'Undone' + (d.length ? ': ' + d[0] : '') : 'Nothing to undo'); return !!d; };
-  // Take back several steps at once (a chat turn can make more than one change) and say so once.
+  // Take back several steps at once and say so once.
   app.undoMany = function (n) {
     var was = H.cur, k = 0; while (k < n && stepHist(-1)) k++;
     var d = k ? MM.edit.describe(JSON.parse(was), JSON.parse(H.cur)) : null; toast(k ? 'Undone' + (d && d.length ? ': ' + d[0] : '') : 'Nothing to undo'); return k;
@@ -87,6 +89,22 @@
   }
   app.applyEdit = applyEdit;
   function persist() { recordHist(); store('mm-trip', { state: app.state, cur: app.cur }); if (app.view === 'build') history.replaceState(null, '', '#/build/' + MM.encodeState(app.state)); }
+  /* ---------- "Start building" is a blank sheet. The trip you had is kept, and the home page offers to pick it back up ---------- */
+  function savedTrip() {
+    var cand = [app.state, (store('mm-trip') || {}).state, (store('mm-trip-last') || {}).state];
+    for (var k = 0; k < cand.length; k++) if (cand[k] && cand[k].items && cand[k].items.length) return Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(cand[k])));
+    return null;
+  }
+  function startFresh() {
+    if (app.state.items.length) store('mm-trip-last', { state: JSON.parse(JSON.stringify(app.state)), at: Date.now() });
+    app.state = MM.defaultState(); app.auto = false; app.focus = []; app.open = {}; app.revise = null; store('mm-revise', null); app.tourPending = true;
+    store('mm-trip', { state: app.state, cur: app.cur });
+  }
+  function resumeStrip() {
+    var sv = savedTrip(); if (!sv) return '';
+    var pl = MM.plan(sv), names = pl.places.map(function (id) { return P[id].n; });
+    return '<div class="resume"><div><span class="over">Pick up where you left off</span><b>' + esc(names.slice(0, 4).join(' → ') + (names.length > 4 ? ' → …' : '')) + '</b><span class="fine">' + pl.totals.days + ' days · about ' + money(pl.totals.total) + ' a person</span></div><button class="btn btn--sm btn--paper" data-act="resume" type="button">Continue this trip</button></div>';
+  }
   function defaultActs(p, n) {
     var list = MM.actsAt(p).filter(function (a) { return a.star && !(a.multi); });
     return list.slice(0, n >= 3 ? 2 : 1).map(function (a) { return a.id; });
@@ -124,6 +142,7 @@
     window.scrollTo(0, 0);
     if (app.views[r.view]) app.views[r.view](r.rest); else ({ home: renderHome, quiz: renderQuiz, results: renderResults, build: renderBuilder })[r.view]();
     track('view', { view: r.view });
+    if (r.view === 'build' && app.tourPending) { app.tourPending = false; if (app.tour) setTimeout(function () { if (app.view === 'build' && !app.state.items.length) app.tour.start(); }, 500); }
   }
 
   /* ============================================================
@@ -163,7 +182,7 @@
         '<div class="over lime" style="margin-bottom:var(--s-4)">Mad Monkey · Trip Builder</div>' +
         '<h1 class="disp">Build the trip you <span class="hl">actually</span> want.</h1>' +
         '<p class="hero__lede"><b>23 hostels. 6 countries.</b> Every bus, boat and flight in between. Pick your stops, see what it really costs, then send it to the crew. Or jump on an ALL IN and let us sort the lot.</p>' +
-        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" type="button">Start building</button><button class="btn btn--lg btn--pink" data-go="quiz" type="button">Build it for me <span class="pill pill--sm pill--paper">60 sec</span></button><button class="btn btn--lg btn--paper" data-act="surprise" type="button">Surprise me</button></div>' +
+        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" data-new="1" type="button">Start building</button><button class="btn btn--lg btn--pink" data-go="quiz" type="button">Build it for me <span class="pill pill--sm pill--paper">60 sec</span></button><button class="btn btn--lg btn--paper" data-act="surprise" type="button">Surprise me</button></div>' + resumeStrip() +
       '</div><div class="hero__map" aria-hidden="true">' +
         '<div class="hm hm--d">' + MM.staticMap({ region: 'all', aspect: 0.85, pad: 0, dots: true, countryLabels: true, routes: HERO_ROUTES, animate: true, px: 560, slice: true, other: false }) + '</div>' +
         '<div class="hm hm--m">' + MM.staticMap({ region: 'mainland', aspect: 1.25, pad: 0.0, dots: true, countryLabels: true, routes: [HERO_ROUTES[0]], animate: true, px: 700, slice: true, other: false }) + '</div>' +
@@ -173,7 +192,7 @@
 
       '<section class="sec"><div class="wrap"><div class="sec__head"><h2 class="disp">Three ways in.</h2><p class="dim" style="max-width:30em">Know exactly where you\'re going, want us to work it out, or just want it done? Pick a door.</p></div>' +
         '<div class="doors on-black">' +
-          '<button class="door" data-go="build" type="button"><span class="door__n">01</span><h3>Build it yourself</h3><p>Tap hostels on the map. Get the real bus, boat and flight times, the cost, and a day-by-day plan.</p><span class="go">Open the map →</span></button>' +
+          '<button class="door" data-go="build" data-new="1" type="button"><span class="door__n">01</span><h3>Build it yourself</h3><p>Tap hostels on the map. Get the real bus, boat and flight times, the cost, and a day-by-day plan.</p><span class="go">Open the map →</span></button>' +
           '<button class="door" data-go="quiz" type="button"><span class="burst burst--pink door__burst"><span>60<br>sec</span></span><span class="door__n">02</span><h3>Build it for me</h3><p>Seven quick questions. Three routes that fit your days, your vibe and your budget.</p><span class="go">Take the quiz →</span></button>' +
           '<button class="door" data-act="scroll" data-to="trips" type="button"><span class="sticker door__sticker">$99 holds it</span><span class="door__n">03</span><h3>Jump on an ALL IN</h3><p>Pre-built crew trips. Beds, boats and activities sorted. $' + MM.DEPOSIT + ' holds your spot.</p><span class="go">See the trips →</span></button>' +
         '</div></div></section>' +
@@ -267,7 +286,7 @@
     root.innerHTML = '<section class="res"><div class="wrap"><div class="res__head"><div class="over">Your routes</div><h2 class="disp">' + ({ 1: 'One trip', 2: 'Two trips', 3: 'Three trips' }[Math.min(3, Math.max(1, app.results.length))]) + '<br>built for <span class="hl">you</span>.</h2></div>' +
       '<div class="res__prof">' + chips.map(function (c) { return '<span class="chip">' + esc(c) + '</span>'; }).join('') + '<button class="chip" data-act="qedit" type="button" style="background:var(--lime)">Edit answers</button></div>' +
       '<div class="rcards">' + app.results.map(function (r, i) { return resultCard(r, i); }).join('') + '</div>' +
-      '<div style="margin-top:var(--s-7);display:flex;gap:var(--s-3);flex-wrap:wrap"><button class="btn btn--pink" data-go="build" type="button">Start from a blank map</button></div></div></section>' + footer();
+      '<div style="margin-top:var(--s-7);display:flex;gap:var(--s-3);flex-wrap:wrap"><button class="btn btn--pink" data-go="build" data-new="1" type="button">Start from a blank map</button></div></div></section>' + footer();
   }
   function resultCard(r, i) {
     var pl = MM.plan(r.state), t = r.cand.tpl, top = i === 0, price = r.isAllIn && !r.hybrid;
@@ -316,7 +335,7 @@
     $('#regions').innerHTML = '<button type="button" data-focus="" aria-pressed="' + !app.focus.length + '">Everywhere</button>' + Object.keys(MM.COUNTRIES).map(function (c) { return '<button type="button" data-focus="' + c + '" aria-pressed="' + (app.focus.indexOf(c) > -1) + '">' + MM.COUNTRIES[c].n + '</button>'; }).join('');
     var t = plan.totals;
     $('#mstats').innerHTML = t.days ? '<span class="chip"><b>' + t.days + '</b> days</span><span class="chip"><b>' + t.stops + '</b> stops</span><span class="chip"><b>' + plan.countries.length + '</b> ' + (plan.countries.length === 1 ? 'country' : 'countries') + '</span><span class="chip"><b>' + plan.km.toLocaleString('en-GB') + '</b> km</span>' : '';
-    $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">Hold my beds</button>' : '<div><b>Tap the map</b><span>to add your first stop</span></div>';
+    $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes' : 'Hold my beds') + '</button>' : '<div><b>Tap the map</b><span>to add your first stop</span></div>';
     MM.BuilderMap.update(plan, app.state, app.focus);
     if (!(opts && opts.instant)) window.scrollTo(0, y);
   }
@@ -329,13 +348,13 @@
   }
 
   function panelHTML(pl) {
-    var s = app.state, t = pl.totals, items = s.items, h = '';
+    var s = app.state, t = pl.totals, items = s.items, h = app.revise && app.reviseBar ? app.reviseBar() : '';
     if (items.length) h += '<div class="print-head"><img src="assets/logo/mad-monkey-black.png" alt="Mad Monkey"><h1>' + esc(MM.routeLine(pl)) + '</h1><p>' + t.days + ' days · ' + plural(pl.countries.length, 'country', 'countries') + ' · about ' + money(t.total) + ' per person (estimate)' + (s.start ? ' · starting ' + U.fmtDate(U.parseDate(s.start)) : '') + '</p><p class="print-link">Open this trip: ' + esc(shareLink()) + '</p></div>';
     var backG = store('mm-back-group');
     if (backG && items.length) h += '<div class="backg"><span>Building your own route for the group?</span><a class="btn btn--sm btn--pink" href="#/group/' + esc(backG) + '" data-act="backg">Back to the group</a><button class="ideas__x" data-act="backgx" type="button">Dismiss</button></div>';
     /* summary */
     h += '<div class="bsum"><div class="bsum__top"><div><div class="over lime">Your trip</div><h2 class="disp" style="margin-top:6px">' + (items.length ? plural(t.days, 'day') + ' · ' + plural(pl.countries.length, 'country', 'countries') : 'Start anywhere') + '</h2>' +
-      '<div class="bsum__route">' + (items.length ? esc(MM.routeLine(pl)) : 'Tap a hostel on the map, or pick a starter below.') + '</div></div>' +
+      '<div class="bsum__route">' + (items.length ? esc(MM.routeLine(pl)) : 'Tap a hostel on the map, or pick a starter below. <button class="linkbtn" data-act="tour" type="button">Show me around</button>') + '</div></div>' +
       (items.length ? '<div class="bsum__total"><b>~' + money(t.total) + '</b><span>est. total · ' + (t.est ? 'incl. estimates' : 'per person') + '</span></div>' : '') + '</div>' +
       (items.length ? '<div class="stats"><div class="stat"><b>' + t.nights + '</b><span>nights</span></div><div class="stat"><b>' + t.stops + '</b><span>stops</span></div><div class="stat"><b>' + pl.km.toLocaleString('en-GB') + '</b><span>km</span></div><div class="stat"><b>' + pl.legs.length + '</b><span>transfers</span></div></div>' : '') +
       '<div class="bsum__ctl"><div class="field"><label for="startd">Start date</label><input class="input" id="startd" type="date" value="' + esc(s.start) + '" min="' + U.isoDate(new Date()) + '"></div>' +
@@ -343,7 +362,7 @@
       '<div class="field full"><label for="fund">Food + fun fund: ' + money(s.fund) + ' a day</label><input class="range" id="fund" type="range" min="5" max="60" step="1" value="' + s.fund + '" aria-label="Daily spending money"></div>' +
       '<div class="field full"><label for="budget">Budget target: ' + (s.budget ? money(s.budget) : 'not set') + '</label><input class="range" id="budget" type="range" min="0" max="6000" step="50" value="' + (s.budget || 0) + '" aria-label="Total budget target"></div></div>' +
       (items.length && s.budget ? budgetBar(t) : '') + (items.length ? seasonStrip(pl) : '') +
-      '<div class="humans"><b>Checked by a real person.</b> ' + TERMS.box() + '</div></div>';
+      '<div class="humans"><b>Checked by a real person.</b> ' + (app.revise ? 'Send my changes replaces the trip the crew is checking, so they only ever look at your latest plan.' : TERMS.box()) + '</div></div>';
 
     if (plannerOn()) h += recoHTML();
 
@@ -363,13 +382,12 @@
     h += missHTML();
     /* add bar */
     var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
-    h += '<div class="addbar"><div class="addbar__row"><div class="sel-wrap"><select class="select" id="addsel" aria-label="Add a stop"><option value="">+ Add a stop…</option>' +
-      Object.keys(groups).map(function (c) { return '<optgroup label="' + MM.COUNTRIES[c].n + '">' + groups[c].map(function (id) { return '<option value="' + id + '">' + esc(P[id].n) + (P[id].partner ? ' (partner)' : '') + (P[id].opens ? ' (opens ' + P[id].opens.slice(8) + '/' + P[id].opens.slice(5, 7) + ')' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></div></div>' +
+    h += '<div class="addbar"><button class="btn btn--pink addbar__btn" data-act="insertat" data-i="' + app.state.items.length + '" data-where="1" type="button">+ Add a stop</button>' +
       nextBar(pl.segs[pl.segs.length - 1].last, 'Mad Monkey guests go next') + tweakRow() + '</div>';
 
     /* edit bar + itinerary */
     h += '<div class="editbar" role="toolbar" aria-label="Edit your trip"><button class="btn btn--sm btn--paper" data-act="undo" type="button"' + (H.past.length ? '' : ' disabled') + '>↶ Undo</button><button class="btn btn--sm btn--paper" data-act="redo" type="button"' + (H.future.length ? '' : ' disabled') + '>↷ Redo</button>' +
-      '<button class="btn btn--sm btn--pink" data-act="chat" type="button">Chat to change it</button><button class="btn btn--sm btn--paper" data-act="insertat" data-i="0" type="button">+ Stop at the start</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>';
+      '<button class="btn btn--sm btn--paper" data-act="insertat" data-i="' + app.state.items.length + '" data-where="1" type="button">+ Add a stop</button><button class="btn btn--sm btn--ghost" data-act="tour" type="button">Show me around</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>';
     h += '<div class="itin">';
     pl.segs.forEach(function (sg, i) {
       h += sg.kind === 'allin' ? blockCard(sg, i, pl) : stopCard(sg, i, pl);
@@ -377,7 +395,7 @@
       if (leg) h += legCard(leg);
       else if (i < pl.segs.length - 1) h += '<div style="height:var(--s-4)"></div>';
     });
-    h += '</div>';
+    h += '<button class="addstop" data-act="insertat" data-i="' + pl.segs.length + '" data-where="1" type="button"><b>+ Add another stop</b><span>Changed your mind about a place? Add somewhere else, at the end or anywhere in between.</span></button></div>';
 
     /* ALL IN match */
     if (pl.match.length) h += matchCard(pl.match[0], pl);
@@ -393,7 +411,7 @@
     h += entryHTML(pl);
     /* CTA */
     h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> ' + TERMS.cta() + '</div>' +
-      '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">Hold my beds + get it checked</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="openpack" type="button">Trip pack</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
+      '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes to the crew' : 'Hold my beds + get it checked') + '</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="openpack" type="button">Trip pack</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
       '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability ' + TERMS.before() + '.</p></div>';
     return h;
   }
@@ -559,8 +577,10 @@
     var h = '<div class="stopc" id="stop' + i + '" data-seg="' + i + '" data-c="' + p.c + '"><div class="stopc__head"><div class="stopc__thumb photo">' + photo(MM.hostelImg(p.id)).replace('class="photo ', 'class="photo ').replace('<div', '<div style="width:100%;height:100%"') + '<span class="stopc__num">' + (i + 1) + '</span></div>' +
       '<div><h3><span class="dotc" data-c="' + p.c + '"></span>' + esc(p.n) + (p.partner ? ' ' + chip('Partner', 'pill--yellow') : '') + '</h3><div class="stopc__sub">' + sub.join(' · ') + '</div></div>' +
       '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
-      '<div class="stopc__tools"><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" type="button"></button><button class="iconbtn" data-act="swapat" data-i="' + i + '" aria-label="Swap ' + esc(p.n) + ' for another stop" title="Swap for another stop" type="button">⇄</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + '" type="button">×</button></div></div></div>';
-    if (chosen.length && !open) h += '<div class="stopc__picks">' + chosen.slice(0, 4).map(function (a) { return '<span class="pill pill--sm">' + esc(a.n) + '</span>'; }).join('') + (chosen.length > 4 ? '<span class="pill pill--sm pill--paper">+' + (chosen.length - 4) + ' more</span>' : '') + '</div>';
+'</div></div>' +
+      '<div class="stopc__acts" role="group" aria-label="Change ' + esc(p.n) + '"><button class="btn btn--sm btn--paper" data-act="swapat" data-i="' + i + '" type="button"><span aria-hidden="true">⇄</span> Swap place</button><button class="btn btn--sm btn--paper stopc__rm" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + ' from your trip" type="button"><span aria-hidden="true">×</span> Remove stop</button>' +
+      '<span class="stopc__move" role="group" aria-label="Move ' + esc(p.n) + '"><span class="stopc__movelbl">Move</span><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move ' + esc(p.n) + ' up" title="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move ' + esc(p.n) + ' down" title="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" title="Drag to reorder" type="button"></button></span></div>';
+    if (chosen.length && !open) h += '<div class="stopc__picks">' + chosen.slice(0, 4).map(function (a) { return '<button class="pill pill--sm pick" type="button" data-act="dayrm" data-i="' + i + '" data-a="' + a.id + '" aria-label="Remove ' + esc(a.n) + ' from your trip" title="Remove">' + esc(a.n) + ' <b aria-hidden="true">×</b></button>'; }).join('') + (chosen.length > 4 ? '<span class="pill pill--sm pill--paper">+' + (chosen.length - 4) + ' more</span>' : '') + '</div>';
     h += galleryStrip(p.id) + reviewLine(p.id) + X('local', sg, i);
     h += '<button class="stopc__more" data-act="toggle" data-k="acts' + i + '" aria-expanded="' + open + '" type="button"><span>Things to do at ' + esc(p.n) + '</span><span class="count"><span class="pill pill--sm pill--paper">' + chosen.length + ' picked</span><b>' + (open ? '−' : '+') + '</b></span></button>';
     if (open) h += actsPanel(sg, i);
@@ -607,7 +627,7 @@
     var h = '<div class="blockc" id="stop' + i + '" data-seg="' + i + '"><div class="blockc__top"><div><span class="pill pill--sm">ALL IN</span><h3 style="margin-top:8px">' + esc(t.n) + '</h3><div class="route">' + esc(t.tag) + '</div></div><div class="blockc__px"><b>' + money(t.usd) + '</b><span>' + t.days + ' days · ' + (t.status === 'soon' ? 'rrp' : 'from') + '</span></div></div>' +
       '<div class="blockc__days">' + route.map(function (r) { return '<div><b>DAY ' + r[0] + '</b><span><strong style="color:var(--paper)">' + esc(r[1]) + '.</strong> ' + esc(r[2]) + '</span></div>'; }).join('') + '</div>' +
       '<div class="blockc__foot"><span class="fine" style="color:var(--ink-dim-on-black);flex:1;min-width:200px">' + (t.status === 'soon' ? 'Launching soon. Pop your details in to be first on the list.' : 'Departs every ' + U.DOWN[t.dep] + ' · next ' + U.fmtDate(nd) + (t.until ? ' · until ' + t.until : '') + ' · $' + MM.DEPOSIT + ' holds your spot') + '</span>' +
-      '<button class="btn btn--sm" data-act="customiseblock" data-i="' + i + '" type="button">Customise</button><button class="iconbtn grip" style="color:var(--paper);border-color:var(--paper)" data-grip="' + i + '" aria-label="Drag to reorder" type="button"></button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="remove" data-i="' + i + '" aria-label="Remove ALL IN ' + esc(t.n) + '" type="button">×</button></div></div>';
+      '<button class="btn btn--sm" data-act="customiseblock" data-i="' + i + '" type="button">Customise</button><button class="iconbtn grip" style="color:var(--paper);border-color:var(--paper)" data-grip="' + i + '" aria-label="Drag to reorder" type="button"></button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" style="color:var(--paper);border-color:var(--paper)" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="btn btn--sm blockc__rm" data-act="remove" data-i="' + i + '" aria-label="Remove ALL IN ' + esc(t.n) + ' from your trip" type="button"><span aria-hidden="true">×</span> Remove</button></div></div>';
     return h;
   }
 
@@ -687,18 +707,35 @@
     return { h: Math.max(0, (ra ? ra.h : 0) + (rb ? rb.h : 0) - (rab ? rab.h : 0)), u: Math.round((ra ? ra.u : 0) + (rb ? rb.u : 0) - (rab ? rab.u : 0)) };
   }
   function openPicker(o) {
-    var rows = MM.PLACE_ORDER.filter(function (id) { return !(o.exclude && o.exclude.indexOf(id) > -1); }).map(function (id) { return { id: id, d: o.near ? detour(o.near, id) : null }; });
-    // closest to the way first; places already in the trip go last (adding the same place twice is rarely what anyone wants)
-    var have = app.state.items.map(function (it) { return it.p; });
-    if (o.near && (o.near[0] || o.near[1])) rows.sort(function (x, y) { var nx = have.indexOf(x.id) > -1 ? 1000 : 0, ny = have.indexOf(y.id) > -1 ? 1000 : 0; return (nx + (x.d ? x.d.h : 999)) - (ny + (y.d ? y.d.h : 999)); });
-    var hint = o.near && (o.near[0] || o.near[1]) ? (o.near[0] && o.near[1] ? 'Closest to the way from ' + P[o.near[0]].n + ' to ' + P[o.near[1]].n + ' first, with what each adds to the journey.' : 'Easiest to get to first.') : 'Every Mad Monkey. They keep their nights, you pick the tours.';
-    openModal('<div class="modal__hd"><div><div class="over">Your trip</div><h2 class="disp">' + esc(o.title) + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd"><p class="qhelp" style="margin-bottom:var(--s-3)">' + hint + '</p>' +
+    var n = app.state.items.length, pl0 = plan;
+    function stopName(k) { var sg = pl0 && pl0.segs[k]; return sg ? (sg.kind === 'allin' ? 'ALL IN ' + sg.trip.n : P[sg.p].n) : 'the last stop'; }
+    function rowsHTML() {
+      var have = app.state.items.map(function (it) { return it.p; });
+      var rows = MM.PLACE_ORDER.filter(function (id) { return !(o.exclude && o.exclude.indexOf(id) > -1); }).map(function (id) { return { id: id, d: o.near ? detour(o.near, id) : null }; });
+      // closest to the way first; places already in the trip go last (adding the same place twice is rarely what anyone wants)
+      if (o.near && (o.near[0] || o.near[1])) rows.sort(function (x, y) { var nx = have.indexOf(x.id) > -1 ? 1000 : 0, ny = have.indexOf(y.id) > -1 ? 1000 : 0; return (nx + (x.d ? x.d.h : 999)) - (ny + (y.d ? y.d.h : 999)); });
+      return rows.map(function (r) {
+        var p = P[r.id], ex = o.near && r.d ? ' · adds ' + (r.d.h < 1 ? 'under an hour' : hours(r.d.h)) + ' and ' + money(Math.max(0, r.d.u)) : '', here = have.indexOf(r.id) > -1 && o.swap == null ? ' · already in your trip' : '';
+        return '<li data-q="' + esc((p.n + ' ' + MM.COUNTRIES[p.c].n).toLowerCase()) + '"><button class="picker__b" type="button" data-act="pickplace" data-p="' + r.id + '"' + (o.swap != null ? ' data-swap="' + o.swap + '"' : ' data-pos="' + o.position + '"') + '><i class="dotc" data-c="' + p.c + '"></i><span><b>' + esc(p.n) + (p.partner ? ' <em>partner</em>' : '') + '</b><small>' + esc(MM.COUNTRIES[p.c].n) + ' · dorm from ' + money(p.bed) + '/night · ' + p.sug + ' nights suggested' + ex + here + '</small></span></button></li>';
+      }).join('');
+    }
+    function hintText() {
+      return o.near && (o.near[0] || o.near[1]) ? (o.near[0] && o.near[1] ? 'Closest to the way from ' + P[o.near[0]].n + ' to ' + P[o.near[1]].n + ' first, with what each adds to the journey.' : 'Easiest to get to first, with what each adds to the journey.') : 'Every Mad Monkey. They keep their nights, you pick the tours.';
+    }
+    var where = '';
+    if (o.where && n > 0) {      // "Where does it go?": the start, or after any stop
+      where = '<div class="field"><label for="pkwhere">Where does it go?</label><div class="sel-wrap"><select class="select" id="pkwhere">' +
+        '<option value="1"' + (o.position === 1 ? ' selected' : '') + '>At the start, before ' + esc(stopName(0)) + '</option>' +
+        app.state.items.map(function (_, k) { return '<option value="' + (k + 2) + '"' + (o.position === k + 2 ? ' selected' : '') + '>' + (k === n - 1 ? 'At the end, after ' : 'After ') + esc(stopName(k)) + '</option>'; }).join('') + '</select></div></div>';
+    }
+    openModal('<div class="modal__hd"><div><div class="over">Your trip</div><h2 class="disp">' + esc(o.title) + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' + where + '<p class="qhelp pkhint" style="margin-bottom:var(--s-3)">' + hintText() + '</p>' +
       '<div class="field"><label for="pksearch">Search</label><input class="input" id="pksearch" type="search" placeholder="a place or a country" autocomplete="off"></div>' +
-      '<ul class="picker">' + rows.map(function (r) {
-        var p = P[r.id], ex = o.near && r.d ? ' · adds ' + (r.d.h < 1 ? 'under an hour' : hours(r.d.h)) + ' and ' + money(Math.max(0, r.d.u)) : '';
-        return '<li data-q="' + esc((p.n + ' ' + MM.COUNTRIES[p.c].n).toLowerCase()) + '"><button class="picker__b" type="button" data-act="pickplace" data-p="' + r.id + '"' + (o.swap != null ? ' data-swap="' + o.swap + '"' : ' data-pos="' + o.position + '"') + '><i class="dotc" data-c="' + p.c + '"></i><span><b>' + esc(p.n) + (p.partner ? ' <em>partner</em>' : '') + '</b><small>' + esc(MM.COUNTRIES[p.c].n) + ' · dorm from ' + money(p.bed) + '/night · ' + p.sug + ' nights suggested' + ex + '</small></span></button></li>';
-      }).join('') + '</ul></div>', function (m) {
-        var q = $('#pksearch', m); q.addEventListener('input', function () { var v = q.value.trim().toLowerCase(); $$('.picker li', m).forEach(function (li) { li.hidden = !!v && li.getAttribute('data-q').indexOf(v) < 0; }); });
+      '<ul class="picker">' + rowsHTML() + '</ul></div>', function (m) {
+        var q = $('#pksearch', m);
+        function filter() { var v = q.value.trim().toLowerCase(); $$('.picker li', m).forEach(function (li) { li.hidden = !!v && li.getAttribute('data-q').indexOf(v) < 0; }); }
+        q.addEventListener('input', filter);
+        var w = $('#pkwhere', m);
+        if (w) w.addEventListener('change', function () { o.position = +w.value; o.near = nearFor(o.position - 1); $('.picker', m).innerHTML = rowsHTML(); $('.pkhint', m).textContent = hintText(); filter(); });
       });
   }
 
@@ -784,7 +821,7 @@
   document.addEventListener('click', function (e) {
     if (e.target.closest('a[data-stop]')) { e.stopPropagation(); return; }
     var door = e.target.closest('.door'); if (door) track('door', { door: door.getAttribute('data-go') || door.getAttribute('data-to') || 'x' });
-    var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
+    var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } if (go_.hasAttribute('data-new')) { track('start_fresh', { had: app.state.items.length ? 1 : 0 }); startFresh(); go('build', ''); return; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
     var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } autoReco(); if (app.auto) persist(); refreshBuilder(); return; }
     var el = e.target.closest('[data-act]'); if (!el) return;
     var act = el.getAttribute('data-act'), i = +el.getAttribute('data-i'), S = app.state;
@@ -836,9 +873,10 @@
       case 'nights': mutate(function (s2) { var it = s2.items[i]; it.n = Math.max(1, Math.min(30, it.n + (+el.getAttribute('data-d')))); }); break;
       case 'move': { var d = +el.getAttribute('data-d'), j = i + d; if (j >= 0 && j < S.items.length) mutate(function (s2) { var tmp = s2.items[i]; s2.items[i] = s2.items[j]; s2.items[j] = tmp; s2.legPick = {}; }); break; }
       case 'remove': { var nm = S.items[i] ? (S.items[i].kind === 'allin' ? 'ALL IN trip' : P[S.items[i].p].n) : 'stop'; mutate(function (s2) { s2.items.splice(i, 1); s2.legPick = {}; }); toast('Removed ' + nm, { undo: true }); break; }
+      case 'resume': { var sv = savedTrip(); if (sv) { app.state = sv; app.auto = false; persist(); go('build', MM.encodeState(sv)); } break; }
       case 'undo': app.undo(); { var tt = el.closest('.toast'); if (tt) tt.remove(); } break;
       case 'redo': app.redo(); break;
-      case 'insertat': openPicker({ title: 'Add a stop', position: i + 1, near: nearFor(i) }); break;
+      case 'insertat': openPicker({ title: 'Add a stop', position: i + 1, near: nearFor(i), where: el.hasAttribute('data-where') }); break;
       case 'swapat': openPicker({ title: 'Swap ' + (S.items[i] && S.items[i].p ? P[S.items[i].p].n : 'this stop') + ' for…', swap: i, exclude: [S.items[i] && S.items[i].p] }); break;
       case 'pickplace': { var pid = el.getAttribute('data-p'), sw = el.getAttribute('data-swap'), pos = +el.getAttribute('data-pos'); closeModal(); if (sw !== null && sw !== '') applyEdit([{ op: 'swap_stop', stop: +sw + 1, place: pid }]); else if (applyEdit([{ op: 'add_stop', place: pid, position: pos }])) { var nc = document.getElementById('stop' + (pos - 1)); if (nc) nc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } break; }
       case 'dayrm': applyEdit([{ op: 'remove_tour', stop: i + 1, tour: el.getAttribute('data-a') }]); break;

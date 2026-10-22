@@ -29,6 +29,10 @@ window.MM_CONFIG = {
   // counts towards the trip, and is refunded if the crew can't make it work. 0 = no deposit: nothing is paid until the guest approves the checked plan.
   DEPOSIT_PER_PERSON: 0,
 
+  // Optional. A guest can change a trip they have already sent, until it is booked: POST { ref, k, trip, summary, ... }. The change REPLACES the trip on the same request, so the crew
+  // only ever checks the latest plan. With the ALL IN backend it is the trip-builder-revise function. Blank = derived from STATUS_ENDPOINT. See docs/EDITING.md.
+  REVISE_ENDPOINT: '',
+
   // Optional. Once the crew has approved a trip, the guest chooses how to pay the rest here: POST { ref, k, plan }. Blank = derived from STATUS_ENDPOINT. See docs/PAYMENTS.md.
   PAY_ENDPOINT: '',
 
@@ -53,10 +57,6 @@ window.MM_CONFIG = {
 
   // Optional. The Mad Monkey app: App Store / Google Play / smart link. When set, trip packs and the crew-checked page show a "Get the app" card.
   APP_URL: '',
-
-  // Optional. The AI trip chat ("Chat to change it"): POST { messages } -> { content, stop_reason }. With the ALL IN backend it is the trip-builder-chat function.
-  // Blank = the quick helper, which understands short instructions ("remove Hoi An") without any AI. See docs/CHAT.md.
-  CHAT_ENDPOINT: '',
 
   // Optional privacy link shown under the lead form.
   PRIVACY_URL: ''

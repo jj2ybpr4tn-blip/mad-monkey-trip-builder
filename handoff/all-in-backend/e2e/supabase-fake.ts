@@ -42,20 +42,5 @@ class Q implements PromiseLike<{ data: unknown; error: unknown }> {
     return Promise.resolve(out).then(res as never);
   }
 }
-// The chat's daily counters (trip_builder_chat_hit): counts per bucket, true while under the limit. The e2e can make it fail with __chatRpcFail.
-const CHAT_HITS: Record<string, number> = {};
-export function createClient(_u: string, _k: string) {
-  return {
-    from: (t: string) => new Q(t),
-    rpc: async (name: string, args?: Record<string, unknown>) => {
-      if (name === "trip_builder_chat_hit") {
-        if ((globalThis as { __chatRpcFail?: boolean }).__chatRpcFail) return { data: null, error: { message: "relation does not exist" } };
-        const b = String(args?.p_bucket); CHAT_HITS[b] = (CHAT_HITS[b] ?? 0) + 1;
-        return { data: CHAT_HITS[b] <= Number(args?.p_limit), error: null };
-      }
-      return { data: name === "get_cron_secret" ? "cron-secret-for-tests" : null, error: null };
-    },
-  };
-}
-export const __chatHits = CHAT_HITS;
+export function createClient(_u: string, _k: string) { return { from: (t: string) => new Q(t), rpc: async (name: string) => ({ data: name === "get_cron_secret" ? "cron-secret-for-tests" : null, error: null }) }; }
 export const __db = DB;
