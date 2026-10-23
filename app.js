@@ -26,15 +26,16 @@
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var money = function (usd) { return MM.money(usd, app.cur); };
-  // Money wording shared by every screen. A deposit is taken when MM_CONFIG.DEPOSIT_PER_PERSON > 0 (the live ALL IN site); without one, nothing is paid until the guest approves the checked plan.
+  // Money wording shared by every screen. Sending a trip is free (MM_CONFIG.DEPOSIT_PER_PERSON = 0, the default): nothing is paid until the guest has seen the checked plan and said yes.
+  // With DEPOSIT_PER_PERSON > 0 a deposit per person is taken when the trip is sent, and it comes off the total.
   var dep = function () { return +C.DEPOSIT_PER_PERSON || 0; };
   var TERMS = {
-    hold: function () { return dep() ? 'A $' + dep() + ' deposit per person holds the beds on a trip you build while they do it, and you only pay the rest once you\'ve approved the plan.' : 'We can hold your beds while they do it, and you approve before you pay a penny.'; },
-    step2: function () { return dep() ? 'Send it for checking with a $' + dep() + ' deposit per person and we hold the nights while we look.' : 'Send it for checking and we hold the nights while we look.'; },
-    step4: function () { return dep() ? 'You get the checked plan and the final price. Happy? Pay the rest now, later or in instalments. Can\'t make it work? Your deposit comes back.' : 'You get a confirmed plan. Happy? Pay the deposit. Not? No harm done.'; },
-    send: function () { return dep() ? 'Send it for checking and a real person looks over every bus, bed and price before you pay the rest.' : 'One tap sends your plan to a real person who can book it.'; },
-    box: function () { return dep() ? 'Hit "Hold my beds" ($' + dep() + ' deposit per person) and the crew reviews your whole trip before you pay the rest.' : 'Hit "Hold my beds" and the crew reviews your whole trip before you pay a penny.'; },
-    cta: function () { return dep() ? 'A $' + dep() + ' deposit per person holds your beds, the crew reviews the routes, dates and prices, and you approve before you pay the rest.' : 'We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.'; },
+    hold: function () { return dep() ? 'A $' + dep() + ' deposit per person holds the beds on a trip you build while they do it, and you only pay the rest once you\'ve approved the plan.' : 'Sending it is free. We hold your beds while they check it, and you pay nothing until you\'ve said yes.'; },
+    step2: function () { return dep() ? 'Send it for checking with a $' + dep() + ' deposit per person and we hold the nights while we look.' : 'Send it for checking. It\'s free, and we hold the nights while we look.'; },
+    step4: function () { return dep() ? 'You get the checked plan and the final price. Happy? Pay the rest now, later or in instalments. Can\'t make it work? Your deposit comes back.' : 'You get the checked plan and the final price. Happy? Say yes and pay your way. Not? No harm done: you\'ve paid nothing.'; },
+    send: function () { return dep() ? 'Send it for checking and a real person looks over every bus, bed and price before you pay the rest.' : 'Sending it is free, and a real person looks over every bus, bed and price before you pay anything.'; },
+    box: function () { return dep() ? 'Hit "Hold my beds" ($' + dep() + ' deposit per person) and the crew reviews your whole trip before you pay the rest.' : 'Hit "Hold my beds" (it\'s free) and the crew reviews your whole trip before you pay a penny.'; },
+    cta: function () { return dep() ? 'A $' + dep() + ' deposit per person holds your beds, the crew reviews the routes, dates and prices, and you approve before you pay the rest.' : 'It\'s free to send. We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.'; },
     before: function () { return dep() ? 'before you pay the rest' : 'before you pay anything'; }
   };
   /* ---------- "Ask Ewan": a real person, one tap away, from every screen ---------- */

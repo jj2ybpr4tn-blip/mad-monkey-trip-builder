@@ -37,7 +37,7 @@ Plan Vietnam now, decide the rest once you're there.
 
 How it is kept: the trip itself carries `from` (where you are) and `been` (where you've been) in its share link (`o=` and `v=`), so a stage opens the same on any device. Which stage it is, and which trips came before, live in this browser (`mm-stage`) and travel to the crew with the trip. The planner part (`plan()` in `logic.js`) is covered by 11 stage tests plus the fuzz test, which makes a quarter of its made-up trips later stages.
 
-Not built (ask if you want it): charging a deposit only once for a whole journey. Each stage is its own request and its own deposit.
+Not built (ask if you want it): charging a deposit only once for a whole journey. Each stage is its own request, and sending is free, so there is no deposit to repeat.
 
 ## 3. A real person checks every trip: "Ask Ewan"
 

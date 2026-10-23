@@ -1,4 +1,7 @@
-// End to end: deposit -> crew review (view, edit, decline) -> approve -> guest chooses how to pay -> booked -> daily job charges.
+// End to end. Sections 1-10 are the deposit flow (TRIP_BUILDER_DEPOSIT_PER_PERSON=50, the old way, still there as a switch):
+//   deposit -> crew review (view, edit, decline) -> approve -> guest chooses how to pay -> booked -> daily job charges.
+// Sections 11+ are the way it works now (free to send): sent -> with the crew at once -> approve -> the guest chooses how to pay,
+//   and a card is saved as part of choosing.
 // Runs the REAL Edge Function handlers against in-memory fakes for Supabase, Stripe and Resend. See run.sh.
 // @ts-nocheck
 import { createClient, __db } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -14,6 +17,7 @@ const H: Record<string, (r: Request) => Promise<Response>> = {};
 async function load(name: string) { let h; Deno.serve = (x) => { h = x; return {}; }; await import(`./functions/${name}/index.ts`); H[name] = h; }
 for (const n of ["trip-builder-request", "trip-builder-admin", "trip-builder-status", "trip-builder-pay", "charge-trip-builder-payments", "trip-builder-revise", "trip-builder-login"]) await load(n);
 
+Deno.env.set("TRIP_BUILDER_DEPOSIT_PER_PERSON", "50");      // sections 1-10: the deposit flow
 let pass = 0, fail = 0;
 const ok = (name: string, c: unknown, extra = "") => { if (c) { pass++; console.log("PASS  " + name); } else { fail++; console.log("FAIL  " + name + (extra ? "  -> " + extra : "")); } };
 const HERE = new URL(".", import.meta.url).pathname;
@@ -151,8 +155,9 @@ async function approve(ref: string, amount: number) {
   const ref = await newTrip(120, "old@example.com", false);
   const { key } = await approve(ref, 400);
   const st = await send("trip-builder-status", { ref, k: key }, "GET");
-  ok("no saved card: only 'pay now' is offered", st.b.pay.options.map((o) => o.plan).join() === "now");
-  ok("and 'later' is refused", (await send("trip-builder-pay", { ref, k: key, plan: "later" })).s === 400);
+  ok("no saved card: everything is still offered, because a card is saved as part of choosing", st.b.pay.options.map((o) => o.plan).join() === "now,later,instalments");
+  const later = await send("trip-builder-pay", { ref, k: key, plan: "later" });
+  ok("'later' with no card sends them to save one (a setup page, nothing charged) and books nothing yet", later.s === 200 && !!later.b.checkoutUrl && later.b.card === true && row(ref).status === "ready" && globalThis.__checkouts.at(-1).mode === "setup");
   const nodate = await newTrip(120, "nodate@example.com"); row(nodate).start_date = null;
   const k2 = (await approve(nodate, 400)).key;
   ok("no departure date: only 'pay now'", (await send("trip-builder-status", { ref: nodate, k: k2 }, "GET")).b.pay.options.map((o) => o.plan).join() === "now");
@@ -386,6 +391,176 @@ async function approve(ref: string, amount: number) {
   const jr = await send("trip-builder-request", junk); await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_deposit", ref: jr.b.ref, origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_dep_" + jr.b.ref, customer: "cus_test_1", customer_details: { email: "stage.junk@example.com" } });
   const jc = outbox().filter((m) => m.to.includes("ewan@madmonkeyhostels.com")).pop();
   ok("a made-up stage is printed as text, never as markup", !!jc && !/<script>x|<img src=x/.test(jc.html));
+}
+
+/* ---- 11. FREE TO SEND: the trip is with the crew at once and nothing is paid ---- */
+Deno.env.delete("TRIP_BUILDER_DEPOSIT_PER_PERSON");
+const ewanMail = () => outbox().filter((m) => m.to.includes("ewan@madmonkeyhostels.com")).pop();
+const mailsTo = (e: string) => outbox().filter((m) => m.to.includes(e));
+const ewanGot = (re: RegExp) => outbox().some((m) => m.to.includes("ewan@madmonkeyhostels.com") && re.test(m.subject));
+const ewanGotFor = (ref: string, re: RegExp) => outbox().some((m) => m.to.includes("ewan@madmonkeyhostels.com") && m.subject.includes(ref) && re.test(m.subject));
+async function freeTrip(startIn: number | null, email: string, tweak: (p: any) => void = () => {}) {
+  const p = JSON.parse(JSON.stringify(base)); p.trip.start = startIn == null ? null : iso(new Date(Date.now() + startIn * 86400000)); p.contact.email = email;
+  tweak(p);
+  const r = await send("trip-builder-request", p);
+  return { r, ref: r.b.ref as string, key: r.b.key as string };
+}
+async function approveFree(ref: string, amount: number) {
+  const a = await send("trip-builder-admin", { action: "balance", ref, amount, note: "All checked.", password: "test-admin-pw" });
+  const m = last(row(ref).guest_email || row(ref).email), k = m && /#\/trip\/MM-[A-Z0-9]{6}\?k=([^"&\s]+)/.exec(m.html.replace(/&amp;/g, "&"));
+  return { a, key: k && decodeURIComponent(k[1]), mail: m };
+}
+const adminKeyFor = async (ref: string) => (await send("trip-builder-admin", { action: "link", ref, password: "test-admin-pw" })).b.url.match(/k=([^&]+)/)[1];
+
+{
+  setDay(0);
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY"); Deno.env.delete("STRIPE_SECRET_KEY");        // free to send needs no Stripe at all
+  const checkoutsBefore = (globalThis.__checkouts ?? []).length, n0 = outbox().length;
+  const { r, ref, key } = await freeTrip(120, "free.guest@example.com");
+  Deno.env.set("STRIPE_SECRET_KEY", stripeKey);
+  ok("sending a trip is free: no Stripe, no payment link, status 'submitted', and the guest's key comes back", r.s === 200 && r.b.status === "submitted" && !r.b.checkoutUrl && !!key && r.b.deposit?.amount === 0 && !!r.b.hold?.until, JSON.stringify(r.b));
+  ok("no Stripe session is made", (globalThis.__checkouts ?? []).length === checkoutsBefore);
+  ok("it is saved as submitted, with no deposit, and the bed hold has started", row(ref).status === "submitted" && row(ref).deposit_amount === 0 && !row(ref).deposit_paid_at && !!row(ref).hold_until);
+  const crew = ewanMail();
+  ok("Ewan is emailed at once: 'nothing paid yet', a suggested price, and the Approve / Not approved / Edit it buttons", !!crew && /Free to send/.test(text(crew)) && /suggested price/.test(text(crew)) && !/Deposit paid/.test(text(crew)) && /do=approve/.test(crew.html.replace(/&amp;/g, "&")));
+  const gm = last("free.guest@example.com");
+  ok("the guest is emailed that it's with the crew and that they haven't paid, with a link that carries their key", /with the crew/.test(gm.subject) && /haven't paid anything/.test(text(gm)) && !/deposit/i.test(text(gm)) && new RegExp("#/trip/" + ref + "\\?k=").test(gm.html.replace(/&amp;/g, "&")));
+  ok("exactly two emails go out: one to the guest, one to the crew", outbox().length - n0 === 2, String(outbox().length - n0));
+  const st = await send("trip-builder-status", { ref, k: key }, "GET");
+  ok("the trip page: with the crew, no deposit, nothing to pay yet, and they can change it", st.b.status === "submitted" && st.b.deposit.amount === 0 && st.b.deposit.paid === false && st.b.payLink === "" && st.b.canEdit === true && !!st.b.hold?.until && st.b.canPay === false);
+  const nd = await freeTrip(null, "free.nodate@example.com");
+  ok("with no start date there are no beds to hold", nd.r.s === 200 && nd.r.b.hold === null && row(nd.ref).hold_until === null);
+
+  // the crew works it without any deposit to wait for
+  const k = await adminKeyFor(ref);
+  const chk = await send("trip-builder-admin", { action: "checking", ref, key: k, note: "On it." });
+  ok("the crew can pick it up: there is no deposit to wait for", chk.s === 200 && row(ref).status === "checking");
+  const v = await send("trip-builder-admin", { action: "view", ref, key: k });
+  ok("the review page suggests the whole trip cost as the price (there is nothing to take off)", v.s === 200 && v.b.suggestedBalance === 702 && v.b.request.deposit_amount === 0, String(v.b.suggestedBalance));
+  const a = await approveFree(ref, 600);
+  ok("approving sets the price and moves it to 'ready'", a.a.s === 200 && a.a.b.ok && row(ref).status === "ready" && row(ref).balance_amount === 600);
+  ok("the 'checked' email gives the price (not 'the rest'), says nothing has been paid, and lists all three ways to pay", !!a.key && /The price for your trip is \$600/.test(text(a.mail)) && /haven't paid anything/.test(text(a.mail)) && !/deposit/i.test(text(a.mail)) && /instalments/.test(text(a.mail)) && /automatically on/.test(text(a.mail)) && /choose how to pay \(/.test(a.mail.subject), a.mail?.subject);
+  const st2 = await send("trip-builder-status", { ref, k: a.key }, "GET");
+  ok("with the key: all three ways to pay are offered although no card is on file", st2.b.pay.options.map((o) => o.plan).join() === "now,later,instalments" && st2.b.canPay === true && !row(ref).stripe_payment_method_id, JSON.stringify(st2.b.pay?.options?.map((o) => o.plan)));
+  const stn = await send("trip-builder-status", { ref }, "GET");
+  ok("without the key there are no options, but the page is told a price is waiting so it can say 'open the link in your email'", stn.b.pay === null && stn.b.canPay === true && stn.b.keyed === false);
+
+  // pay it all now
+  const nw = await freeTrip(40, "free.now@example.com"), an = await approveFree(nw.ref, 300);
+  const pn = await send("trip-builder-pay", { ref: nw.ref, k: an.key, plan: "now" }), con = globalThis.__checkouts.at(-1);
+  ok("'now' is one ordinary Checkout payment for the whole price: no card saving, no deposit", pn.s === 200 && con.mode === "payment" && con.amount === 300 && con.meta.kind === "trip_builder_balance" && !con.setup && !con.create && con.email === "free.now@example.com");
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_balance", ref: nw.ref, n: "1", origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_bal_f", amount_total: 30000, customer_details: { email: "free.now@example.com" } });
+  ok("paid: booked and paid in full, and the confirmation doesn't call it a 'balance'", row(nw.ref).status === "approved" && !!row(nw.ref).balance_paid_at && /You're booked/.test(last("free.now@example.com").subject) && !/balance/i.test(text(last("free.now@example.com"))));
+
+  // instalments, with no card on file: the card the first payment is made with is saved for the rest
+  const inst = await freeTrip(120, "free.inst@example.com"), ai = await approveFree(inst.ref, 500);
+  const pi = await send("trip-builder-pay", { ref: inst.ref, k: ai.key, plan: "instalments" }), coi = globalThis.__checkouts.at(-1);
+  ok("instalments: the first payment is a Checkout that also SAVES the card (a customer is created, setup_future_usage off_session)", pi.s === 200 && coi.mode === "payment" && coi.amount === 125 && coi.create === "always" && coi.setup === "off_session" && !coi.customer && coi.email === "free.inst@example.com" && coi.meta.kind === "trip_builder_instalment");
+  ok("nothing is booked, and no card is stored, until that payment lands", row(inst.ref).status === "ready" && !row(inst.ref).stripe_payment_method_id);
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_instalment", ref: inst.ref, n: "1", origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_fi1", amount_total: 12500, customer_details: { email: "free.inst@example.com" } });
+  ok("when it lands: booked, and the card it was paid with is saved for the rest", row(inst.ref).status === "approved" && row(inst.ref).pay_plan === "instalments" && row(inst.ref).stripe_payment_method_id === "pm_test_1" && row(inst.ref).stripe_customer_id === "cus_test_1");
+  const bm = last("free.inst@example.com");
+  ok("their 'booked' email has no deposit in it and says later payments come out of the card they saved with us", /You're booked/.test(bm.subject) && !/deposit/i.test(text(bm)) && /saved with us/.test(text(bm)));
+  ok("Ewan's note says they will pay in instalments (not 'the rest')", ewanGotFor(inst.ref, /is booked and will pay in instalments/) && !ewanGotFor(inst.ref, /pay the rest/));
+  setDay(30); globalThis.__charges = []; globalThis.__stripeFail = false;
+  await send("charge-trip-builder-payments", {}, "POST", { "x-cron-secret": "cron-secret-for-tests" });
+  const ic = globalThis.__charges.filter((c) => c.meta.ref === inst.ref);
+  ok("on day 30 the second payment is charged to the card that was saved at the first", ic.length === 1 && ic[0].amount === 125 && ic[0].pm === "pm_test_1" && ic[0].customer === "cus_test_1");
+  setDay(0);
+
+  // pay later, with no card on file: they save one on a Checkout page (nothing charged) and are booked when it is saved
+  const lat = await freeTrip(40, "free.later@example.com"), al = await approveFree(lat.ref, 450);
+  const pl = await send("trip-builder-pay", { ref: lat.ref, k: al.key, plan: "later" }), cl = globalThis.__checkouts.at(-1);
+  ok("'later' with no card: they are sent to save one (a Checkout in setup mode, cards only, nothing charged) and it remembers the price they were shown", pl.s === 200 && pl.b.card === true && !!pl.b.checkoutUrl && cl.mode === "setup" && cl.pmTypes?.join() === "card" && cl.currency === "usd" && cl.create === "always" && cl.email === "free.later@example.com" && cl.meta.kind === "trip_builder_card" && cl.meta.amt === "450" && cl.amount === null, JSON.stringify(cl));
+  ok("nothing is booked and no plan is stored until the card is saved", row(lat.ref).status === "ready" && row(lat.ref).pay_plan === null && row(lat.ref).pay_schedule.length === 0);
+  const setupDone = { metadata: { kind: "trip_builder_card", ref: lat.ref, plan: "later", amt: "450", origin: "https://madmonkeyhostels.com" }, mode: "setup", setup_intent: "seti_1", customer: "cus_setup_1", customer_details: { email: "free.later@example.com" } };
+  await handleTripBuilderPaid(sb, setupDone);
+  const rl = row(lat.ref);
+  ok("when the card is saved they are booked: card stored, one payment of the whole price a week before they leave", rl.status === "approved" && rl.pay_plan === "later" && rl.stripe_payment_method_id === "pm_setup_1" && rl.stripe_customer_id === "cus_setup_1" && rl.pay_schedule.length === 1 && rl.pay_schedule[0].how === "card" && rl.pay_schedule[0].amount === 450 && rl.pay_schedule[0].due === iso(new Date(Date.now() + 33 * 86400000)), JSON.stringify(rl.pay_schedule));
+  ok("they get a 'booked' email (card saved with us, no deposit) and so does Ewan", /You're booked/.test(last("free.later@example.com").subject) && /saved with us/.test(text(last("free.later@example.com"))) && !/deposit/i.test(text(last("free.later@example.com"))) && ewanGotFor(lat.ref, /is booked and will pay on the card a week before you leave/) && !ewanGotFor(lat.ref, /pay the rest/));
+  const nAfter = outbox().length;
+  await handleTripBuilderPaid(sb, setupDone);
+  ok("the same Stripe message delivered twice books once and emails once", outbox().length === nAfter && row(lat.ref).pay_schedule.length === 1);
+  setDay(33); globalThis.__charges = [];
+  await send("charge-trip-builder-payments", {}, "POST", { "x-cron-secret": "cron-secret-for-tests" });
+  const lc = globalThis.__charges.filter((c) => c.meta.ref === lat.ref);
+  ok("on the day, the card they saved is charged and they are paid in full", lc.length === 1 && lc[0].amount === 450 && lc[0].pm === "pm_setup_1" && lc[0].customer === "cus_setup_1" && !!row(lat.ref).balance_paid_at);
+  setDay(0);
+
+  // the price changes while they are on the card page
+  const chg = await freeTrip(40, "free.changed@example.com"), ac = await approveFree(chg.ref, 450);
+  await send("trip-builder-pay", { ref: chg.ref, k: ac.key, plan: "later" });
+  await send("trip-builder-admin", { action: "balance", ref: chg.ref, amount: 500, note: "New price.", password: "test-admin-pw" });
+  const nM = outbox().length;
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_card", ref: chg.ref, plan: "later", amt: "450", origin: "x" }, mode: "setup", setup_intent: "seti_2", customer: "cus_setup_1", customer_details: { email: "free.changed@example.com" } });
+  ok("if the price changed while they were on the card page they are NOT booked on the old one: the card is kept and Ewan is told", row(chg.ref).status === "ready" && row(chg.ref).balance_amount === 500 && row(chg.ref).stripe_payment_method_id === "pm_setup_1" && ewanGotFor(chg.ref, /saved a card, but the trip changed first/) && outbox().slice(nM).every((m) => !/You're booked/.test(m.subject)));
+  const again = await send("trip-builder-pay", { ref: chg.ref, k: ac.key, plan: "later" });
+  ok("they choose again: the card is already on file, so they are booked straight away at the new price", again.s === 200 && again.b.booked === true && row(chg.ref).pay_schedule[0].amount === 500);
+
+  // the trip was changed by the guest while they were on the card page
+  const mv = await freeTrip(40, "free.moved@example.com"), am = await approveFree(mv.ref, 450);
+  await send("trip-builder-pay", { ref: mv.ref, k: am.key, plan: "later" });
+  row(mv.ref).status = "checking";
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_card", ref: mv.ref, plan: "later", amt: "450", origin: "x" }, mode: "setup", setup_intent: "seti_4", customer: "cus_setup_1", customer_details: { email: "free.moved@example.com" } });
+  ok("if the trip went back to the crew meanwhile, they are not booked", row(mv.ref).status === "checking" && row(mv.ref).pay_plan === null);
+
+  // Stripe gives no card
+  const nc = await freeTrip(40, "free.nocard@example.com"), anc = await approveFree(nc.ref, 400);
+  await send("trip-builder-pay", { ref: nc.ref, k: anc.key, plan: "later" });
+  globalThis.__noCard = true;
+  let threw = false;
+  try { await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_card", ref: nc.ref, plan: "later", amt: "400", origin: "x" }, mode: "setup", setup_intent: "seti_3", customer: "cus_setup_1", customer_details: { email: "free.nocard@example.com" } }); } catch { threw = true; }
+  ok("if Stripe gives no card they are not booked, Ewan is told, and the webhook reports the error", threw && row(nc.ref).status === "ready" && ewanGotFor(nc.ref, /saved a card but we couldn't read it/));
+  const ni = await freeTrip(120, "free.nocard2@example.com"), ani = await approveFree(ni.ref, 500);
+  await send("trip-builder-pay", { ref: ni.ref, k: ani.key, plan: "instalments" });
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_instalment", ref: ni.ref, n: "1", origin: "x" }, payment_intent: "pi_fi2", amount_total: 12500, customer_details: { email: "free.nocard2@example.com" } });
+  globalThis.__noCard = false;
+  ok("instalments paid but no card readable: they are booked (they paid) and Ewan is told the rest can't be taken automatically", row(ni.ref).status === "approved" && !row(ni.ref).stripe_payment_method_id && ewanGotFor(ni.ref, /no card saved for/));
+
+  // logging in, changing a trip, declining, WhatsApp, limits
+  const lg = await freeTrip(120, "free.login@example.com"), nl = mailsTo("free.login@example.com").length;
+  await send("trip-builder-login", { email: "free.login@example.com" });
+  ok("logging in finds a trip that was sent free (there is no deposit to have been paid)", mailsTo("free.login@example.com").length === nl + 1 && mailsTo("free.login@example.com").slice(-1)[0].html.includes(lg.ref));
+  const sp = await freeTrip(120, "free.spam@example.com", (p) => { p.trip.route = "Your account is locked: see http://evil.example/login now"; p.contact.name = "<img src=x onerror=alert(1)> Sam"; });
+  await send("trip-builder-login", { email: "free.spam@example.com" });
+  const all = mailsTo("free.spam@example.com").map((m) => m.html).join("\n");
+  ok("what someone typed as a 'route' or a name is never printed in an email to that address (a free trip can be sent with anyone's email)", sp.r.s === 200 && mailsTo("free.spam@example.com").length === 2 && !/evil\.example|account is locked|<img src=x/i.test(all) && /Hey there,/.test(text(mailsTo("free.spam@example.com")[0])) && /your trip/i.test(text(mailsTo("free.spam@example.com")[1])));
+
+  const rv = await freeTrip(120, "free.revise@example.com");
+  const SITE = "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/";
+  const change = (ref: string, key: unknown, n: number, extra: Record<string, unknown> = {}, route = "Hanoi") => send("trip-builder-revise", {
+    ref, k: key, note: "Dropped Saigon.", changes: ["Removed Ho Chi Minh City"],
+    trip: { ...base.trip, link: SITE + "i=s.hanoi.4&n=" + n, route, days: 5, nights: 4, stops: ["hanoi"], estTotalUsd: 300, start: iso(new Date(Date.now() + 120 * 86400000)) },
+    summary: base.summary, crewText: "CREW v" + n, itinerary: "ITIN", ...extra });
+  const nr = outbox().length, c1 = await change(rv.ref, rv.key, 1);
+  ok("changing a free trip the crew hasn't picked up: replaced, the crew gets an UPDATED email, the guest gets none (nobody has checked that address)", c1.s === 200 && c1.b.rev === 1 && /^UPDATED/.test(ewanMail().subject) && outbox().length - nr === 1 && mailsTo("free.revise@example.com").length === 1);
+  row(rv.ref).status = "checking"; const nr2 = outbox().length;
+  const c2 = await change(rv.ref, rv.key, 2, { changes: ["Removed Saigon", "see http://evil.example"] }, "Hanoi and http://evil.example");
+  const gm2 = mailsTo("free.revise@example.com").slice(-1)[0];
+  ok("once the crew has it, the guest gets a confirmation, with only plain text in it", c2.s === 200 && outbox().length - nr2 === 2 && /We've got your changes/.test(gm2.subject) && /Removed Saigon/.test(text(gm2)) && !/evil\.example/.test(gm2.html) && /your trip/.test(text(gm2)));
+
+  const dc = await freeTrip(120, "free.decline@example.com"), dk = await adminKeyFor(dc.ref);
+  const dd = await send("trip-builder-admin", { action: "decline", ref: dc.ref, key: dk, note: "Sorry, full that week.", refund: true });
+  ok("declining a free trip: nothing to refund, and the email doesn't mention a refund or a deposit", dd.s === 200 && dd.b.refunded === 0 && row(dc.ref).status === "declined" && /full that week/.test(text(last("free.decline@example.com"))) && !/refund|deposit/i.test(text(last("free.decline@example.com"))));
+
+  const n3 = outbox().length;
+  const wa = await freeTrip(120, "ignored@example.com", (p) => { p.contact.via = "whatsapp"; p.contact.email = ""; p.contact.whatsapp = "+447700900123"; });
+  ok("a WhatsApp-only trip is saved and the crew is told; there is no guest email to send", wa.r.s === 200 && row(wa.ref).status === "submitted" && outbox().length - n3 === 1 && outbox().slice(n3).every((m) => m.to.includes("ewan@madmonkeyhostels.com")));
+  const wb = await send("trip-builder-admin", { action: "balance", ref: wa.ref, amount: 300, password: "test-admin-pw" });
+  ok("approving it says no email could be sent and hands back the guest's link for the crew to pass on", wb.s === 200 && wb.b.emailed === false && /#\/trip\/MM-[A-Z0-9]{6}\?k=/.test(wb.b.url));
+
+  let sent = 0, code = 0;
+  for (let i = 0; i < 7; i++) { const x = (await freeTrip(120, "free.flood@example.com")).r; if (x.s === 200) sent++; else code = x.s; }
+  const countBefore = __db.trip_builder_requests.length; await freeTrip(120, "free.flood@example.com");
+  ok("free sending is still limited: 5 trips an hour from one contact, then 429, and a refused one saves nothing", sent === 5 && code === 429 && __db.trip_builder_requests.length === countBefore, sent + " sent, " + code);
+
+  // the switch: a typo in the secret means free; a real number brings the deposit back
+  Deno.env.set("TRIP_BUILDER_DEPOSIT_PER_PERSON", "fifty");
+  ok("a secret that isn't a number is treated as free, never as an odd charge", (await freeTrip(120, "free.typo@example.com")).r.b.status === "submitted");
+  Deno.env.set("TRIP_BUILDER_DEPOSIT_PER_PERSON", "50");
+  const dep = await freeTrip(120, "free.deposit@example.com");
+  ok("with the deposit switched on, sending asks for it first (status pending_payment, a Checkout link) and nobody is emailed yet", dep.r.b.status === "pending_payment" && !!dep.r.b.checkoutUrl && dep.r.b.deposit.amount === 100 && mailsTo("free.deposit@example.com").length === 0);
+  Deno.env.delete("TRIP_BUILDER_DEPOSIT_PER_PERSON");
 }
 
 console.log(`\n${pass}/${pass + fail} checks passed`);

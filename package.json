@@ -4,7 +4,7 @@
   "private": true,
   "description": "Guest-facing build-your-own-trip funnel for Mad Monkey",
   "scripts": {
-    "test": "node test/logic.test.js && node test/search.test.js && node test/fuzz.test.js && node test/server.test.js && node test/pages.test.js",
+    "test": "node test/logic.test.js && node test/search.test.js && node test/thumbs.test.js && node test/fuzz.test.js && node test/server.test.js && node test/pages.test.js",
     "check": "node scripts/lint.mjs && node scripts/audit-data.mjs && node scripts/make-thumbs.mjs --check && npm test",
     "lint": "node scripts/lint.mjs",
     "audit": "node scripts/audit-data.mjs",

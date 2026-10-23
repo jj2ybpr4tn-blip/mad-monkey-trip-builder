@@ -28,21 +28,23 @@ Every layer of the trip builder was read, scanned and attacked: the planner and 
 ### Accessibility and phones
 
 - Modals: labelled, the page behind is inert, focus is trapped and returned; a route announcer, the title changes per screen, a skip link, one `h1` per screen, headings never skip a level (a small normaliser sets `aria-level`), tour cards are real buttons. axe-core (WCAG 2.2 AA + best practice) is clean on every main screen and modal, and so is the new search box in every state (open, no match, one letter).
-- 320px phones: the logo was squashed to 28px wide and the header overflowed; the hero grew sideways when the search list opened; wrapped links overlapped. All fixed; `test/ui-lint.js` is clean at 320, 375, 414 and 768.
+- 320px phones: the logo was squashed to 28px wide and the header overflowed; the hero grew sideways when the search list opened; wrapped links overlapped. All fixed; `test/ui-lint.js` is clean at 320, 375, 414 and 767 (as a touch screen, where every tap target is 44px).
 
 ### Speed
 
-- Photos are the weight, not the code. `npm run thumbs` makes two small WebP copies of each of the 260 photos (12 MB in all). A three-stop builder page went from **3.3 MB of photos to 170 KB**; the Google pages use them through `<picture>` with the JPEG as fallback; a missing small copy falls back to the full photo. The pages also gained fetch timeouts everywhere a screen waits on a server.
+- Photos are the weight, not the code. `npm run thumbs` makes two small WebP copies of each of the 260 photos (12 MB in all). A three-stop builder page went from **3.3 MB of photos to 170 KB**; the Google pages use them through `<picture>` with the JPEG as fallback; a missing small copy falls back to the full photo. The pages also gained fetch timeouts everywhere a screen waits on a server. The live ALL IN site hot-links the full photos, so it gets the same speed-up with one command, `node scripts/sync-allin.mjs <site> --with-thumbs`: it hosts just the 13 MB of small copies beside the builder and sets `THUMB_BASE` (the page finds each small copy from the hot-linked address it would have used; `test/thumbs.test.js` proves every photo maps to a copy that exists).
 
 ### The data
 
-`npm run audit` checks prices, legs, tours, ALL IN trips, photos and wording against each other (0 errors). The entry rules were checked again against current sources on 23 Oct (Thailand 30 days from 15 Sep 2026, Vietnam, Cambodia, Indonesia, the Philippines, Laos): nothing needed changing ([ENTRY-SOURCES.md](ENTRY-SOURCES.md)). Two content gaps remain for a person: **Nacpan Beach has fewer than three tours**, and **the sauna / gym / ice bath has no price**.
+`npm run audit` checks prices, legs, tours, ALL IN trips, photos and wording against each other (0 errors). The entry rules were checked again against current sources on 23 Oct (Thailand 30 days from 15 Sep 2026, Vietnam, Cambodia, Indonesia, the Philippines, Laos): nothing needed changing ([ENTRY-SOURCES.md](ENTRY-SOURCES.md)). Two small content gaps remain for a person (see the list at the end): **Nacpan Beach lists only two things to do**, and **the Nusa Lembongan sauna + ice bath has no price**.
 
 ## What was added
 
 - **Type where you're going.** "Where to?" on the home page and in the builder; **Best order**. [PLANNING.md](PLANNING.md)
 - **Plan in stages**, with **log in by email** (no password). [PLANNING.md](PLANNING.md)
 - **A real human checks every trip**, and **Ask Ewan** on every screen. [PLANNING.md](PLANNING.md)
+- **Free to send** (Ewan, 23 Oct). Sending a trip for checking costs nothing: no deposit, no payment on the way in. The crew checks it and sets the price; only then does the guest pay, their way (all now, a week before they leave, or instalments), and a card is saved as part of choosing. The deposit is still there as a switch. [PAYMENTS.md](PAYMENTS.md)
+- **Skip the rest of the quiz** after the landing point.
 
 ## How to check it yourself
 
@@ -51,7 +53,7 @@ npm run check          # lint, data audit, thumbnails up to date, then every tes
 handoff/all-in-backend/e2e/run.sh /path/to/mm-squad-trips      # the backend, end to end (needs Deno 2)
 ```
 
-In a browser tab on `npm start`: `test/ui-xss.js` (hostile data), `test/ui-lint.js` (phone layout), `test/ui-smoke.js` (presses every button).
+In a browser tab on `npm start`: `test/ui-xss.js` (hostile data), `test/ui-lint.js` (phone layout), `test/ui-smoke.js` (presses every button), `test/ui-free.js` (free to send).
 
 | Check | Result |
 |---|---|
@@ -60,17 +62,21 @@ In a browser tab on `npm start`: `test/ui-xss.js` (hostile data), `test/ui-lint.
 | fuzz (seeded, about 8,000 cases) | 5 checks, clean over 8 seeds |
 | server | 70 |
 | Google pages | 12 |
-| ALL IN backend: Deno tests / end to end / vitest | 48 / 114 / 45 |
+| photo copies (`test/thumbs.test.js`) | 18 |
+| ALL IN backend: Deno tests / end to end / vitest | 58 / 157 / 45 |
+| free to send, in the browser (`test/ui-free.js`: the form, the trip page in every state, the crew page) | 36 |
 | hostile data in the browser | 22 screens, clean |
 | axe-core | clean on every main screen and modal |
-| phone layout (320 / 375 / 414 / 768) | clean |
+| phone layout (320 / 375 / 414 / 767 touch) | clean |
 | dead buttons (`test/ui-smoke.js`: 323 presses on 6 screens) | 0 did nothing, 0 script errors |
 
 ## What a person still has to do
 
-1. **Send the ALL IN patches to Charlie** (`handoff/all-in-backend/`, [README](../handoff/all-in-backend/README.md)) and set `TRIP_BUILDER_LINK_SECRET`. Until the backend patch is live, the live site's login and stage features can't email anything, and the forged-origin hole is open.
-2. **Try the new emails with the test send** and one small real payment; none of this was run against live Stripe, Resend or the Supabase gateway.
-3. **Confirm with the hostel team:** whether Kampot is open (the data says 1 Nov 2026; Mad Monkey announced a riverside resort for late 2025), the two content gaps above, and whether a guest planning stage 2 should pay a second deposit (today it does).
-4. **Decide about photos on the live site.** The live copy hot-links the full-size photos from madmonkeyhostels.com (`PHOTO_BASE` is blank there), so the small copies that make the demo fast do not apply to it. Hosting the photos next to the builder (61 MB, 13 MB of it the small copies) would; that is a choice for you and Charlie, and is not in the patches.
+1. **Send the ALL IN patches to Charlie** (`handoff/all-in-backend/`, seven of them, [README](../handoff/all-in-backend/README.md)) and set `TRIP_BUILDER_LINK_SECRET`. Until the backend patches are live the live site still asks for a deposit, its login and stage features can't email anything, and the forged-origin hole is open.
+2. **Try it end to end with a small real payment** once it is live: send a trip (it should be free and Ewan should get the email at once), approve it, then pay a small amount each of the three ways (all now; "a week before" through the card page; instalments). None of this was run against live Stripe, Resend or the Supabase gateway.
+3. **Fill two small gaps in the data if you know the answers.** They are optional and don't hold anything up. *Nacpan Beach* (El Nido, Palawan) lists only two things to do, "Nacpan ultimate island hopping" ($39) and "Sunset cruise" ($21), where every other hostel has three or more; if there is a third (or more), send its name and price. *"Sauna + ice bath" at Nusa Lembongan* has no price in the data; send the price, or "free" if guests don't pay for it, and it is added. (Kampot: confirmed by Ewan, it opens on 1 Nov 2026 as the data says.)
+4. **Optional: the photo speed-up on the live site.** Charlie runs `node scripts/sync-allin.mjs <site> --with-thumbs` from this repo. It adds 13 MB of small photos beside the builder and needs nothing else.
 5. **Check the wording.** The builder says "Plan it here. A real human checks it before anything is booked." It does not say "designed with AI", because nothing in the builder is AI (the chat was removed; the planner is routing and pricing rules). If AI is added later, the line in `HUMAN` at the top of the Ask Ewan block in `app.js` is the one place to change.
-6. **Not built:** working offline (Wanderlog charges for it; a service worker would be the way, with care over stale files), notes on a stop, real-time editing together, one deposit for a whole journey of stages.
+6. **Free requests still ask the crew to hold beds** for up to 48 hours (the new-trip email says "beds held until ..."). Free means more requests, so more holds. If you'd rather only hold once a trip is approved, say so and the wording and the email change.
+7. **Watch for junk.** The deposit used to keep it out. Now a trip is limited to 5 an hour per contact and 10 an hour per address, and nothing a sender types is printed in an email to someone else. If junk still comes, the next steps are a Turnstile check on the form, or set `TRIP_BUILDER_DEPOSIT_PER_PERSON` to 50 again (and `DEPOSIT_PER_PERSON` in the builder's `config.js`).
+8. **Not built:** working offline (Wanderlog charges for it; a service worker would be the way, with care over stale files), notes on a stop, real-time editing together, one payment for a whole journey of stages.

@@ -11,7 +11,7 @@ The main button is **"Hold my beds + get it checked"**. It sends the same payloa
   "hold": { "requested": true, "hours": 48 }     // true only if the guest ticked it AND picked a start date; hours = HOLD_HOURS in config.js
 ```
 
-Respond with JSON `{ "ref": "MM-ABC123", "status": "submitted" }` if you want to issue your own reference; otherwise the browser makes one. **The hold itself happens on your side**: when `hold.requested` is true, place a soft hold on the beds for those nights for `hold.hours`, and let it lapse if the trip isn't confirmed.
+**Sending is free** (`DEPOSIT_PER_PERSON` is 0), so the trip is with the crew the moment it is sent: respond with JSON `{ "ref": "MM-ABC123", "status": "submitted", "key": "<the guest's key, if you issue one>", "hold": { "until": "<ISO time>" } }` if you want to issue your own reference (and the guest's key, which lets them change the trip later); otherwise the browser makes the reference. If your backend wants a deposit first (`DEPOSIT_PER_PERSON` above 0), answer with a Stripe `checkoutUrl` and `status: "pending_payment"` instead: the page follows what you answer, and sends the guest there to pay it before the trip counts as sent. **The hold itself happens on your side**: when `hold.requested` is true, place a soft hold on the beds for those nights for `hold.hours`, and let it lapse if the trip isn't confirmed.
 
 ### Trip status page (optional)
 
@@ -21,7 +21,7 @@ The guest lands on `#/trip/<ref>` after sending. With `STATUS_ENDPOINT` set, it 
 { "status": "submitted | checking | ready | approved", "note": "Everything checks out, here's your confirmed plan", "payLink": "https://…" }
 ```
 
-`ready` shows the guest an **Approve + pay deposit** button (it opens `payLink`). Without the endpoint the page runs in demo mode with buttons that step through each state so you can see them.
+`ready` shows the guest the price and, when the endpoint answers with payment options (`pay`, see [PAYMENTS.md](PAYMENTS.md)), how they would like to pay; a plain `payLink` still works (it opens it). Without the endpoint the page runs in demo mode with buttons that step through each state so you can see them.
 
 ### Full payload
 

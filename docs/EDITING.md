@@ -26,7 +26,7 @@ All of it goes through `edit.js`: one set of validated, all-or-nothing operation
 
 ## Changing a trip after sending it
 
-A guest can change the trip they sent **until it is booked**. The change **replaces** the trip on the same request (same reference, same deposit, same beds held), so the crew only ever reviews the latest plan and never a plan the guest has already moved on from.
+A guest can change the trip they sent **until it is booked**. The change **replaces** the trip on the same request (same reference, same deposit if there was one, same beds held), so the crew only ever reviews the latest plan and never a plan the guest has already moved on from.
 
 1. On their trip page (`#/trip/<ref>`) they press **Change my trip**. The builder opens the version the crew has, with a pink bar: *Changing trip MM-XXXXXX. Your changes replace what the crew is checking.*
 2. They edit it like any other trip. The header button becomes **Send my changes** (disabled until something changes).
@@ -36,7 +36,7 @@ What happens, by where the trip is:
 
 | Status | Guest changes it | The crew |
 |---|---|---|
-| deposit not paid yet | the trip is replaced quietly | isn't told (they haven't seen it); their first email will already be the new version |
+| deposit not paid yet (only with a deposit switched on) | the trip is replaced quietly | isn't told (they haven't seen it); their first email will already be the new version |
 | submitted / checking | replaced | gets an **UPDATED (v2)** email: what moved, what it was before, the guest's note, and the usual Approve / Not approved / Edit it buttons |
 | ready (crew approved and set a price) | the approval and price are **withdrawn**, back to *checking* | email says so; nothing is waiting for the guest to pay |
 | booked | not here: "message the crew" (money is moving, so a payment is never left pointing at a plan that has moved) | |
