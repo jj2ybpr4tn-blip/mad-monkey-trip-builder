@@ -1,4 +1,4 @@
-From 9289e55cbc80cea6fd506792c73fb5b1e2209342 Mon Sep 17 00:00:00 2001
+From 278c560a0818ec342a3722a89fc0da3b616dcaf9 Mon Sep 17 00:00:00 2001
 From: Ewan McIntyre <ewan3568@me.com>
 Date: Fri, 23 Oct 2026 15:58:16 +0800
 Subject: [PATCH 6/7] Trip builder: free to send, Where to? search, best order,
@@ -44,7 +44,7 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 ---
  public/trip-builder/app.js             | 336 +++++++++++++++++++------
  public/trip-builder/config.js          |   4 +
- public/trip-builder/crew.css           |   3 +-
+ public/trip-builder/crew.css           |   5 +-
  public/trip-builder/crew.js            |  17 +-
  public/trip-builder/data/activities.js |   2 +-
  public/trip-builder/data/media.js      |  23 ++
@@ -55,8 +55,8 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  public/trip-builder/index.html         |  68 ++---
  public/trip-builder/logic.js           | 211 ++++++++++------
  public/trip-builder/search.js          | 177 +++++++++++++
- public/trip-builder/styles.css         | 127 ++++++++--
- public/trip-builder/ui-crew.js         |  69 ++---
+ public/trip-builder/styles.css         | 129 ++++++++--
+ public/trip-builder/ui-crew.js         |  71 +++---
  public/trip-builder/ui-extras.js       |   9 +-
  public/trip-builder/ui-group.js        |  14 +-
  public/trip-builder/ui-live.js         |  20 +-
@@ -66,7 +66,7 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  public/trip-builder/ui-search.js       | 109 ++++++++
  public/trip-builder/ui-stage.js        | 158 ++++++++++++
  public/trip-builder/ui-tour.js         |  10 +-
- 24 files changed, 1263 insertions(+), 307 deletions(-)
+ 24 files changed, 1266 insertions(+), 310 deletions(-)
  create mode 100644 public/trip-builder/search.js
  create mode 100644 public/trip-builder/ui-search.js
  create mode 100644 public/trip-builder/ui-stage.js
@@ -808,7 +808,7 @@ index bbddbf0..7293fa9 100644
  
  // With an API, fill in every endpoint that wasn't set by hand.
 diff --git a/public/trip-builder/crew.css b/public/trip-builder/crew.css
-index 8037194..9443bc2 100644
+index 8037194..618aa5e 100644
 --- a/public/trip-builder/crew.css
 +++ b/public/trip-builder/crew.css
 @@ -3,7 +3,7 @@
@@ -820,6 +820,15 @@ index 8037194..9443bc2 100644
  .crew__sub{font-weight:600;font-size:16px;color:var(--ink-dim);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
  .cpill{display:inline-block;border:var(--bw) solid var(--black);background:var(--paper);padding:1px 10px;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--black)}
  .cpill--new{background:var(--pink)} .cpill--chk{background:var(--orange)} .cpill--rdy{background:var(--yellow)} .cpill--ok{background:var(--lime)} .cpill--off{background:var(--black);color:var(--paper)} .cpill--edit{background:var(--cyan)}
+@@ -53,7 +53,7 @@
+ .cstop__b>p{font-size:12.5px;font-weight:500;color:#333;margin:2px 0 8px}
+ .cstop ul{list-style:none;margin:0;padding:0} .cstop li{display:flex;justify-content:space-between;gap:14px;font-size:14px;font-weight:500;padding:4px 0}
+ .cstop li>span:last-child{text-align:right;white-space:nowrap} .cstop li i{display:block;font-style:normal;font-size:11.5px;color:var(--ink-dim)}
+-.cstop li.none{color:#777} .cstop li em{font-style:normal;font-weight:900;font-size:10.5px;background:var(--yellow);padding:0 5px;border:2px solid var(--black);text-transform:uppercase}
++.cstop li.none{color:#5c5c5c} .cstop li em{font-style:normal;font-weight:900;font-size:10.5px;background:var(--yellow);padding:0 5px;border:2px solid var(--black);text-transform:uppercase}
+ .cstop__next{margin-top:8px;padding-top:8px;border-top:2px dashed var(--black);font-size:13px;font-weight:500}
+ 
+ .cmoney{width:100%;border-collapse:collapse;border:var(--bw) solid var(--black);background:var(--paper);margin:var(--s-4) 0 0;font-size:14px}
 @@ -93,3 +93,4 @@ body[data-view="crew"] .foot{display:none}
  .cplan li:first-child{border-top:0} .cplan li i{font-style:normal;font-size:10.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase} .cplan li.paid{background:#f3ffd0} .cplan li.failed,.cplan li.gave_up{background:var(--yellow)}
  .cbanner--upd{background:var(--pink)} .cbanner--upd ul{margin:6px 0 6px 18px;padding:0;font-weight:700} .cbanner--upd p{margin:6px 0 0;font-weight:500} .cbanner--upd .cdim{color:var(--black)}
@@ -1088,7 +1097,7 @@ index c6d7dc9..ddb15c9 100644
      },
      routeVotes: function (g) { var t = { a: 0, b: 0 }; g.members.forEach(function (m) { var v = m.votes.route; if (v === 'a' || v === 'b') t[v]++; }); return t; },
 diff --git a/public/trip-builder/index.html b/public/trip-builder/index.html
-index bd259c7..5da0a24 100644
+index bd259c7..869508b 100644
 --- a/public/trip-builder/index.html
 +++ b/public/trip-builder/index.html
 @@ -6,6 +6,9 @@
@@ -1107,8 +1116,8 @@ index bd259c7..5da0a24 100644
    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
 -  <link rel="stylesheet" href="styles.css?v=50">
 -  <link rel="stylesheet" href="crew.css?v=50">
-+  <link rel="stylesheet" href="styles.css?v=87">
-+  <link rel="stylesheet" href="crew.css?v=87">
++  <link rel="stylesheet" href="styles.css?v=88">
++  <link rel="stylesheet" href="crew.css?v=88">
  </head>
  <body data-view="home">
 +  <a class="skip" href="#app">Skip to the content</a>
@@ -1156,35 +1165,35 @@ index bd259c7..5da0a24 100644
 -  <script src="ui-pack.js?v=50"></script>
 -  <script src="ui-crew.js?v=50"></script>
 -  <script src="ui-tour.js?v=50"></script>
-+  <script src="data/map-data.js?v=87"></script>
-+  <script src="data/places.js?v=87"></script>
-+  <script src="data/activities.js?v=87"></script>
-+  <script src="data/media.js?v=87"></script>
-+  <script src="data/legs.js?v=87"></script>
-+  <script src="data/trips.js?v=87"></script>
-+  <script src="data/entry.js?v=87"></script>
-+  <script src="data/gallery.js?v=87"></script>
-+  <script src="data/rules.js?v=87"></script>
-+  <script src="data/guide.js?v=87"></script>
-+  <script src="logic.js?v=87"></script>
-+  <script src="extras.js?v=87"></script>
-+  <script src="crew.js?v=87"></script>
-+  <script src="edit.js?v=87"></script>
-+  <script src="search.js?v=87"></script>
-+  <script src="group.js?v=87"></script>
-+  <script src="config.js?v=87"></script>
-+  <script src="ui-map.js?v=87"></script>
-+  <script src="ui-story.js?v=87"></script>
-+  <script src="app.js?v=87"></script>
-+  <script src="ui-review.js?v=87"></script>
-+  <script src="ui-group.js?v=87"></script>
-+  <script src="ui-live.js?v=87"></script>
-+  <script src="ui-extras.js?v=87"></script>
-+  <script src="ui-pack.js?v=87"></script>
-+  <script src="ui-crew.js?v=87"></script>
-+  <script src="ui-tour.js?v=87"></script>
-+  <script src="ui-search.js?v=87"></script>
-+  <script src="ui-stage.js?v=87"></script>
++  <script src="data/map-data.js?v=88"></script>
++  <script src="data/places.js?v=88"></script>
++  <script src="data/activities.js?v=88"></script>
++  <script src="data/media.js?v=88"></script>
++  <script src="data/legs.js?v=88"></script>
++  <script src="data/trips.js?v=88"></script>
++  <script src="data/entry.js?v=88"></script>
++  <script src="data/gallery.js?v=88"></script>
++  <script src="data/rules.js?v=88"></script>
++  <script src="data/guide.js?v=88"></script>
++  <script src="logic.js?v=88"></script>
++  <script src="extras.js?v=88"></script>
++  <script src="crew.js?v=88"></script>
++  <script src="edit.js?v=88"></script>
++  <script src="search.js?v=88"></script>
++  <script src="group.js?v=88"></script>
++  <script src="config.js?v=88"></script>
++  <script src="ui-map.js?v=88"></script>
++  <script src="ui-story.js?v=88"></script>
++  <script src="app.js?v=88"></script>
++  <script src="ui-review.js?v=88"></script>
++  <script src="ui-group.js?v=88"></script>
++  <script src="ui-live.js?v=88"></script>
++  <script src="ui-extras.js?v=88"></script>
++  <script src="ui-pack.js?v=88"></script>
++  <script src="ui-crew.js?v=88"></script>
++  <script src="ui-tour.js?v=88"></script>
++  <script src="ui-search.js?v=88"></script>
++  <script src="ui-stage.js?v=88"></script>
  </body>
  </html>
 diff --git a/public/trip-builder/logic.js b/public/trip-builder/logic.js
@@ -1811,7 +1820,7 @@ index 0000000..5b13401
 +  if (typeof module !== 'undefined') module.exports = { norm: norm };
 +})(typeof window !== 'undefined' ? window : globalThis);
 diff --git a/public/trip-builder/styles.css b/public/trip-builder/styles.css
-index 065fe79..6cffef9 100644
+index 065fe79..6ed8958 100644
 --- a/public/trip-builder/styles.css
 +++ b/public/trip-builder/styles.css
 @@ -40,7 +40,7 @@ h1,h2,h3,h4,p{margin:0}
@@ -1972,6 +1981,15 @@ index 065fe79..6cffef9 100644
    .miss__no,.ideas__x,.doc__more{display:inline-flex;align-items:center;padding-inline:8px}
    .bmap__ctl button{min-width:44px;min-height:44px}
    .bmap__regions button{min-height:44px}
+@@ -852,7 +859,7 @@ body.seo{background:var(--bone);color:var(--black)}
+ .paypick{border:0;margin:var(--s-4) 0 0;padding:0;display:grid;gap:var(--s-3)} .paypick legend{padding:0;margin-bottom:var(--s-2)}
+ .payopt{display:flex;gap:var(--s-3);align-items:flex-start;border:var(--bw) solid var(--black);background:var(--paper);padding:var(--s-3) var(--s-4);cursor:pointer;box-shadow:4px 4px 0 var(--black);text-align:left}
+ .payopt:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--black)} .payopt:focus-within{outline:var(--bw) solid var(--blue);outline-offset:2px}
+-.payopt--on{background:var(--lime)} .payopt input{flex:0 0 auto;margin-top:6px;width:20px;height:20px;accent-color:var(--black)}
++.payopt--on{background:var(--lime)} .payopt input{flex:0 0 auto;margin-top:4px;width:24px;height:24px;accent-color:var(--black)}
+ .payopt__b{display:grid;gap:3px;min-width:0} .payopt__b b{font-weight:900;text-transform:uppercase;letter-spacing:.02em;font-size:15px} .payopt__b em{font-style:normal;font-weight:900;font-size:24px;line-height:1.1}
+ .payopt__b small{font-size:13px;font-weight:500;line-height:1.45;color:var(--ink-dim)} .payopt--on small{color:#2a2a22}
+ .paysched{margin:var(--s-4) 0 0} .paysched ul{list-style:none;margin:var(--s-2) 0 var(--s-3);padding:0;border:var(--bw) solid var(--black);background:var(--paper)}
 @@ -881,6 +888,8 @@ body{overflow-x:clip}
  /* ---------- phones: lead with the words and the buttons, map underneath ---------- */
  @media (max-width:900px){.hero__in{padding-block:var(--s-5) var(--s-6)} .hero h1{font-size:clamp(40px,11.5vw,72px)} .hero__cta .btn{flex:1 1 220px}}
@@ -2068,7 +2086,7 @@ index 065fe79..6cffef9 100644
 +.beenpick__i input{width:18px;height:18px;accent-color:var(--black);flex:none}
 +@media print{.stagebar__act,.yourtrips{display:none}}
 diff --git a/public/trip-builder/ui-crew.js b/public/trip-builder/ui-crew.js
-index c1219f7..f905d75 100644
+index c1219f7..ce9e806 100644
 --- a/public/trip-builder/ui-crew.js
 +++ b/public/trip-builder/ui-crew.js
 @@ -18,17 +18,19 @@
@@ -2113,7 +2131,7 @@ index c1219f7..f905d75 100644
      });
    }
  
-@@ -64,14 +66,14 @@
+@@ -64,18 +66,18 @@
      setSess({ ref: r.ref, k: q.k, name: r.name, first: first, people: r.party_size, dates: r.dates_flex, from: r.from_place, notes: r.notes, editing: false, rev: d.rev });
  
      var h = '<section class="quiz crew"><div class="wrap">' +
@@ -2131,6 +2149,11 @@ index c1219f7..f905d75 100644
          act('edit', 'edit', 'Edit it', canEdit || !can ? 'Change it, add our input' : 'Balance link already sent', canEdit, open) + '</div>' +
        '<div id="cpanel"></div>' +
        '<div class="crew__grid"><div class="crew__main">' + (sum ? tripHTML(sum, d.suggestedBalance, r) : '<div class="cbox"><p>This trip can\'t be shown here. Open it in the builder below.</p></div>') + '</div>' +
+-      '<aside class="crew__side">' + guestHTML(r, first, enc) + historyHTML(r, rev, d.original, first) + '</aside></div>' +
++      '<div class="crew__side" role="group" aria-label="About the guest and this trip">' + guestHTML(r, first, enc) + historyHTML(r, rev, d.original, first) + '</div></div>' +
+       '</div></section>';
+     root.innerHTML = h;
+     var panel = $('#cpanel', root);
 @@ -95,19 +97,26 @@
    }
  

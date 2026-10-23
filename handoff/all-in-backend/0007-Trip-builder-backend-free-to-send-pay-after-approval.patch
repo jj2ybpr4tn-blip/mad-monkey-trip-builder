@@ -1,4 +1,4 @@
-From fcc7aab03552fef331bb8f21aebadfc2d1fedb4a Mon Sep 17 00:00:00 2001
+From a98c4be1752e35d6b791a1f11be2a2aa425c7be7 Mon Sep 17 00:00:00 2001
 From: Ewan McIntyre <ewan3568@me.com>
 Date: Fri, 23 Oct 2026 16:56:33 +0800
 Subject: [PATCH 7/7] Trip builder backend: free to send, pay after approval

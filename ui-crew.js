@@ -77,7 +77,7 @@
         act('edit', 'edit', 'Edit it', canEdit || !can ? 'Change it, add our input' : 'Balance link already sent', canEdit, open) + '</div>' +
       '<div id="cpanel"></div>' +
       '<div class="crew__grid"><div class="crew__main">' + (sum ? tripHTML(sum, d.suggestedBalance, r) : '<div class="cbox"><p>This trip can\'t be shown here. Open it in the builder below.</p></div>') + '</div>' +
-      '<aside class="crew__side">' + guestHTML(r, first, enc) + historyHTML(r, rev, d.original, first) + '</aside></div>' +
+      '<div class="crew__side" role="group" aria-label="About the guest and this trip">' + guestHTML(r, first, enc) + historyHTML(r, rev, d.original, first) + '</div></div>' +
       '</div></section>';
     root.innerHTML = h;
     var panel = $('#cpanel', root);
