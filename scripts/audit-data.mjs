@@ -148,7 +148,7 @@ const need = (rel) => { used.add(rel); if (!fs.existsSync(path.join(PH, rel))) e
 ids.forEach((id) => { if (MM.hostelImg(id)) need('hostel/' + id + '.jpg'); MM.galleryRaw(id).forEach((_, k) => need('gallery/' + id + '-' + k + '.jpg')); });
 Object.values(MM.ACTS).forEach((a) => { if (a.slug && MM.tourImg(a.slug)) need('tour/' + a.slug + '.jpg'); });
 const walk = (d, rel = '') => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? (rel === '' && (e.name === 's' || e.name === 'm') ? [] : walk(path.join(d, e.name), rel + e.name + '/')) : [rel + e.name]);   // s/ and m/ are the small copies
-const onDisk = fs.existsSync(PH) ? walk(PH) : [];
+const onDisk = fs.existsSync(PH) ? walk(PH).filter((f) => f !== 'thumbs.json') : [];   // (thumbs.json is the fingerprint list scripts/make-thumbs.mjs keeps)
 used.forEach((rel) => { ['s', 'm'].forEach((k) => { if (fs.existsSync(path.join(PH, rel)) && !fs.existsSync(path.join(PH, k, rel.replace(/\.jpe?g$/i, '.webp')))) warn('no small copy: assets/photos/' + k + '/' + rel.replace(/\.jpe?g$/i, '.webp') + ' (run: node scripts/make-thumbs.mjs)'); }); });
 onDisk.forEach((f) => { if (!used.has(f)) warn('photo on disk but not used: assets/photos/' + f); const sz = fs.statSync(path.join(PH, f)).size; if (sz > 450000) warn('photo is heavy (' + Math.round(sz / 1024) + ' KB): assets/photos/' + f); });
 
