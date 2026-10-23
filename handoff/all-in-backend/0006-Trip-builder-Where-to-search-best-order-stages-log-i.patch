@@ -1,4 +1,4 @@
-From 296dc464ea5e329e0837d5ed12cd5688db199cb4 Mon Sep 17 00:00:00 2001
+From e45c3c341eb3da07211a083bc2c0e5fc87ccdc93 Mon Sep 17 00:00:00 2001
 From: Ewan McIntyre <ewan3568@me.com>
 Date: Fri, 23 Oct 2026 15:58:16 +0800
 Subject: [PATCH 6/6] Trip builder: Where to? search, best order, stages + log
@@ -36,7 +36,7 @@ config.js gains LOGIN_ENDPOINT.
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 ---
- public/trip-builder/app.js             | 320 ++++++++++++++++++++-----
+ public/trip-builder/app.js             | 321 ++++++++++++++++++++-----
  public/trip-builder/config.js          |   4 +
  public/trip-builder/crew.css           |   3 +-
  public/trip-builder/crew.js            |  17 +-
@@ -60,13 +60,13 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  public/trip-builder/ui-search.js       | 109 +++++++++
  public/trip-builder/ui-stage.js        | 158 ++++++++++++
  public/trip-builder/ui-tour.js         |  10 +-
- 24 files changed, 1196 insertions(+), 268 deletions(-)
+ 24 files changed, 1197 insertions(+), 268 deletions(-)
  create mode 100644 public/trip-builder/search.js
  create mode 100644 public/trip-builder/ui-search.js
  create mode 100644 public/trip-builder/ui-stage.js
 
 diff --git a/public/trip-builder/app.js b/public/trip-builder/app.js
-index 51bcc7c..1e6e8d5 100644
+index 51bcc7c..bbf6e6e 100644
 --- a/public/trip-builder/app.js
 +++ b/public/trip-builder/app.js
 @@ -15,6 +15,14 @@
@@ -569,16 +569,17 @@ index 51bcc7c..1e6e8d5 100644
      var blockNo = {}; pl.days.forEach(function (d, i) { if (d.kind === 'block') { blockNo[d.blockTrip.id + d.si] = (blockNo[d.blockTrip.id + d.si] || 0) + 1; d._bk = blockNo[d.blockTrip.id + d.si]; } });
      pl.days.forEach(function (d) {
        var title = d.title, extra = '';
-@@ -706,6 +825,48 @@
+@@ -706,6 +825,49 @@
      if ((a && !ra) || (b && !rb)) return null;
      return { h: Math.max(0, (ra ? ra.h : 0) + (rb ? rb.h : 0) - (rab ? rab.h : 0)), u: Math.round((ra ? ra.u : 0) + (rb ? rb.u : 0) - (rab ? rab.u : 0)) };
    }
 +  /* ---------- the search box (ui-search.js): what happens when someone picks a result ----------
 +     mode 'start' is the home page (it begins a new trip); 'add' is the builder (it adds to this one, or begins one if the sheet is blank). */
-+  // Where a new place fits the journey best: the gap where it adds the least travel (1 = before the first stop).
++  // Where a new place fits the journey best: the gap where it adds the least travel (1 = before the first stop). It is tried from the end backwards and an
++  // earlier gap has to save a quarter of an hour to win, so a tie (one stop plus Hoi An costs the same either way round) puts the new place after, not before, where you land.
 +  function bestPosition(id) {
 +    plan = MM.plan(app.state); var n = app.state.items.length, best = n + 1, bh = Infinity;
-+    for (var i = 0; i <= n; i++) { var d = detour(nearFor(i), id); if (d && d.h < bh - 0.01) { bh = d.h; best = i + 1; } }
++    for (var i = n; i >= 0; i--) { var d = detour(nearFor(i), id); if (d && d.h < bh - 0.25) { bh = d.h; best = i + 1; } }
 +    return best;
 +  }
 +  function searchPick(res, mode) {
@@ -618,7 +619,7 @@ index 51bcc7c..1e6e8d5 100644
    function openPicker(o) {
      var n = app.state.items.length, pl0 = plan;
      function stopName(k) { var sg = pl0 && pl0.segs[k]; return sg ? (sg.kind === 'allin' ? 'ALL IN ' + sg.trip.n : P[sg.p].n) : 'the last stop'; }
-@@ -731,9 +892,9 @@
+@@ -731,9 +893,9 @@
      openModal('<div class="modal__hd"><div><div class="over">Your trip</div><h2 class="disp">' + esc(o.title) + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' + where + '<p class="qhelp pkhint" style="margin-bottom:var(--s-3)">' + hintText() + '</p>' +
        '<div class="field"><label for="pksearch">Search</label><input class="input" id="pksearch" type="search" placeholder="a place or a country" autocomplete="off"></div>' +
        '<ul class="picker">' + rowsHTML() + '</ul></div>', function (m) {
@@ -630,7 +631,7 @@ index 51bcc7c..1e6e8d5 100644
          var w = $('#pkwhere', m);
          if (w) w.addEventListener('change', function () { o.position = +w.value; o.near = nearFor(o.position - 1); $('.picker', m).innerHTML = rowsHTML(); $('.pkhint', m).textContent = hintText(); filter(); });
        });
-@@ -742,19 +903,37 @@
+@@ -742,19 +904,37 @@
    /* ============================================================
       MODALS
       ============================================================ */
@@ -671,7 +672,7 @@ index 51bcc7c..1e6e8d5 100644
        '<input type="hidden" name="via" value="' + via + '">' +
        '<input class="input cpick__wa" name="whatsapp" type="tel" autocomplete="tel" placeholder="WhatsApp number with country code, e.g. +44 7700 900123" aria-label="WhatsApp number" value="' + esc(q.whatsapp || '') + '">' +
        '<input class="input cpick__em" name="email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email" value="' + esc(q.email || '') + '"></div>';
-@@ -768,7 +947,7 @@
+@@ -768,7 +948,7 @@
    document.addEventListener('click', function (e) {
      var b = e.target.closest('.cpick [data-via]'); if (!b) return;
      var box = b.closest('.cpick'), via = b.getAttribute('data-via'); box.setAttribute('data-via', via); box.querySelector('[name=via]').value = via;
@@ -680,7 +681,7 @@ index 51bcc7c..1e6e8d5 100644
      var inp = box.querySelector(via === 'email' ? '.cpick__em' : '.cpick__wa'); if (inp) inp.focus();
    });
  
-@@ -797,7 +976,7 @@
+@@ -797,7 +977,7 @@
      var raw = ($('#meetin') || {}).value || '', out = $('#meetout'); if (!out) return;
      var say = function (h) { out.innerHTML = h; };
      var mBuild = raw.match(/#\/build\/([^\s]+)/), mShort = raw.match(/\/t\/([a-z0-9]{7})/);
@@ -689,7 +690,7 @@ index 51bcc7c..1e6e8d5 100644
      got.then(function (enc) {
        var theirs = MM.decodeState(enc); if (!theirs.items || !theirs.items.length) throw 0;
        var o = MM.overlap(app.state, theirs), tp = MM.plan(theirs);
-@@ -819,7 +998,6 @@
+@@ -819,7 +999,6 @@
       EVENTS
       ============================================================ */
    document.addEventListener('click', function (e) {
@@ -697,7 +698,7 @@ index 51bcc7c..1e6e8d5 100644
      var door = e.target.closest('.door'); if (door) track('door', { door: door.getAttribute('data-go') || door.getAttribute('data-to') || 'x' });
      var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } if (go_.hasAttribute('data-new')) { track('start_fresh', { had: app.state.items.length ? 1 : 0 }); startFresh(); go('build', ''); return; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
      var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } autoReco(); if (app.auto) persist(); refreshBuilder(); return; }
-@@ -844,18 +1022,30 @@
+@@ -844,18 +1023,30 @@
        case 'mapfit': MM.BuilderMap.reset(); break;
        case 'scroll': { var t = document.getElementById(el.getAttribute('data-to')); if (t) t.scrollIntoView({ behavior: 'smooth' }); break; }
        case 'close': closeModal(); break;
@@ -731,7 +732,7 @@ index 51bcc7c..1e6e8d5 100644
        case 'customiseblock': { var blk = S.items[i], tp = MM.ALL_IN.filter(function (x) { return x.id === blk.trip; })[0]; var ns = tp.stops.map(function (st) { return { kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }; }); mutate(function (s2) { s2.items.splice.apply(s2.items, [i, 1].concat(ns)); }); toast('Now it\'s yours: edit anything'); break; }
        case 'swapallin': { var id2 = el.getAttribute('data-id'), tr = MM.ALL_IN.filter(function (x) { return x.id === id2; })[0], inTrip = {}; tr.stops.forEach(function (st) { inTrip[st.p] = 1; }); mutate(function (s2) { var extras = s2.items.filter(function (it) { return it.kind === 'stop' && !inTrip[it.p]; }); s2.items = [{ kind: 'allin', trip: id2 }].concat(extras); }); track('swap_allin', { id: id2 }); break; }
        /* builder */
-@@ -881,11 +1071,11 @@
+@@ -881,11 +1072,11 @@
        case 'pickplace': { var pid = el.getAttribute('data-p'), sw = el.getAttribute('data-swap'), pos = +el.getAttribute('data-pos'); closeModal(); if (sw !== null && sw !== '') applyEdit([{ op: 'swap_stop', stop: +sw + 1, place: pid }]); else if (applyEdit([{ op: 'add_stop', place: pid, position: pos }])) { var nc = document.getElementById('stop' + (pos - 1)); if (nc) nc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } break; }
        case 'dayrm': applyEdit([{ op: 'remove_tour', stop: i + 1, tour: el.getAttribute('data-a') }]); break;
        case 'toggle': { var key = el.getAttribute('data-k'); app.open[key] = !app.open[key]; refreshBuilder(); break; }
@@ -746,7 +747,7 @@ index 51bcc7c..1e6e8d5 100644
        case 'lead': if (app.review) app.review.open(); break;
        case 'share': openShare(); break;
        case 'story': openStory(); break;
-@@ -899,7 +1089,6 @@
+@@ -899,7 +1090,6 @@
    });
    document.addEventListener('keydown', function (e) {
      if (e.key === 'Escape' && modalRoot.firstChild) closeModal();
@@ -754,7 +755,7 @@ index 51bcc7c..1e6e8d5 100644
    });
    document.addEventListener('change', function (e) {
      var t = e.target;
-@@ -938,14 +1127,13 @@
+@@ -938,14 +1128,13 @@
      }
      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
    });
@@ -1050,7 +1051,7 @@ index c6d7dc9..ddb15c9 100644
      },
      routeVotes: function (g) { var t = { a: 0, b: 0 }; g.members.forEach(function (m) { var v = m.votes.route; if (v === 'a' || v === 'b') t[v]++; }); return t; },
 diff --git a/public/trip-builder/index.html b/public/trip-builder/index.html
-index bd259c7..ff069d3 100644
+index bd259c7..5c5cf3a 100644
 --- a/public/trip-builder/index.html
 +++ b/public/trip-builder/index.html
 @@ -6,6 +6,9 @@
@@ -1069,8 +1070,8 @@ index bd259c7..ff069d3 100644
    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
 -  <link rel="stylesheet" href="styles.css?v=50">
 -  <link rel="stylesheet" href="crew.css?v=50">
-+  <link rel="stylesheet" href="styles.css?v=82">
-+  <link rel="stylesheet" href="crew.css?v=82">
++  <link rel="stylesheet" href="styles.css?v=83">
++  <link rel="stylesheet" href="crew.css?v=83">
  </head>
  <body data-view="home">
 +  <a class="skip" href="#app">Skip to the content</a>
@@ -1118,35 +1119,35 @@ index bd259c7..ff069d3 100644
 -  <script src="ui-pack.js?v=50"></script>
 -  <script src="ui-crew.js?v=50"></script>
 -  <script src="ui-tour.js?v=50"></script>
-+  <script src="data/map-data.js?v=82"></script>
-+  <script src="data/places.js?v=82"></script>
-+  <script src="data/activities.js?v=82"></script>
-+  <script src="data/media.js?v=82"></script>
-+  <script src="data/legs.js?v=82"></script>
-+  <script src="data/trips.js?v=82"></script>
-+  <script src="data/entry.js?v=82"></script>
-+  <script src="data/gallery.js?v=82"></script>
-+  <script src="data/rules.js?v=82"></script>
-+  <script src="data/guide.js?v=82"></script>
-+  <script src="logic.js?v=82"></script>
-+  <script src="extras.js?v=82"></script>
-+  <script src="crew.js?v=82"></script>
-+  <script src="edit.js?v=82"></script>
-+  <script src="search.js?v=82"></script>
-+  <script src="group.js?v=82"></script>
-+  <script src="config.js?v=82"></script>
-+  <script src="ui-map.js?v=82"></script>
-+  <script src="ui-story.js?v=82"></script>
-+  <script src="app.js?v=82"></script>
-+  <script src="ui-review.js?v=82"></script>
-+  <script src="ui-group.js?v=82"></script>
-+  <script src="ui-live.js?v=82"></script>
-+  <script src="ui-extras.js?v=82"></script>
-+  <script src="ui-pack.js?v=82"></script>
-+  <script src="ui-crew.js?v=82"></script>
-+  <script src="ui-tour.js?v=82"></script>
-+  <script src="ui-search.js?v=82"></script>
-+  <script src="ui-stage.js?v=82"></script>
++  <script src="data/map-data.js?v=83"></script>
++  <script src="data/places.js?v=83"></script>
++  <script src="data/activities.js?v=83"></script>
++  <script src="data/media.js?v=83"></script>
++  <script src="data/legs.js?v=83"></script>
++  <script src="data/trips.js?v=83"></script>
++  <script src="data/entry.js?v=83"></script>
++  <script src="data/gallery.js?v=83"></script>
++  <script src="data/rules.js?v=83"></script>
++  <script src="data/guide.js?v=83"></script>
++  <script src="logic.js?v=83"></script>
++  <script src="extras.js?v=83"></script>
++  <script src="crew.js?v=83"></script>
++  <script src="edit.js?v=83"></script>
++  <script src="search.js?v=83"></script>
++  <script src="group.js?v=83"></script>
++  <script src="config.js?v=83"></script>
++  <script src="ui-map.js?v=83"></script>
++  <script src="ui-story.js?v=83"></script>
++  <script src="app.js?v=83"></script>
++  <script src="ui-review.js?v=83"></script>
++  <script src="ui-group.js?v=83"></script>
++  <script src="ui-live.js?v=83"></script>
++  <script src="ui-extras.js?v=83"></script>
++  <script src="ui-pack.js?v=83"></script>
++  <script src="ui-crew.js?v=83"></script>
++  <script src="ui-tour.js?v=83"></script>
++  <script src="ui-search.js?v=83"></script>
++  <script src="ui-stage.js?v=83"></script>
  </body>
  </html>
 diff --git a/public/trip-builder/logic.js b/public/trip-builder/logic.js
