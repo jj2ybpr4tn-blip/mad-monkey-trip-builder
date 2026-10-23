@@ -57,11 +57,27 @@
   MM.tourImg = function (slug) { return slug && TOUR[slug] ? (own() ? own() + '/tour/' + slug + '.jpg' : BASE + 'tour/' + slug + '/' + TOUR[slug] + '.jpg') : null; };
   MM.actImg = function (a) { return MM.tourImg(a.slug); };
   // Small copies of the same photos (scripts/make-thumbs.mjs): 's' is 320px wide for thumbnails and strips, 'm' is 720px wide for the big cards.
-  // Only our own copies have them, so hot-linked photos come back unchanged. The page falls back to the full photo if a small one is missing.
+  // Two ways to have them:
+  //   PHOTO_BASE   we host full copies of the photos too, and the small ones sit beside them: <base>/s/hostel/<id>.webp
+  //   THUMB_BASE   only the small copies are hosted next to the builder (about 13 MB instead of 61) and the full photos are still hot-linked from madmonkeyhostels.com:
+  //                <thumb base>/s/hostel/<id>.webp. This is how the live ALL IN site gets them.
+  // A photo with no small copy comes back unchanged, and the page falls back to the full photo if a small one is missing.
+  var thumbBase = function () { return (r.MM_CONFIG && r.MM_CONFIG.THUMB_BASE || '').replace(/\/$/, ''); };
+  var NAMES = null;     // a hot-linked photo's address -> its name in assets/photos ("hostel/hanoi"), worked out the first time it is needed
+  function names() {
+    if (NAMES) return NAMES;
+    NAMES = {};
+    Object.keys(HOSTEL).forEach(function (id) { NAMES[BASE + 'property/' + id + '/' + HOSTEL[id] + '.jpg'] = 'hostel/' + id; });
+    Object.keys(TOUR).forEach(function (slug) { NAMES[BASE + 'tour/' + slug + '/' + TOUR[slug] + '.jpg'] = 'tour/' + slug; });
+    if (MM.gallery && MM.PLACES) Object.keys(MM.PLACES).forEach(function (id) { MM.gallery(id).forEach(function (u, k) { NAMES[u] = 'gallery/' + id + '-' + k; }); });
+    return NAMES;
+  }
   MM.thumb = function (url, size) {
-    var b = own(), cfg = r.MM_CONFIG || {};
-    if (!url || !b || cfg.PHOTO_THUMBS === false || (size !== 's' && size !== 'm') || url.indexOf(b + '/') !== 0) return url;
-    return b + '/' + size + '/' + url.slice(b.length + 1).replace(/\.jpe?g$/i, '.webp');
+    var cfg = r.MM_CONFIG || {}, b = own();
+    if (!url || cfg.PHOTO_THUMBS === false || (size !== 's' && size !== 'm')) return url;
+    if (b) return url.indexOf(b + '/') === 0 ? b + '/' + size + '/' + url.slice(b.length + 1).replace(/\.jpe?g$/i, '.webp') : url;
+    var t = thumbBase(), name = t && names()[url];
+    return name ? t + '/' + size + '/' + name + '.webp' : url;
   };
 
   if (typeof module !== 'undefined') module.exports = { HOSTEL: HOSTEL, TOUR: TOUR };

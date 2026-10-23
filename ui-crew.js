@@ -73,7 +73,7 @@
       (!can ? '<div class="cbanner">' + (r.status === 'approved' ? 'This trip is booked. Nothing left to action.' : r.status === 'declined' ? 'This trip was declined' + (r.refunded_at ? ' and the deposit refunded' : '') + '.' : r.status === 'pending_payment' ? 'The deposit isn\'t paid yet, so there is nothing to action.' : 'Nothing to action.') + '</div>' : '') +
       '<div class="crew__acts" role="group" aria-label="Decide about this trip">' +
         act('approve', 'yes', 'Approve', r.status === 'ready' ? 'Change the price' : 'Send ' + first + ' the final price', can, open) +
-        act('decline', 'no', 'Not approved', 'Say no and refund the deposit', can, open) +
+        act('decline', 'no', 'Not approved', num(r.deposit_amount) > 0 ? 'Say no and refund the deposit' : 'Say no, with a reason', can, open) +
         act('edit', 'edit', 'Edit it', canEdit || !can ? 'Change it, add our input' : 'Balance link already sent', canEdit, open) + '</div>' +
       '<div id="cpanel"></div>' +
       '<div class="crew__grid"><div class="crew__main">' + (sum ? tripHTML(sum, d.suggestedBalance, r) : '<div class="cbox"><p>This trip can\'t be shown here. Open it in the builder below.</p></div>') + '</div>' +
@@ -127,7 +127,7 @@
       row('Their spending money', usd(b.spendFund), false, usd(b.spendPerDay) + ' a day for food and fun. Theirs to spend, not charged by us.') + row('Estimated total', usd(b.total), true) +
       (num(s.people) > 1 ? row('For all ' + num(s.people), usd(b.tripCostAllPeople) + ' trip cost · ' + usd(b.totalAllPeople) + ' with spending money', true) : '') +
       (b.guestBudget ? row('Their own budget', usd(b.guestBudget) + ' each', false, b.budgetLeft == null ? '' : b.budgetLeft >= 0 ? usd(b.budgetLeft) + ' to spare' : usd(-b.budgetLeft) + ' over') : '') +
-      '<tfoot><tr><td colspan="2">Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (num(s.people) > 1 ? ' for ' + num(s.people) : '') + ' less the deposit)</i></td></tr></tfoot></table>';
+      '<tfoot><tr><td colspan="2">' + (num(r.deposit_amount) > 0 ? 'Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (num(s.people) > 1 ? ' for ' + num(s.people) : '') + ' less the deposit)</i>' : 'Free to send, nothing paid yet · suggested price <b>' + usd(suggested) + '</b> <i>(the trip cost' + (num(s.people) > 1 ? ' for ' + num(s.people) : '') + ')</i>') + '</td></tr></tfoot></table>';
     if (r.notes) h += '<div class="cbox cbox--note"><h3>' + esc(firstName(r.name)) + '\'s note</h3><p>' + esc(r.notes).replace(/\n/g, '<br>') + '</p></div>';
     return h;
   }
@@ -151,7 +151,7 @@
       (r.guest_email && r.guest_email !== r.email ? '<dt>Receipts</dt><dd>' + esc(r.guest_email) + '</dd>' : '') +
       '<dt>Dates</dt><dd>' + esc({ fixed: 'Fixed', flex: 'Flexible', open: 'Not decided' }[r.dates_flex] || '—') + '</dd>' +
       '<dt>Sent</dt><dd>' + esc(when(r.created_at)) + '</dd>' +
-      '<dt>Deposit</dt><dd>' + usd(r.deposit_amount) + (r.deposit_paid_at ? ' paid' : ' not paid') + (r.refunded_at ? ', refunded' : '') + '</dd>' +
+      '<dt>Deposit</dt><dd>' + (num(r.deposit_amount) > 0 ? usd(r.deposit_amount) + (r.deposit_paid_at ? ' paid' : ' not paid') + (r.refunded_at ? ', refunded' : '') : 'None: free to send') + '</dd>' +
       (r.hold_until && ['submitted', 'checking'].indexOf(r.status) > -1 ? '<dt>Beds held</dt><dd>until ' + esc(when(r.hold_until)) + '</dd>' : '') +
       (r.all_in_match ? '<dt>Looks like</dt><dd>ALL IN ' + esc(r.all_in_match) + '</dd>' : '') +
       (r.campaign_ref ? '<dt>Came from</dt><dd>' + esc(r.campaign_ref) + '</dd>' : '') + (r.from_hostel ? '<dt>QR at</dt><dd>' + esc(r.from_hostel) + '</dd>' : '') + '</dl></div>';
@@ -176,11 +176,11 @@
   /* ---------- the three panels ---------- */
   function panelHTML(which, r, sum, d, first, dep) {
     if (which === 'approve') {
-      var sug = d.suggestedBalance || '';
+      var sug = d.suggestedBalance || '', hasDep = num(r.deposit_amount) > 0;
       return '<div class="cpanel cpanel--yes"><h3>' + (r.status === 'ready' ? 'Update ' + esc(first) + '\'s price' : 'Send ' + esc(first) + ' the final price') + '</h3>' +
-        '<p>The trip checks out. ' + esc(first) + ' gets an email to choose how to pay the rest: all now, a week before they leave, or in instalments if they leave 2+ months out. The ' + dep + ' deposit is already counted, and nothing is charged until they choose.</p>' +
-        '<div class="field"><label for="cbal">Balance to charge (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? num(r.balance_amount) : (num(sug) || '')) + '" inputmode="decimal">' +
-        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (num(sum.people) > 1 ? ' for ' + num(sum.people) : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ') less the ' + dep + ' deposit. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : 'Work out the balance after the deposit.') + '</p></div>' +
+        '<p>The trip checks out. ' + esc(first) + ' gets an email to choose how to pay' + (hasDep ? ' the rest' : '') + ': all now, a week before they leave, or in instalments if they leave 2+ months out. ' + (hasDep ? 'The ' + dep + ' deposit is already counted, and nothing' : 'They haven\'t paid anything yet, and nothing') + ' is charged until they choose.</p>' +
+        '<div class="field"><label for="cbal">' + (hasDep ? 'Balance to charge' : 'Price to charge') + ' (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? num(r.balance_amount) : (num(sug) || '')) + '" inputmode="decimal">' +
+        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (num(sum.people) > 1 ? ' for ' + num(sum.people) : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ')' + (hasDep ? ' less the ' + dep + ' deposit' : '') + '. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : (hasDep ? 'Work out the balance after the deposit.' : 'Work out the price for everyone.')) + '</p></div>' +
         '<div class="field"><label for="cnote">Note to ' + esc(first) + ' (optional, goes in the email)</label><textarea class="input" id="cnote" placeholder="e.g. All checked. We swapped the night bus for a day minivan so you arrive in daylight.">' + esc(r.crew_note || '') + '</textarea></div>' +
         '<p class="cerr" id="cerr" role="alert" hidden></p><button class="btn btn--lg" id="cgo" type="button">' + (r.status === 'ready' ? 'Send ' + esc(first) + ' the new price' : 'Send ' + esc(first) + ' the final price') + '</button></div>';
     }
@@ -210,7 +210,7 @@
       go.disabled = true; go.textContent = 'Working…';
       if (which === 'approve') {
         var amt = Math.round(parseFloat($('#cbal', root).value) * 100) / 100;
-        if (!(amt >= 1 && amt <= 50000)) return fail(new Error('Enter the balance in US dollars, after the deposit.'));
+        if (!(amt >= 1 && amt <= 50000)) return fail(new Error(num(r.deposit_amount) > 0 ? 'Enter the balance in US dollars, after the deposit.' : 'Enter the price in US dollars.'));
         call({ action: 'balance', ref: q.ref, key: q.k, amount: amt, note: noteV, rev: d.rev }).then(function (res) {
           setSess(null);
           load(root, q, '', 'Sent. ' + esc(first) + ' can now choose how to pay the <b>' + usd(amt) + '</b>' + (res.emailed ? ', by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(u.url(res.url) || '#/') + '">choose how to pay</a>.'));

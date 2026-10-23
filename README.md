@@ -38,8 +38,8 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 | **Guests go next** | Ranked from Mad Monkey's own products (ALL IN itineraries, the featured partner trip, Mad Packages, the LP↔VV tickets), each chip tagged with where it comes from. |
 | **Smarter planning** | Best months for the route (your month highlighted), budget target with live bar, *Suggest my next stop*, *Make it cheaper / faster*, entry rules by passport with official links. |
 | **Photos + trust** | Real photo strips + lightbox for every hostel (127 photos), the published 4.9/5 from 53,000+ travellers and the three named quotes. No hostel-level reviews are published, so none are shown (drop real ones into `MM.REVIEWS`). |
-| **Human review + bed hold** | "Hold my beds + get it checked": the trip goes to a real crew member, beds are held while they check, the guest gets a reference and a status page, and approves before paying. Highlighted across the site. See [docs/LEADS.md](docs/LEADS.md). |
-| **Pay your way** | After the crew approves a trip, the deposit already paid counts and the guest chooses how to pay the rest: all now, a week before they leave, or in instalments when they leave 60+ days out. See [docs/PAYMENTS.md](docs/PAYMENTS.md). |
+| **Human review + bed hold** | "Hold my beds + get it checked": **free to send**. The trip goes to a real crew member, beds are held while they check, the guest gets a reference and a status page, and approves before paying anything. Highlighted across the site. See [docs/LEADS.md](docs/LEADS.md). |
+| **Pay your way** | After the crew approves a trip and sets the price, the guest chooses how to pay: all now, a week before they leave (a card is saved, nothing charged until then), or in instalments when they leave 60+ days out. See [docs/PAYMENTS.md](docs/PAYMENTS.md). |
 | **Edit it your way** | **Start building** is always a blank sheet (with a short walk-around, and "Pick up where you left off" if you had a trip). Every stop has worded **Remove stop** / **Swap place** buttons, **+ Add a stop** asks where it goes, the day-by-day plan is editable, and Undo/Redo covers everything. A guest can also **change a trip after sending it**: it replaces the one the crew is checking, so they never review an outdated plan. See [docs/EDITING.md](docs/EDITING.md). |
 | **Crew review** | What the team receives when a trip is sent: the whole trip as the guest built it (stops, tours, travel, money, heads-up) in the email, with **Approve / Not approved / Edit it** buttons that open a review page. See [docs/CREW-REVIEW.md](docs/CREW-REVIEW.md). |
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
@@ -68,7 +68,7 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 
 **The other way: your own backend.** Leave `API_BASE` blank and set `LEAD_ENDPOINT` etc. in [config.js](config.js) to endpoints you build. Contracts: [docs/LEADS.md](docs/LEADS.md), [docs/GROUP.md](docs/GROUP.md).
 
-Optional switches in `config.js`: `WHATSAPP`, `CREW_EMAIL`, `SITE_URL`, `PRIVACY_URL`, `HOLD_HOURS`, and **`PHOTO_BASE`** (serve photos from your own copies: run `npm run mirror-photos` first).
+Optional switches in `config.js`: `WHATSAPP`, `CREW_EMAIL`, `SITE_URL`, `PRIVACY_URL`, `HOLD_HOURS`, **`PHOTO_BASE`** (serve photos from your own copies: run `npm run mirror-photos` first), **`THUMB_BASE`** (host only the small WebP copies, 13 MB, and keep hot-linking the full photos: what the live ALL IN site does, see below) and **`DEPOSIT_PER_PERSON`** (0 = sending a trip is free, the default; a number takes a deposit when a trip is sent).
 
 Attribution params work out of the box: `?ref=exeter` (ambassador / campaign) and `?from=hanoi` (QR in the Hanoi common room → opens at "Where next from Mad Monkey Hanoi?"). Both land in the lead.
 
@@ -89,7 +89,7 @@ The brief was to build it from what Mad Monkey already publishes, so **every num
 | **Entry rules** (`data/entry.js`) | **Checked against current web sources in Oct 2026** ([docs/ENTRY-SOURCES.md](docs/ENTRY-SOURCES.md)), including Thailand's cut to 30 days on 15 Sep 2026. Laos fees conflict between sources, so the app says to check. These change often: re-check every few months. |
 | **Bed hold** | The server records and counts down the hold and gives the crew the sheet; **the crew has to actually block the beds** in your booking system. `HOLD_HOURS` (48) is a placeholder: set a number ops can honour. |
 | Photos | All 260 (hostels, tours, galleries) are **mirrored into `assets/photos`** at 1100px (`npm run mirror-photos`; re-run to refresh). The crew server uses them automatically; for a static host set `PHOTO_BASE: '/assets/photos'`. They're Mad Monkey's own published photography. `npm run thumbs` makes two small WebP copies of each (`s/` 320px, `m/` 720px, 12 MB for all 260) which thumbnails, cards and the Google pages load instead: a three-stop trip page went from 3.3 MB of photos to 170 KB. A missing small copy falls back to the full photo (`PHOTO_THUMBS: false` turns it off). |
-| Photos | Hot-linked from madmonkeyhostels.com share images. They fall back to a flat block if one 404s. Copy into `/assets` or your CDN before launch so the page doesn't depend on the main site. |
+| Photos | Hot-linked from madmonkeyhostels.com share images. They fall back to a flat block if one 404s. Copy into `/assets` or your CDN before launch so the page doesn't depend on the main site. **Lighter option:** `node scripts/sync-allin.mjs <ALL IN site> --with-thumbs` hosts just the small WebP copies (`assets/photos/s` and `m`, 13 MB) beside the live builder and sets `THUMB_BASE`; the page then loads them first (about 170 KB of photos for a three-stop trip instead of 3 MB) and falls back to the hot-linked full photo if a small one is missing. |
 
 **Thailand ↔ Cambodia border:** reports from Feb–Jul 2026 say the land crossings are closed, so Bangkok ↔ Siem Reap / Phnom Penh is flights-only in the graph and every such leg shows a warning. When it reopens, flip `open` in `MM.BORDERS` and add bus edges.
 
@@ -118,7 +118,7 @@ data/               places, activities, legs, trips, media, map-data
 assets/logo/        the official wordmarks (downloaded, never redrawn) + favicon
 docs/LEADS.md       lead payload for whoever builds the endpoint
 docs/CREW-REVIEW.md the crew email + review page, and the endpoint it talks to
-docs/PAYMENTS.md    deposit, approval, then the rest your way (now / a week before / instalments)
+docs/PAYMENTS.md    free to send, approval, then pay your way (now / a week before / instalments)
 docs/EDITING.md     editing your trip, the blank start + walk-around, changing a trip after sending it
 docs/PLANNING.md    search ("Where to?"), best order, plan in stages + log in, Ask Ewan
 docs/REVIEW.md      the big review (Oct 2026): what was found, what was fixed, what is still open

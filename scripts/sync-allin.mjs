@@ -3,6 +3,10 @@
  *
  *   node scripts/sync-allin.mjs /path/to/mm-squad-trips            copy the files across
  *   node scripts/sync-allin.mjs /path/to/mm-squad-trips --check    change nothing, say what would change (exit 1 if anything would)
+ *   node scripts/sync-allin.mjs /path/to/mm-squad-trips --with-thumbs   also host the small WebP photo copies (assets/photos/s and m, about 13 MB) beside the live copy
+ *                                                                  and set THUMB_BASE in its config.js. The live site hot-links the full photos from madmonkeyhostels.com,
+ *                                                                  so these are what make a page load about 170 KB of photos instead of 3 MB. Once they are there, every
+ *                                                                  later run keeps them in step without the flag.
  *
  * The live copy is this builder plus three things that are ITS OWN and are never overwritten:
  *   config.js    its endpoints, deposit and ALL IN base (only missing keys are added, with this repo's defaults commented in)
@@ -13,11 +17,13 @@
 import fs from 'node:fs'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2), check = args.includes('--check'), target = args.find((a) => !a.startsWith('--'));
+const WITH_THUMBS_FLAG = args.includes('--with-thumbs');
 if (!target) { console.error('usage: node scripts/sync-allin.mjs <path to mm-squad-trips> [--check]'); process.exit(2); }
 const DEST = path.join(path.resolve(target), 'public', 'trip-builder');
 if (!fs.existsSync(DEST)) { console.error('No public/trip-builder in ' + target); process.exit(2); }
 
 const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'styles.css', 'crew.css'];
+const withThumbs = WITH_THUMBS_FLAG || fs.existsSync(path.join(DEST, 'assets', 'photos', 's'));
 const DATA = fs.readdirSync(path.join(ROOT, 'data')).filter((f) => f.endsWith('.js')).map((f) => 'data/' + f);
 const changes = [];
 function put(rel, text) {
@@ -43,9 +49,35 @@ const aroot = path.join(ROOT, 'assets');
   }
 })(aroot);
 
+// the small photo copies: the live site hot-links the full photos, so only these are hosted beside it. Kept an exact mirror of ours (a copy we no longer make is removed).
+if (withThumbs) {
+  let n = 0;
+  for (const k of ['s', 'm']) {
+    const from = path.join(ROOT, 'assets', 'photos', k), to = path.join(DEST, 'assets', 'photos', k), want = new Set();
+    (function walk(dir, rel) {
+      for (const e of fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []) {
+        const p = path.join(dir, e.name), r = rel + e.name;
+        if (e.isDirectory()) { walk(p, r + '/'); continue; }
+        if (!/\.webp$/.test(e.name)) continue;
+        want.add(r); const out = path.join(to, r);
+        if (!fs.existsSync(out) || !fs.readFileSync(out).equals(fs.readFileSync(p))) { n++; if (!check) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.copyFileSync(p, out); } }
+      }
+    })(from, '');
+    (function stale(dir, rel) {
+      for (const e of fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []) {
+        const p = path.join(dir, e.name), r = rel + e.name;
+        if (e.isDirectory()) { stale(p, r + '/'); continue; }
+        if (!want.has(r)) { n++; if (!check) fs.rmSync(p); }
+      }
+    })(to, '');
+  }
+  if (n) changes.push('photos   ' + n + ' small photo cop' + (n === 1 ? 'y' : 'ies') + ' (assets/photos/s and m)');
+}
+
 // config.js: add any key the live copy doesn't have yet, never touch the ones it has
 const cfgPath = path.join(DEST, 'config.js'), live = fs.readFileSync(cfgPath, 'utf8'), mine = fs.readFileSync(path.join(ROOT, 'config.js'), 'utf8');
-const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", REVISE_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-revise'", LOGIN_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-login'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '50' };
+const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", REVISE_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-revise'", LOGIN_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-login'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '0' };
+if (withThumbs) ALLIN_DEFAULTS.THUMB_BASE = "'assets/photos'";   // (the key is only added when the small copies are hosted there)
 let cfg = live;
 const missingKeys = Object.keys(ALLIN_DEFAULTS).filter((k) => !new RegExp('^\\s*' + k + '\\s*:', 'm').test(cfg));
 if (missingKeys.length) {

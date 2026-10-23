@@ -25,8 +25,10 @@ window.MM_CONFIG = {
   // Only promise what ops can honour: the hold itself happens on YOUR side when the lead arrives.
   HOLD_HOURS: 48,
 
-  // A deposit per person, in US dollars, taken when a trip is sent for checking (LEAD_ENDPOINT answers with a Stripe checkoutUrl). It holds the beds,
-  // counts towards the trip, and is refunded if the crew can't make it work. 0 = no deposit: nothing is paid until the guest approves the checked plan.
+  // Sending a trip for checking is FREE (0, the default): nothing is paid until the crew has checked the trip and the guest has said yes. Then they choose
+  // how to pay (see PAY_ENDPOINT). Set a number of US dollars per person to take a deposit when a trip is sent instead (LEAD_ENDPOINT answers with a Stripe
+  // checkoutUrl); it holds the beds, counts towards the trip, and is refunded if the crew can't make it work. The ALL IN backend has the matching switch,
+  // the secret TRIP_BUILDER_DEPOSIT_PER_PERSON (also 0 by default): keep the two the same.
   DEPOSIT_PER_PERSON: 0,
 
   // Optional. A guest can change a trip they have already sent, until it is booked: POST { ref, k, trip, summary, ... }. The change REPLACES the trip on the same request, so the crew
@@ -60,6 +62,11 @@ window.MM_CONFIG = {
 
   // Serve photos from your own copies (run scripts/mirror-photos.mjs first). e.g. '/assets/photos' or a CDN URL. Blank = hot-link madmonkeyhostels.com.
   PHOTO_BASE: 'assets/photos',
+
+  // Optional. Where the small WebP copies of the photos are hosted when the FULL photos are still hot-linked from madmonkeyhostels.com (PHOTO_BASE blank): e.g. 'assets/photos'.
+  // Folders s/ and m/ inside it hold them (node scripts/make-thumbs.mjs makes them; node scripts/sync-allin.mjs <site> --with-thumbs copies them into the ALL IN site and sets this).
+  // A page then loads about 170 KB of photos instead of 3 MB. Blank = no small copies. Ignored when PHOTO_BASE is set (they are found beside those photos).
+  THUMB_BASE: '',
 
   // On by default. Thumbnails and cards load the small copies of PHOTO_BASE's photos that scripts/make-thumbs.mjs makes (about 10 KB instead of 190 KB each), and fall back to the full photo if a small one is missing. false = always the full photo.
   PHOTO_THUMBS: true,

@@ -1,0 +1,1253 @@
+From fcc7aab03552fef331bb8f21aebadfc2d1fedb4a Mon Sep 17 00:00:00 2001
+From: Ewan McIntyre <ewan3568@me.com>
+Date: Fri, 23 Oct 2026 16:56:33 +0800
+Subject: [PATCH 7/7] Trip builder backend: free to send, pay after approval
+
+Sending a trip for checking no longer takes a $50 per person deposit (Ewan, 23 Oct 2026). The guest pays only after
+the crew has checked the trip and set the price.
+
+- trip-builder-request: saves the trip as "submitted" and emails the crew and the guest at once. No Stripe, no payment
+  link. The bed hold starts now. The old deposit is a switch: the secret TRIP_BUILDER_DEPOSIT_PER_PERSON (unset, 0 or
+  anything that isn't 1-1000 means free; a number brings the deposit back). Trips that already paid one are untouched.
+- Paying: with no deposit there is no card on file, so one is saved as part of choosing. Instalments: the first
+  payment's Checkout also saves the card. "A week before I leave": a Checkout page in setup mode saves a card (nothing
+  charged), and stripe-webhook (new kind trip_builder_card) books them when it is saved, only if the trip is still
+  'ready' at the price they were shown; otherwise the card is kept, nothing is booked and Ewan is told.
+- The crew can act on a free trip (no deposit to wait for), the review page suggests the whole trip cost as the price,
+  and every email reads correctly when nothing was paid up front. New guest email: "Your trip is with the crew".
+- Open to anyone now, so: the first email prints only a plain first name and a route that reads as a route, the log-in
+  email too, and a guest changing a trip nobody on the crew has picked up gets no confirmation email.
+- Log in finds free trips; the status answer gains canPay; the admin screen and the test send show free trips.
+- public/trip-builder/config.js: DEPOSIT_PER_PERSON 50 -> 0.
+
+No migration (deposit_amount is 0 on a free trip). Tests: 58 Deno (10 new), end-to-end 114 -> 157 checks (the deposit flow
+still passes with the switch on; the free flow, the card page, a price that changes meanwhile, no card from Stripe, the
+junk-text cases). See docs/trip-builder-free-send.md.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ docs/trip-builder-crew-review.md              |   4 +-
+ docs/trip-builder-free-send.md                |  35 +++++
+ docs/trip-builder-journeys.md                 |   4 +-
+ docs/trip-builder-payments.md                 |  22 +--
+ docs/trip-builder-revise.md                   |   4 +-
+ public/trip-builder/config.js                 |   5 +-
+ src/components/admin/TripBuilderAdmin.tsx     |  13 +-
+ supabase/functions/_shared/email.ts           |  52 ++++---
+ .../_shared/trip-builder-free.test.ts         | 117 ++++++++++++++++
+ .../_shared/trip-builder-pay.test.ts          |  15 +--
+ .../functions/_shared/trip-builder-pay.ts     |  22 +--
+ supabase/functions/_shared/trip-builder.ts    | 127 ++++++++++++++++--
+ supabase/functions/stripe-webhook/index.ts    |   2 +-
+ .../functions/trip-builder-admin/index.ts     |  20 +--
+ .../functions/trip-builder-login/index.ts     |  12 +-
+ supabase/functions/trip-builder-pay/index.ts  |  33 +++--
+ .../functions/trip-builder-request/index.ts   |  49 ++++---
+ .../functions/trip-builder-revise/index.ts    |  15 ++-
+ .../functions/trip-builder-status/index.ts    |   6 +-
+ .../trip-builder-test-emails/index.ts         |  17 +--
+ 20 files changed, 446 insertions(+), 128 deletions(-)
+ create mode 100644 docs/trip-builder-free-send.md
+ create mode 100644 supabase/functions/_shared/trip-builder-free.test.ts
+
+diff --git a/docs/trip-builder-crew-review.md b/docs/trip-builder-crew-review.md
+index fddae34..d825864 100644
+--- a/docs/trip-builder-crew-review.md
++++ b/docs/trip-builder-crew-review.md
+@@ -14,8 +14,8 @@ Three buttons at the top and bottom: **Approve**, **Not approved**, **Edit it**.
+ 
+ | Button | What it does |
+ | --- | --- |
+-| Approve | Asks for the balance (pre-filled: trip cost for everyone less the deposit; spending money is never charged) and an optional note, then emails the guest to choose how to pay it (all now, a week before they leave, or instalments). Nothing is charged until they choose: see [trip-builder-payments.md](trip-builder-payments.md). Same as Admin > "Send the final price". |
+-| Not approved | Reason for the guest, and "refund the deposit" (ticked). Same as Admin > "Decline". |
++| Approve | Asks for the price (pre-filled: trip cost for everyone, less the deposit if one was paid; spending money is never charged) and an optional note, then emails the guest to choose how to pay it (all now, a week before they leave, or instalments). Nothing is charged until they choose: see [trip-builder-payments.md](trip-builder-payments.md). Same as Admin > "Send the final price". |
++| Not approved | Reason for the guest, and, when a deposit was paid, "refund the deposit" (ticked). Same as Admin > "Decline". |
+ | Edit it | Opens the trip in the builder with a "Save our version" bar. Saving updates the request (route, days, dates, estimate, trip link), moves it to *checking*, and keeps the guest's own version in `payload.original`. Then Approve sends the guest the edited plan. |
+ 
+ Opening a link only **reads**. Nothing is sent, charged or refunded until someone presses the button inside a panel, so mail scanners that follow links do nothing.
+diff --git a/docs/trip-builder-free-send.md b/docs/trip-builder-free-send.md
+new file mode 100644
+index 0000000..a4b8023
+--- /dev/null
++++ b/docs/trip-builder-free-send.md
+@@ -0,0 +1,35 @@
++# Free to send (Ewan, 23 Oct 2026)
++
++Sending a trip to the crew for checking used to take a $50 per person deposit on Stripe. It is now **free**: no payment, no Stripe, nothing to refund. A real person checks the trip first; the guest pays only after the crew has approved it and said the price.
++
++## What a guest sees
++
++1. **Send it.** The builder's form says sending is free. `trip-builder-request` saves the trip as `submitted` and answers at once with `{ ref, status: "submitted", key, hold }` (no `checkoutUrl`). The guest gets an email ("Your trip is with the crew", with their key) and **Ewan and the team get the new-trip email straight away**, with the Approve / Not approved / Edit it buttons. The bed hold (48 hours) starts now when there is a start date.
++2. **The crew checks it** on the review page (or Admin > Trip builder) and sets the price. The suggested price is the whole trip cost for everyone: there is no deposit to take off. The guest gets the "Your trip is checked" email.
++3. **The guest chooses how to pay** (all now, a week before they leave, or instalments when they leave 60+ days out). No card is on file yet, so one is saved as part of choosing:
++   - **All now**: a normal Checkout payment.
++   - **Instalments**: the first payment is a Checkout payment that also saves the card (`customer_creation: "always"`, `setup_future_usage: "off_session"`). The rest is charged to it by the daily job.
++   - **A week before they leave**: they are sent to a Checkout page in **setup mode** to save a card (cards only, nothing charged). When it is saved (`stripe-webhook`, kind `trip_builder_card`) they are booked, with one payment of the price a week before they leave. It books only if the trip is still `ready` at the price they were shown (`amt` in the session's metadata); if the price changed or the trip went back to the crew meanwhile, the card is kept, nothing is booked and Ewan is told, and the guest chooses again (the card is on file, so it books at once).
++4. Booked, then the daily job, reminders and receipts work as before ([trip-builder-payments.md](trip-builder-payments.md)).
++
++## The switch
++
++`TRIP_BUILDER_DEPOSIT_PER_PERSON` (a Supabase secret) is the whole switch: **unset, `0`, or anything that isn't a whole number from 1 to 1000 means free** (a typo can never charge anyone something odd). A number such as `50` brings the old deposit back: `trip-builder-request` saves the trip as `pending_payment` and returns a Stripe Checkout link, and the crew is told when it is paid. The builder's `DEPOSIT_PER_PERSON` in `public/trip-builder/config.js` should be the same number (the page follows what the backend answers, so a mismatch is harmless, but its wording follows the config). It is read on every request: changing the secret needs no deploy.
++
++Trips that already paid a deposit are untouched: their card is on file, "a week before" books at once, and a decline refunds the deposit.
++
++## Open to anyone, so a few things are tightened
++
++Sending used to cost $50, which kept junk out. Free means anyone can send a trip with any email address, so:
++
++- **5 trips an hour per contact and 10 per address** (added with the links hardening, see [trip-builder-journeys.md](trip-builder-journeys.md)); a refused request saves nothing.
++- **Nothing a sender typed reaches somebody else's inbox as text of their own.** The first email to the guest prints only their first name (letters only, otherwise "there") and a route only if it reads as a route (no links, addresses or messages). The log-in email does the same. A guest who changes a trip that nobody on the crew has picked up yet gets no confirmation email (the crew still gets the update); once the crew has it, the confirmation prints plain text only.
++- The new-trip email goes to Ewan and the team only, so what a sender types in it is read by people who know it is a form.
++
++If junk still gets through, the next steps are a Cloudflare Turnstile check on the form, or set the secret to bring the deposit back.
++
++## Where it changed
++
++`trip-builder-request` (free path, deposit kept behind the switch), `_shared/trip-builder.ts` (`depositPerPerson`, `needsDeposit`, `handleTripBuilderSubmitted`, the card-saving branches of `handleTripBuilderPaid`, `plainFirstName` / `plainText`), `trip-builder-pay` (the card page for "a week before"; the first instalment saves the card), `trip-builder-admin` (the crew can act without a deposit), `trip-builder-status` (`canPay`, no card needed to be offered every plan), `trip-builder-revise`, `trip-builder-login`, `stripe-webhook` (the new kind), `_shared/email.ts` (`tripBuilderReceivedEmail`, and every email reads correctly when nothing was paid up front), `TripBuilderAdmin.tsx`, `trip-builder-test-emails`, and the live builder's `config.js` (`DEPOSIT_PER_PERSON: 0`). No migration: `deposit_amount` is 0 on a free trip.
++
++Tests: `trip-builder-free.test.ts` and `trip-builder-pay.test.ts` (Deno), and sections 11 onwards of the end-to-end run (`handoff/all-in-backend/e2e` in Ewan's builder repo), which run every flow above against fakes for Supabase, Stripe and Resend.
+diff --git a/docs/trip-builder-journeys.md b/docs/trip-builder-journeys.md
+index 7064607..ab486fe 100644
+--- a/docs/trip-builder-journeys.md
++++ b/docs/trip-builder-journeys.md
+@@ -5,7 +5,7 @@
+ A guest who has sent a trip can "log in" from any device: the builder asks for the email they used and POSTs `{ email }` here. We email them a link to each trip they have sent (newest first, up to five), each with its own signed guest key (the same key as in the "your trip is checked" emails, valid 90 days). Opening the link gives them their trip page, where they can change the trip or plan the next stage. There is no password and no account.
+ 
+ - The answer is always `{ ok: true }`, whether or not the address has a trip, and a throttled address gets the same answer. It can't be used to find out who has booked.
+-- Only trips whose deposit was paid and that are still live (submitted, checking, ready, approved) are included.
++- Only trips that are still live (submitted, checking, ready, approved) are included: not declined, and not one waiting on an unpaid deposit (the deposit is off by default now, so a free trip is live as soon as it is sent, see [trip-builder-free-send.md](trip-builder-free-send.md)). What is printed about a trip is only plain text.
+ - Three emails an hour per address, counted from `email_send_log` (template `trip_builder_login`). No new table, no migration.
+ - A hidden `website` field that is filled in is treated as a bot (same answer, nothing sent).
+ - An address is matched as plain text only: `_`, `%`, `\` and `*` in it can't act as wildcards, so `a_b@x.com` never matches `aXb@x.com`'s trips.
+@@ -13,7 +13,7 @@ A guest who has sent a trip can "log in" from any device: the builder asks for t
+ 
+ ## Later stages
+ 
+-The builder's "Plan my next stage" sends a new request (its own deposit, its own review) marked as stage 2, 3...: `payload.stage = { n, parent, from, been }` and `payload.summary.stage` (where they start, the first journey, where they have already been, the earlier trip's reference). `readSummary` reads it defensively (`readStage`): the number is clamped, the parent has to look like a trip reference, everything else is length-limited text. The crew's new-trip email gets a "Stage 2 of their journey" box and a `Stage 2 ·` subject, and the review page shows the same box. No migration: it all lives in `payload`.
++The builder's "Plan my next stage" sends a new request (its own review, and its own deposit only if the deposit switch is on) marked as stage 2, 3...: `payload.stage = { n, parent, from, been }` and `payload.summary.stage` (where they start, the first journey, where they have already been, the earlier trip's reference). `readSummary` reads it defensively (`readStage`): the number is clamped, the parent has to look like a trip reference, everything else is length-limited text. The crew's new-trip email gets a "Stage 2 of their journey" box and a `Stage 2 ·` subject, and the review page shows the same box. No migration: it all lives in `payload`.
+ 
+ ## Links in our emails only point at our own sites
+ 
+diff --git a/docs/trip-builder-payments.md b/docs/trip-builder-payments.md
+index dd47e7a..1f8bc0b 100644
+--- a/docs/trip-builder-payments.md
++++ b/docs/trip-builder-payments.md
+@@ -1,20 +1,22 @@
+-# Paying for a trip: deposit, approval, then the rest your way
++# Paying for a trip: free to send, approval, then pay your way
+ 
+ How money flows for a trip someone builds and sends to the crew. The builder (`public/trip-builder/ui-review.js`) is the guest side; the functions below are the backend.
+ 
++> **Sending a trip is free** (Ewan, 23 Oct 2026): no deposit, no Stripe on the way in. The crew checks it, sets the price, and only then does the guest pay, their way. See [trip-builder-free-send.md](trip-builder-free-send.md). The deposit below is still here as a switch (the secret `TRIP_BUILDER_DEPOSIT_PER_PERSON`), and trips that already paid one carry on exactly as described.
++
+ ## The journey
+ 
+-1. **Send it.** The guest sends their trip and pays a deposit per person (`MM_CONFIG.DEPOSIT_PER_PERSON`, $50 on the live site) on a Stripe Checkout page. The deposit holds their beds, counts towards the trip, and is refunded if the crew can't make it work. The checkout **saves the card** (`customer_creation: "always"`, `setup_future_usage: "off_session"`) so the rest can be taken later.
+-2. **The crew checks it** (the new-trip email, then the review page: Approve / Not approved / Edit it, see [trip-builder-crew-review.md](trip-builder-crew-review.md)). Approving records the balance: the trip cost for everyone less the deposit. **No payment link is made and nothing is charged.**
+-3. **The guest chooses how to pay the rest** from the button in the "your trip is checked" email (their trip page, `#/trip/<ref>?k=<key>`):
++1. **Send it.** *(With the deposit switch on.)* The guest sends their trip and pays a deposit per person (`MM_CONFIG.DEPOSIT_PER_PERSON`, $50 on the live site) on a Stripe Checkout page. The deposit holds their beds, counts towards the trip, and is refunded if the crew can't make it work. The checkout **saves the card** (`customer_creation: "always"`, `setup_future_usage: "off_session"`) so the rest can be taken later.
++2. **The crew checks it** (the new-trip email, then the review page: Approve / Not approved / Edit it, see [trip-builder-crew-review.md](trip-builder-crew-review.md)). Approving records the price: the trip cost for everyone, less the deposit if one was paid. **No payment link is made and nothing is charged.**
++3. **The guest chooses how to pay** (the rest, if a deposit was paid) from the button in the "your trip is checked" email (their trip page, `#/trip/<ref>?k=<key>`):
+ 
+ | Choice | When it's offered | What happens |
+ | --- | --- | --- |
+-| **Pay it all now** | always | A Checkout page for the whole balance. Booked and paid in full when it lands. |
+-| **Pay a week before they leave** | a saved card, a start date, and more than 7 days to go | Booked immediately. The saved card is charged automatically 7 days before departure, with a reminder 3 days before. |
+-| **Instalments** | a saved card and **60+ days** to departure | Equal payments, the first now on a Checkout page, the rest charged to the saved card every 30 days, the last at least 7 days before departure. Up to 6, each at least $20. |
++| **Pay it all now** | always | A Checkout page for the whole price. Booked and paid in full when it lands. |
++| **Pay a week before they leave** | a start date, and more than 7 days to go | With a card already on file (a deposit was paid) they are booked immediately. Otherwise they are sent to a Checkout page in **setup mode** to save a card (nothing is charged there) and are booked when it is saved. The card is charged automatically 7 days before departure, with a reminder 3 days before. |
++| **Instalments** | **60+ days** to departure | Equal payments, the first now on a Checkout page (which also **saves the card** it is paid with), the rest charged to that card every 30 days, the last at least 7 days before departure. Up to 6, each at least $20. |
+ 
+-   Trips with no start date, or sent before cards were saved, can only pay it all now.
++   Trips with no start date can only pay it all now.
+ 4. **Booked.** Their trip page shows the schedule (paid / due). The crew sees the plan and progress in Admin > Trip builder.
+ 5. **Every day a job** (`charge-trip-builder-payments`, 03:00 UTC) sends reminders and charges what's due. A declined card is retried 2 days later, up to 4 times; the guest gets an email with a way to pay it by hand and Ewan is told; a payment that can't be taken by the departure date is marked "not taken" and Ewan is told.
+ 
+@@ -38,7 +40,7 @@ Stripe Checkout links expire (24 hours at most). The old flow made the balance l
+ ```
+ 
+ `MM_CONFIG.PAY_ENDPOINT` (derived from `STATUS_ENDPOINT` when blank): `POST { ref, k, plan }`, `plan` is `now`, `later`, `instalments`, or `due` (pay a missed payment by hand).
+-Answers `{ ok, checkoutUrl }` (redirect the guest there), or `{ ok, booked: true }` for "later", or `{ error }` with a status of 400 (not on offer), 401 (bad or expired key), 409 (not ready, or already booked on another plan).
++Answers `{ ok, checkoutUrl }` (redirect the guest there; for `later` with no card on file it is a page to save a card, with `card: true`), or `{ ok, booked: true }` for "later" with a card on file, or `{ error }` with a status of 400 (not on offer), 401 (bad or expired key), 409 (not ready, or already booked on another plan).
+ 
+ The key `k` is `HMAC-SHA256("tbguest:" + ref + ":" + expiry)`, one trip, 90 days, and it's separate from the crew's key: a crew key can't act as a guest and the other way round.
+ 
+@@ -48,7 +50,7 @@ The key `k` is `HMAC-SHA256("tbguest:" + ref + ":" + expiry)`, one trip, 90 days
+ 
+ ## Safety
+ 
+-- The deposit's card is the only card used; nothing is charged until the guest has chosen a plan on a page they reached from the crew-approved email.
++- Only the card the guest saved themselves is used (the one a deposit was paid with, the one saved on the "pay a week before" page, or the one the first instalment was paid with); nothing is charged until the guest has chosen a plan on a page they reached from the crew-approved email.
+ - Each scheduled charge uses a Stripe idempotency key (`tbpay:<ref>:<n>:<attempt>`), so a double run or a lost database write can't charge twice.
+ - A trip that has been paid towards can't be declined from the review page (a decline only refunds the deposit): refund the payments in Stripe first.
+ - A crew key can only act on its own trip while it is still being checked; a guest key can only choose a plan while the trip is `ready` (or pay what's owing).
+diff --git a/docs/trip-builder-revise.md b/docs/trip-builder-revise.md
+index 0797713..30f639a 100644
+--- a/docs/trip-builder-revise.md
++++ b/docs/trip-builder-revise.md
+@@ -1,6 +1,6 @@
+ # Trip builder: guests change a trip after sending it
+ 
+-A guest can change the trip they already sent, until it is booked. The change **replaces** the trip on the same request (same reference, same deposit, same beds held), so the crew only ever reviews the latest plan and never one the guest has already moved on from. No migration, no new secret, nothing extra to pay for: it uses the `payload` the request already stores.
++A guest can change the trip they already sent, until it is booked. The change **replaces** the trip on the same request (same reference, same deposit if there was one, same beds held), so the crew only ever reviews the latest plan and never one the guest has already moved on from. No migration, no new secret, nothing extra to pay for: it uses the `payload` the request already stores.
+ 
+ ## How it works
+ 
+@@ -11,7 +11,7 @@ A guest can change the trip they already sent, until it is booked. The change **
+ 
+ | Status | What a change does |
+ |---|---|
+-| `pending_payment` (deposit not paid) | replaced quietly; nobody is emailed (the crew hasn't seen it). Their first email will already be the new version |
++| `pending_payment` (only with the deposit switch on, deposit not paid) | replaced quietly; nobody is emailed (the crew hasn't seen it). Their first email will already be the new version |
+ | `submitted`, `checking` | replaced; crew emailed |
+ | `ready` (approved, price set) | the approval and price are **withdrawn** (`balance_*`, `pay_plan`, `pay_schedule` cleared), back to `checking`; crew emailed and told so; the guest is told nothing is due |
+ | `approved` (booked) | refused with 409: money is moving, so a payment is never left pointing at a plan that moved. The guest is told to message the crew |
+diff --git a/public/trip-builder/config.js b/public/trip-builder/config.js
+index 7293fa9..c2b57f0 100644
+--- a/public/trip-builder/config.js
++++ b/public/trip-builder/config.js
+@@ -32,8 +32,9 @@ window.MM_CONFIG = {
+   // Only promise what ops can honour: the hold itself happens on YOUR side when the lead arrives.
+   HOLD_HOURS: 48,
+ 
+-  // Deposit per person taken when a trip is sent for checking (Charlie, 19 Oct 2026). The server charges this too.
+-  DEPOSIT_PER_PERSON: 50,
++  // Sending a trip for checking is FREE (Ewan, 23 Oct 2026): 0 here. The guest pays only after the crew has checked the trip and set the price (they choose how to pay then).
++  // To take a deposit per person again, set a number here AND the Supabase secret TRIP_BUILDER_DEPOSIT_PER_PERSON to the same number (docs/trip-builder-free-send.md).
++  DEPOSIT_PER_PERSON: 0,
+ 
+   // The crew review page (#/crew/<ref>, opened from the buttons in the new-trip email). Ewan, 20 Oct 2026.
+   CREW_ENDPOINT: 'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin',
+diff --git a/src/components/admin/TripBuilderAdmin.tsx b/src/components/admin/TripBuilderAdmin.tsx
+index 2ff2fd1..bb2d93a 100644
+--- a/src/components/admin/TripBuilderAdmin.tsx
++++ b/src/components/admin/TripBuilderAdmin.tsx
+@@ -6,9 +6,10 @@ import { getAdminToken, isAdminPreview } from "@/lib/admin";
+ import { publicUrl } from "@/lib/base-path";
+ 
+ // Admin > Trip builder (19 Oct 2026). Trips sent from Ewan's builder at
+-// /trip-builder with a $50 per person deposit. The crew checks each one, then
+-// sends the balance link (guest gets the "ready" email) or declines it and
+-// refunds the deposit. Backend: trip-builder-admin.
++// /trip-builder (free to send; a deposit per person only if the backend secret
++// TRIP_BUILDER_DEPOSIT_PER_PERSON is set). The crew checks each one, then
++// sets the price (guest gets the "ready" email and chooses how to pay) or declines
++// it (refunding a deposit if there was one). Backend: trip-builder-admin.
+ 
+ type Req = {
+   ref: string; status: string; name: string; contact_via: string | null; email: string | null; whatsapp: string | null;
+@@ -119,7 +120,7 @@ export default function TripBuilderAdmin({ refreshKey }: { refreshKey?: number }
+             <div className="font-sticker text-[10px] tracking-[0.15em] text-mm-lime">TRIP BUILDER</div>
+             <h2 className="mt-1 font-display text-3xl">CUSTOM TRIPS</h2>
+             <p className="mt-1 max-w-2xl text-sm text-mm-bone/80">
+-              Trips guests built in the trip builder, each with a $50 per person deposit. Check the plan, then send the balance link, or decline it and refund the deposit.
++              Trips guests built in the trip builder. Sending is free. Check the plan, then set the price so the guest can choose how to pay, or decline it (a deposit, if one was paid, is refunded).
+             </p>
+           </div>
+           <a href={publicUrl("trip-builder/")} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 border-[2px] border-mm-bone px-3 py-1.5 font-sticker text-[10px] tracking-[0.15em]">
+@@ -162,7 +163,7 @@ export default function TripBuilderAdmin({ refreshKey }: { refreshKey?: number }
+                         {r.guest_email && r.guest_email !== r.email && <div className="text-xs text-mm-black/50">Receipts: {r.guest_email}</div>}</td>
+                       <td className="px-3 py-3"><div>{r.route}</div><div className="text-xs text-mm-black/60">{r.days} days · {r.start_date ? `from ${day(r.start_date)}` : "no date yet"}{r.dates_flex ? ` · ${r.dates_flex}` : ""}</div></td>
+                       <td className="px-3 py-3">{r.party_size}</td>
+-                      <td className="px-3 py-3">{usd(r.deposit_amount)}<div className="text-xs text-mm-black/60">{r.refunded_at ? "refunded" : r.deposit_paid_at ? "paid" : "not paid"}</div></td>
++                      <td className="px-3 py-3">{r.deposit_amount > 0 ? usd(r.deposit_amount) : "None"}<div className="text-xs text-mm-black/60">{r.deposit_amount > 0 ? (r.refunded_at ? "refunded" : r.deposit_paid_at ? "paid" : "not paid") : "free to send"}</div></td>
+                       <td className="px-3 py-3"><span className={`inline-flex border-[2px] border-mm-black px-2 py-0.5 font-sticker text-[10px] tracking-[0.12em] ${st.cls}`}>{st.label}</span>
+                         {r.status === "ready" && r.balance_amount != null && <div className="mt-1 text-xs">{usd(r.balance_amount)} to pay, their choice of how</div>}
+                         {r.pay_plan && (r.pay_schedule ?? []).length > 0 && <div className="mt-1 text-xs">{r.pay_plan === "later" ? "pays a week before they leave" : r.pay_plan === "instalments" ? "instalments" : "paid all at once"} · {(r.pay_schedule ?? []).filter((i) => i.status === "paid").length}/{(r.pay_schedule ?? []).length} paid</div>}
+@@ -220,7 +221,7 @@ export default function TripBuilderAdmin({ refreshKey }: { refreshKey?: number }
+                                     </div>
+                                     {r.balance_url && <button onClick={() => navigator.clipboard.writeText(r.balance_url!).then(() => toast.success("Copied"))} className="mt-2 text-xs underline">Copy the current balance link</button>}
+                                   </div>
+-                                  <button disabled={busy === r.ref} onClick={() => act(r, "decline", { refund: true }, `Decline ${r.ref} and refund the ${usd(r.deposit_amount)} deposit to ${r.name}?`)}
++                                  <button disabled={busy === r.ref} onClick={() => act(r, "decline", { refund: true }, r.deposit_amount > 0 ? `Decline ${r.ref} and refund the ${usd(r.deposit_amount)} deposit to ${r.name}?` : `Decline ${r.ref} for ${r.name}?`)}
+                                     className="w-full border-[2px] border-mm-black bg-mm-paper px-3 py-2 font-sticker text-[10px] tracking-[0.15em] disabled:opacity-60">CAN'T DO IT: DECLINE + REFUND DEPOSIT</button>
+                                   <button disabled={busy === r.ref} onClick={() => act(r, "booked", {}, `Mark ${r.ref} as booked without taking the balance here?`)}
+                                     className="w-full px-3 py-1 text-xs underline disabled:opacity-60">Paid another way: mark as booked</button>
+diff --git a/supabase/functions/_shared/email.ts b/supabase/functions/_shared/email.ts
+index caf6f72..9b578fb 100644
+--- a/supabase/functions/_shared/email.ts
++++ b/supabase/functions/_shared/email.ts
+@@ -762,8 +762,9 @@ export function underfilledCrewNoticeEmail(v: {
+ }
+ 
+ // ---------- Trip builder (Ewan's builder at /trip-builder, 19 Oct 2026) ----------
+-// A guest sends a trip for checking with a $50 per person deposit; the crew
+-// checks it in Admin > Trip builder and sends the balance link from there.
++// A guest sends a trip for checking (free since 23 Oct 2026; with a deposit per person if
++// TRIP_BUILDER_DEPOSIT_PER_PERSON is set); the crew checks it (the review page, or Admin >
++// Trip builder) and sets the price, then the guest chooses how to pay.
+ // All trip builder comms go through Ewan: alerts to him, guest replies to him.
+ 
+ const tbButton = (href: string, label: string) =>
+@@ -799,16 +800,33 @@ export function tripBuilderDepositEmail(v: {
+   return { subject: `Your trip is with the crew (${v.ref})`, html: tbShell("Your trip is with the crew", "It's with the crew 🐒", body) };
+ }
+ 
+-/** Ops: a new trip to check, deposit paid. Shows the whole trip the way the guest built it, with Approve / Not approved / Edit it buttons. */
++/** Guest: a free trip is with the crew (nothing paid yet). The route is only printed when it is plain text (it is whatever the sender typed). */
++export function tripBuilderReceivedEmail(v: {
++  firstName: string; ref: string; route: string; days: number; startDate: string; people: number; holdUntil: string; statusUrl: string;
++}): { subject: string; html: string } {
++  const e = escapeHtml;
++  const body = [
++    tbP(`Hey ${e(v.firstName)},`),
++    tbP(`Thanks for sending your trip${v.people > 1 ? ` (${v.people} people)` : ""}${v.route ? `: <strong>${e(v.route)}</strong>` : ""}, ${v.days} days${v.startDate ? `, starting ${e(v.startDate)}` : ""}. It's with the crew, and <strong>you haven't paid anything</strong>.`),
++    v.holdUntil ? tbP(`We're holding your beds until <strong>${e(v.holdUntil)}</strong> while a real Mad Monkey crew member checks the routes, beds, dates and prices.`) : tbP("A real Mad Monkey crew member is checking the routes, beds and prices, and will help you pin down dates."),
++    tbP("Next, you'll get a confirmed plan and the final price. Only then do you choose how to pay, and only if you say yes. If we can't make the trip work, there's nothing to pay and nothing to refund."),
++    `<p style="margin:18px 0">${tbButton(v.statusUrl, "Track my trip")}</p>`,
++    tbP(`Questions? Reply to this email or message Ewan on WhatsApp: <a href="${TB_WA_LINK}" style="color:#0a0a0a">${TRIP_BUILDER_WHATSAPP}</a>.`),
++    `<p style="margin:0;font-size:13px;color:#555">Reference: <strong>${e(v.ref)}</strong></p>`,
++  ].join("\n");
++  return { subject: `Your trip is with the crew (${v.ref})`, html: tbShell("Your trip is with the crew", "It's with the crew 🐒", body) };
++}
++
++/** Ops: a new trip to check (deposit paid, or free to send). Shows the whole trip the way the guest built it, with Approve / Not approved / Edit it buttons. */
+ export function tripBuilderOpsEmail(v: {
+   ref: string; name: string; contact: string; guestEmail: string; guestWhatsapp?: string; people: number; route: string; days: number;
+-  startDate: string; dates: string; estTotal: string; deposit: string; allInMatch: string; notes: string;
++  startDate: string; dates: string; estTotal: string; /** "$100" once a deposit is paid; "" when the trip was free to send. */ deposit: string; allInMatch: string; notes: string;
+   itinerary: string; tripLink: string; adminUrl: string; holdUntil: string;
+   /** What the builder sent (payload.summary). Null for trips sent before the summary existed: the email falls back to the plain itinerary. */
+   summary?: Summary | null;
+   /** Links to the crew review page, one per button. */
+   reviewUrl?: string; approveUrl?: string; declineUrl?: string; editUrl?: string;
+-  /** "$602" – the trip cost for everyone less the deposit. A starting figure only. */
++  /** "$602" – the trip cost for everyone, less the deposit if there was one. A starting figure only. */
+   suggestedBalance?: string;
+   /** Set when the guest has changed a trip they already sent: this email is the new version, and says what moved. */
+   update?: { rev: number; changes: string[]; note: string; withdrawn: boolean; was: { route: string; days: number; total: string; start: string } };
+@@ -842,7 +860,7 @@ export function tripBuilderOpsEmail(v: {
+   const who = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0;font-size:14px;line-height:1.5"><tr><td style="padding:12px 14px">
+ <div style="font-size:18px;font-weight:900;${D}">${e(v.name)}</div>
+ <div style="${D}">${v.people > 1 ? `Party of ${v.people}` : "Travelling solo"} · ${contactLine}</div>
+-<div style="${D}">Deposit paid <strong>${e(v.deposit)}</strong>${v.holdUntil ? ` · beds held until <strong>${e(v.holdUntil)}</strong>` : " · no start date, so no beds to hold yet"}</div>
++<div style="${D}">${v.deposit ? `Deposit paid <strong>${e(v.deposit)}</strong>` : "Free to send: <strong>nothing paid yet</strong>"}${v.holdUntil ? ` · beds held until <strong>${e(v.holdUntil)}</strong>` : " · no start date, so no beds to hold yet"}</div>
+ <div style="font-size:12px;color:#555">Ref ${e(v.ref)}${v.guestEmail && waDigits.length >= 8 ? ` · receipts to ${e(v.guestEmail)}` : ""}</div>
+ </td></tr></table>`;
+ 
+@@ -933,7 +951,7 @@ ${mrow("Their spending money", money(b.spendFund), false, `${money(b.spendPerDay
+ ${mrow("Estimated total", money(b.total), true)}
+ ${sum.people > 1 ? mrow(`For all ${sum.people}`, `${money(b.tripCostAllPeople)} trip cost · ${money(b.totalAllPeople)} with spending money`, true) : ""}
+ ${b.guestBudget ? mrow("Their own budget", `${money(b.guestBudget)} each`, false, b.budgetLeft == null ? "" : b.budgetLeft >= 0 ? `${money(b.budgetLeft)} to spare` : `${money(-b.budgetLeft)} over`) : ""}
+-<tr><td colspan="2" style="background:#ccff01;padding:8px 12px;font-size:13px;${D}">Deposit paid <strong>${e(v.deposit)}</strong>${v.suggestedBalance ? ` · suggested balance <strong>${e(v.suggestedBalance)}</strong> <span style="font-size:11px">(trip cost${sum.people > 1 ? ` for ${sum.people}` : ""} less the deposit). You set the final figure when you approve.</span>` : ""}</td></tr>
++<tr><td colspan="2" style="background:#ccff01;padding:8px 12px;font-size:13px;${D}">${v.deposit ? `Deposit paid <strong>${e(v.deposit)}</strong>` : "Nothing paid yet (free to send)"}${v.suggestedBalance ? ` · suggested ${v.deposit ? "balance" : "price"} <strong>${e(v.suggestedBalance)}</strong> <span style="font-size:11px">(trip cost${sum.people > 1 ? ` for ${sum.people}` : ""}${v.deposit ? " less the deposit" : ""}). You set the final figure when you approve.</span>` : ""}</td></tr>
+ </table>`;
+ 
+   /* ---- heads up ---- */
+@@ -964,6 +982,8 @@ ${sum.flags.map((f) => `<tr><td style="padding:6px 12px;font-size:13px;line-heig
+ /** Guest: checked, here's the final price. The button opens their trip page, where they choose how to pay the rest. */
+ export function tripBuilderReadyEmail(v: {
+   firstName: string; ref: string; route: string; balance: string; note: string; payUrl: string; statusUrl: string;
++  /** False when nothing was paid when the trip was sent (the usual case now): it is the whole price, not "the rest". */
++  hasDeposit?: boolean;
+   /** The checked plan (the crew may have tweaked it), so the guest can see exactly what they're paying for. */
+   planUrl?: string;
+   /** What they can choose, e.g. ["Pay it all now", "Pay it automatically on Tue 12 Jan, a week before you leave", "Pay in 3 instalments"]. */
+@@ -975,12 +995,14 @@ export function tripBuilderReadyEmail(v: {
+     tbP(`Good news: the crew has checked your trip, <strong>${e(v.route)}</strong>.`),
+     v.note ? `<div style="margin:16px 0;padding:14px;border:2px solid #0a0a0a;background:#ccff01"><div style="font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">From the crew</div><div style="font-size:15px;white-space:pre-line">${e(v.note)}</div></div>` : "",
+     safeHref(v.planUrl) ? tbP(`Have a look at the plan we checked: <a href="${e(safeHref(v.planUrl))}" style="color:#0a0a0a">see your trip</a>.`) : "",
+-    tbP(`The rest to pay is <strong>${e(v.balance)}</strong>. Your deposit is already taken off, and it's the same card that carries on.`),
++    v.hasDeposit === false
++      ? tbP(`The price for your trip is <strong>${e(v.balance)}</strong>. You haven't paid anything yet. Choose how you'd like to pay below, and we'll lock in your beds.`)
++      : tbP(`The rest to pay is <strong>${e(v.balance)}</strong>. Your deposit is already taken off, and it's the same card that carries on.`),
+     v.choices && v.choices.length ? `<ul style="margin:0 0 12px 0;padding-left:20px">${v.choices.map((c) => `<li style="margin:0 0 4px 0">${e(c)}</li>`).join("")}</ul>` : "",
+     `<p style="margin:18px 0">${tbButton(v.payUrl, "Choose how to pay")}</p>`,
+     `<p style="margin:0;font-size:13px;color:#555">Want something changed first? Just reply to this email. Reference: <strong>${e(v.ref)}</strong></p>`,
+   ].join("\n");
+-  return { subject: `Your trip is checked: choose how to pay the rest (${v.ref})`, html: tbShell("Your trip is ready", "Ready for your OK", body) };
++  return { subject: `Your trip is checked: choose how to pay${v.hasDeposit === false ? "" : " the rest"} (${v.ref})`, html: tbShell("Your trip is ready", "Ready for your OK", body) };
+ }
+ 
+ type PayRow = { amount: string; due: string; paid: boolean };
+@@ -989,15 +1011,15 @@ const tbTable = (rows: PayRow[]) => `<table role="presentation" width="100%" cel
+ 
+ /** Guest: they have chosen how to pay and the first payment (if any) is in. Their trip is booked. */
+ export function tripBuilderBookedEmail(v: {
+-  firstName: string; ref: string; route: string; planLabel: string; deposit: string; schedule: PayRow[]; statusUrl: string; startDate?: string;
++  firstName: string; ref: string; route: string; planLabel: string; /** "" when nothing was paid when the trip was sent. */ deposit: string; schedule: PayRow[]; statusUrl: string; startDate?: string;
+ }): { subject: string; html: string } {
+   const e = escapeHtml;
+   const body = [
+     tbP(`Hey ${e(v.firstName)},`),
+-    tbP(`You're booked: <strong>${e(v.route)}</strong>${v.startDate ? `, starting ${e(v.startDate)}` : ""}. Your <strong>${e(v.deposit)}</strong> deposit is counted, and you've chosen to ${e(v.planLabel)}.`),
++    tbP(`You're booked: <strong>${e(v.route)}</strong>${v.startDate ? `, starting ${e(v.startDate)}` : ""}. ${v.deposit ? `Your <strong>${e(v.deposit)}</strong> deposit is counted, and you've` : "You've"} chosen to ${e(v.planLabel)}.`),
+     `<p style="margin:0 0 6px 0;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#555">Your payments</p>`,
+     tbTable(v.schedule),
+-    tbP("Payments after today are charged to the card you paid your deposit with. We'll email you a few days before each one. Want to pay one sooner? Open your trip below."),
++    tbP(`Payments after today are charged to the card you ${v.deposit ? "paid your deposit with" : "saved with us"}. We'll email you a few days before each one. Want to pay one sooner? Open your trip below.`),
+     `<p style="margin:18px 0">${tbButton(v.statusUrl, "My trip")}</p>`,
+     `<p style="margin:0;font-size:13px;color:#555">Reference: <strong>${e(v.ref)}</strong></p>`,
+   ].join("\n");
+@@ -1028,7 +1050,7 @@ export function tripBuilderReminderEmail(v: { firstName: string; ref: string; ro
+   const e = escapeHtml;
+   const body = [
+     tbP(`Hey ${e(v.firstName)},`),
+-    tbP(`A reminder that <strong>${e(v.amount)}</strong> for <strong>${e(v.route)}</strong> comes out of the card you paid your deposit with on <strong>${e(v.due)}</strong>. There's nothing you need to do.`),
++    tbP(`A reminder that <strong>${e(v.amount)}</strong> for <strong>${e(v.route)}</strong> comes out of the card you saved with us on <strong>${e(v.due)}</strong>. There's nothing you need to do.`),
+     tbP("Need to change something first? Reply to this email and we'll sort it."),
+     `<p style="margin:18px 0">${tbButton(v.statusUrl, "My trip")}</p>`,
+     `<p style="margin:0;font-size:13px;color:#555">Reference: <strong>${e(v.ref)}</strong></p>`,
+@@ -1067,7 +1089,7 @@ export function tripBuilderConfirmedEmail(v: { firstName: string; ref: string; r
+   const e = escapeHtml;
+   const body = [
+     tbP(`Hey ${e(v.firstName)},`),
+-    tbP(`We've got your <strong>${e(v.paid)}</strong> balance, so you're paid in full and your beds are locked in for <strong>${e(v.route)}</strong>.`),
++    tbP(`We've got your <strong>${e(v.paid)}</strong>, so you're paid in full and your beds are locked in for <strong>${e(v.route)}</strong>.`),
+     tbP("The crew will be in touch with anything you need before you go."),
+     `<p style="margin:18px 0">${tbButton(v.statusUrl, "My trip")}</p>`,
+     `<p style="margin:0;font-size:13px;color:#555">Reference: <strong>${e(v.ref)}</strong></p>`,
+@@ -1097,7 +1119,7 @@ export function tripBuilderRevisedEmail(v: { firstName: string; ref: string; rou
+     tbP(`We've got your changes. The crew will check this version, <strong>${e(v.route)}</strong> (${v.days} days), instead of the one you sent before. There's nothing else for you to do.`),
+     v.changes.length ? `<ul style="margin:0 0 12px 0;padding-left:20px">${v.changes.map((c) => `<li style="margin:0 0 4px 0">${e(c)}</li>`).join("")}</ul>` : "",
+     v.withdrawn ? tbP("A crew member had already approved your earlier version. Because the plan has changed they'll check the new one and come back to you with the final price. Nothing is due in the meantime.") : "",
+-    tbP("Your deposit and your beds carry on as they were. You can keep changing your trip from your trip page until it's booked."),
++    tbP("Your beds carry on as they were. You can keep changing your trip from your trip page until it's booked."),
+     `<p style="margin:18px 0">${tbButton(v.statusUrl, "Track my trip")}</p>`,
+     `<p style="margin:0;font-size:13px;color:#555">Reference: <strong>${e(v.ref)}</strong></p>`,
+   ].join("\n");
+diff --git a/supabase/functions/_shared/trip-builder-free.test.ts b/supabase/functions/_shared/trip-builder-free.test.ts
+new file mode 100644
+index 0000000..2ed2134
+--- /dev/null
++++ b/supabase/functions/_shared/trip-builder-free.test.ts
+@@ -0,0 +1,117 @@
++import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
++import { needsDeposit, parseDeposit, planLabel, plainFirstName, plainText } from "./trip-builder.ts";
++import { readSummary } from "./trip-builder-crew.ts";
++import { tripBuilderBookedEmail, tripBuilderOpsEmail, tripBuilderReadyEmail, tripBuilderReceivedEmail, tripBuilderReminderEmail } from "./email.ts";
++
++Deno.test("free to send is the default; the deposit switch only takes whole dollars from 1 to 1000", () => {
++  for (const v of [undefined, null, "", "  ", "0", "abc", "-5", "1001", "5000", "NaN", "Infinity", "$50", "fifty"]) assertEquals(parseDeposit(v), 0, `${JSON.stringify(v)} is free`);
++  assertEquals(parseDeposit("50"), 50);
++  assertEquals(parseDeposit(" 50 "), 50);
++  assertEquals(parseDeposit(50), 50);
++  assertEquals(parseDeposit("50.4"), 50);
++  assertEquals(parseDeposit("1000"), 1000);
++  assertEquals(parseDeposit("1"), 1);
++});
++
++Deno.test("a trip is only waiting on a deposit when one is owed and unpaid", () => {
++  assertEquals(needsDeposit({ deposit_amount: 0, deposit_paid_at: null }), false, "free to send: nothing to wait for");
++  assertEquals(needsDeposit({ deposit_amount: "0.00", deposit_paid_at: null }), false);
++  assertEquals(needsDeposit({ deposit_amount: 100, deposit_paid_at: null }), true);
++  assertEquals(needsDeposit({ deposit_amount: 100, deposit_paid_at: "2026-10-23T10:00:00Z" }), false);
++  assertEquals(needsDeposit({}), false);
++});
++
++Deno.test("names and routes that are printed in emails to someone else's address are plain text only", () => {
++  for (const n of ["Sam", "José", "Mary-Jane", "O'Brien", "Zoë", "Sam Lee", "Æsa"]) assertEquals(plainFirstName(n), n.split(" ")[0], n);
++  for (const n of ["", "   ", "123", "<script>x</script>", "a".repeat(40), "(Sam)", "http://evil.example", "a@b.co", null, undefined, 5, { x: 1 }]) assertEquals(plainFirstName(n), "there", JSON.stringify(n));
++  // only the first word is ever printed, so a message typed into the name field can't reach someone's inbox
++  assertEquals(plainFirstName("Click http://evil.example"), "Click");
++  assertEquals(plainFirstName("Your account is locked, call 555 1234"), "Your");
++  assertEquals(plainText("Hanoi → Hoi An → Ho Chi Minh City"), "Hanoi → Hoi An → Ho Chi Minh City");
++  assertEquals(plainText("Hoi An: 4 nights"), "Hoi An: 4 nights");
++  assertEquals(plainText("Removed Ho Chi Minh City", 140), "Removed Ho Chi Minh City");
++  for (const bad of ["", "see http://evil.example/login", "https://x.y", "visit evil.com now", "go to www.evil", "<b>hi</b>", "a@b.co", "x".repeat(161), "line one\nline two", null, undefined, { a: 1 }]) assertEquals(plainText(bad), "", JSON.stringify(bad));
++  assertEquals(plainText("x".repeat(200), 300), "x".repeat(200), "the cap can be raised");
++});
++
++Deno.test("plan wording: 'the rest' only when a deposit has been paid", () => {
++  assertEquals(planLabel("later"), "pay the rest on the card a week before you leave");
++  assertEquals(planLabel("instalments"), "pay the rest in instalments");
++  assertEquals(planLabel("now"), "pay the rest now");
++  assertEquals(planLabel("later", false), "pay on the card a week before you leave");
++  assertEquals(planLabel("instalments", false), "pay in instalments");
++  assertEquals(planLabel("now", false), "pay now");
++  assertEquals(planLabel(null, false), "pay now");
++});
++
++const received = (o: Record<string, unknown> = {}) => tripBuilderReceivedEmail({ firstName: "Sam", ref: "MM-ABC234", route: "Hanoi → Hoi An", days: 9, startDate: "Mon 1 Mar 2027", people: 1, holdUntil: "", statusUrl: "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/trip/MM-ABC234?k=abc", ...o });
++
++Deno.test("the email for a free trip says nothing has been paid, and never mentions a deposit or a refund", () => {
++  const m = received();
++  assertStringIncludes(m.subject, "MM-ABC234");
++  assertStringIncludes(m.html, "you haven't paid anything");
++  assertStringIncludes(m.html, "Hanoi → Hoi An");
++  assertStringIncludes(m.html, "#/trip/MM-ABC234?k=abc");
++  assert(!/deposit/i.test(m.html.replace(/<[^>]+>/g, " ")), "no deposit talk");
++  assert(!/refund/i.test(m.html.replace(/<[^>]+>/g, " ").replace(/nothing to refund/gi, "")), "no refund talk beyond 'nothing to refund'");
++  assertStringIncludes(received({ holdUntil: "Wed 25 Oct, 10:00 UTC" }).html, "holding your beds until");
++  assertStringIncludes(received({ holdUntil: "" }).html, "pin down dates");
++  assertStringIncludes(received({ people: 3 }).html, "(3 people)");
++  assert(!received({ route: "" }).html.includes("<strong></strong>"), "no empty route");
++});
++
++Deno.test("what a sender typed is escaped in the guest's email", () => {
++  const m = received({ firstName: `<img src=x onerror=alert(1)>`, route: `<script>alert(1)</script>`, startDate: `"><b>x` });
++  assert(!/<img src=x|<script>alert|<b>x/.test(m.html), "no markup got through");
++});
++
++const sum = () => readSummary({ summary: { headline: "Hanoi", days: 9, nights: 8, stopCount: 2, countries: ["Vietnam"], start: "2027-03-01", end: "2027-03-09", people: 2, pref: "Smart pick", stops: [], budget: { beds: 100, tours: 40, transport: 60, allIn: 0, squadDiscount: 0, tripCost: 200, spendPerDay: 20, spendFund: 120, total: 320, people: 2, tripCostAllPeople: 400, totalAllPeople: 640, guestBudget: 0, budgetLeft: null }, flags: [] } });
++const ops = (deposit: string, suggested: string) => tripBuilderOpsEmail({
++  ref: "MM-ABC234", name: "Sam Lee", contact: "Email sam@example.com", guestEmail: "sam@example.com", people: 2, route: "Hanoi", days: 9, startDate: "Mon 1 Mar 2027", dates: "fixed",
++  estTotal: "$320", deposit, allInMatch: "", notes: "", itinerary: "x", tripLink: "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.hanoi.4", adminUrl: "https://madmonkeyhostels.com/all-in-trips/admin",
++  holdUntil: "", summary: sum(), suggestedBalance: suggested,
++});
++const plain = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
++
++Deno.test("the crew's email says 'free to send' when nothing was paid, and still shows a deposit when there was one", () => {
++  const free = plain(ops("", "$400").html);
++  assertStringIncludes(free, "Free to send: nothing paid yet");
++  assertStringIncludes(free, "Nothing paid yet (free to send)");
++  assertStringIncludes(free, "suggested price $400");
++  assert(!/Deposit paid/.test(free) && !/less the deposit/.test(free), "no deposit lines");
++  const paid = plain(ops("$100", "$300").html);
++  assertStringIncludes(paid, "Deposit paid $100");
++  assertStringIncludes(paid, "suggested balance $300");
++  assertStringIncludes(paid, "less the deposit");
++});
++
++const ready = (hasDeposit?: boolean) => tripBuilderReadyEmail({ firstName: "Sam", ref: "MM-ABC234", route: "Hanoi", balance: "$512", note: "", payUrl: "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/trip/MM-ABC234?k=a", statusUrl: "https://madmonkeyhostels.com/x", choices: ["Pay all $512 now"], ...(hasDeposit === undefined ? {} : { hasDeposit }) });
++
++Deno.test("the 'checked' email asks for the price, not 'the rest', when nothing was paid up front", () => {
++  const free = ready(false);
++  assertStringIncludes(plain(free.html), "The price for your trip is $512");
++  assertStringIncludes(plain(free.html), "You haven't paid anything yet");
++  assert(!/deposit/i.test(plain(free.html)) && !/the rest/i.test(free.subject), "no deposit talk");
++  assertStringIncludes(free.subject, "choose how to pay (MM-ABC234)");
++  for (const m of [ready(true), ready()]) {
++    assertStringIncludes(plain(m.html), "The rest to pay is $512");
++    assertStringIncludes(plain(m.html), "Your deposit is already taken off");
++    assertStringIncludes(m.subject, "choose how to pay the rest");
++  }
++});
++
++Deno.test("the booked email only talks about a deposit when there was one, and the card is 'saved with us' otherwise", () => {
++  const args = { firstName: "Sam", ref: "MM-ABC234", route: "Hanoi", planLabel: "pay in instalments", schedule: [{ amount: "$128", due: "Today", paid: true }], statusUrl: "https://madmonkeyhostels.com/x", startDate: "Mon 1 Mar 2027" };
++  const free = plain(tripBuilderBookedEmail({ ...args, deposit: "" }).html);
++  assertStringIncludes(free, "You've chosen to pay in instalments");
++  assertStringIncludes(free, "saved with us");
++  assert(!/deposit/i.test(free), "no deposit talk");
++  const paid = plain(tripBuilderBookedEmail({ ...args, planLabel: "pay the rest in instalments", deposit: "$100" }).html);
++  assertStringIncludes(paid, "Your $100 deposit is counted");
++  assertStringIncludes(paid, "paid your deposit with");
++});
++
++Deno.test("the reminder names the card as the one saved with us (true with or without a deposit)", () => {
++  const m = tripBuilderReminderEmail({ firstName: "Sam", ref: "MM-ABC234", route: "Hanoi", amount: "$128", due: "Wed 18 Nov", statusUrl: "https://madmonkeyhostels.com/x" });
++  assertStringIncludes(plain(m.html), "the card you saved with us");
++});
+diff --git a/supabase/functions/_shared/trip-builder-pay.test.ts b/supabase/functions/_shared/trip-builder-pay.test.ts
+index c4f3305..0666351 100644
+--- a/supabase/functions/_shared/trip-builder-pay.test.ts
++++ b/supabase/functions/_shared/trip-builder-pay.test.ts
+@@ -56,15 +56,14 @@ Deno.test("instalments: first now through Checkout, the rest on the card every 3
+   }
+ });
+ 
+-Deno.test("options: now always; later and instalments only with a saved card and enough time", () => {
++Deno.test("options: now always; later and instalments only with enough time before departure", () => {
+   const plans = (o: Parameters<typeof payOptions>[0]) => payOptions({ ...o, now: NOW }).map((x) => x.plan);
+-  assertEquals(plans({ balance: 500, start: plus(120), cardSaved: true }), ["now", "later", "instalments"]);
+-  assertEquals(plans({ balance: 500, start: plus(30), cardSaved: true }), ["now", "later"], "30 days out: no instalments");
+-  assertEquals(plans({ balance: 500, start: plus(7), cardSaved: true }), ["now"], "leaving in a week: the 7-day charge date is already here");
+-  assertEquals(plans({ balance: 500, start: plus(8), cardSaved: true }), ["now", "later"], "8 days out: charge tomorrow");
+-  assertEquals(plans({ balance: 500, start: plus(120), cardSaved: false }), ["now"], "no saved card (deposit taken before this existed)");
+-  assertEquals(plans({ balance: 500, start: null, cardSaved: true }), ["now"], "no date: nothing to schedule against");
+-  assertEquals(plans({ balance: 0.5, start: plus(120), cardSaved: true }), [], "nothing to pay");
++  assertEquals(plans({ balance: 500, start: plus(120) }), ["now", "later", "instalments"], "free to send: no card on file yet, it is collected when they choose");
++  assertEquals(plans({ balance: 500, start: plus(30) }), ["now", "later"], "30 days out: no instalments");
++  assertEquals(plans({ balance: 500, start: plus(7) }), ["now"], "leaving in a week: the 7-day charge date is already here");
++  assertEquals(plans({ balance: 500, start: plus(8) }), ["now", "later"], "8 days out: charge tomorrow");
++  assertEquals(plans({ balance: 500, start: null }), ["now"], "no date: nothing to schedule against");
++  assertEquals(plans({ balance: 0.5, start: plus(120) }), [], "nothing to pay");
+ });
+ 
+ Deno.test("what is due today, and what needs a reminder", () => {
+diff --git a/supabase/functions/_shared/trip-builder-pay.ts b/supabase/functions/_shared/trip-builder-pay.ts
+index 4921b20..408983a 100644
+--- a/supabase/functions/_shared/trip-builder-pay.ts
++++ b/supabase/functions/_shared/trip-builder-pay.ts
+@@ -1,13 +1,13 @@
+ // Trip builder: how a guest pays the rest once the crew has approved their trip (Ewan, 20 Oct 2026).
+ //
+-// The deposit taken when the trip was sent (and the card it was paid with) carries straight on:
+-// the crew sets the balance, the guest picks how to pay it, and the plan follows the same rules
+-// as ALL IN bookings:
++// Sending a trip is free (Ewan, 23 Oct 2026), so the crew sets the price once they have checked it, the guest picks how
++// to pay it, and the plan follows the same rules as ALL IN bookings. (If a deposit was taken when the trip was sent,
++// it counts towards the price and the card it was paid with carries on.)
+ //   now          pay the whole balance straight away
+-//   later        the saved card is charged automatically LATE_DAYS before departure (a reminder goes first)
+-//   instalments  only when departure is INSTALMENT_MIN_DAYS or more away: equal payments, the first one now,
+-//                the rest charged to the saved card every INSTALMENT_EVERY_DAYS days, the last at least
+-//                LATE_DAYS before departure
++//   later        a card is saved now (nothing is charged) and charged automatically LATE_DAYS before departure (a reminder goes first)
++//   instalments  only when departure is INSTALMENT_MIN_DAYS or more away: equal payments, the first one now (the card
++//                it is paid with is saved), the rest charged to that card every INSTALMENT_EVERY_DAYS days, the last at
++//                least LATE_DAYS before departure
+ // Pure functions only (no Stripe, no database), so every rule here is covered by trip-builder-pay.test.ts.
+ 
+ export const LATE_DAYS = 7;
+@@ -62,14 +62,14 @@ export function buildSchedule(plan: Plan, balance: number, start: string | null,
+   return splitCents(cents, n).map((c, i) => mk(i + 1, c, addDays(today, i * INSTALMENT_EVERY_DAYS), i === 0 ? "checkout" : "card"));
+ }
+ 
+-/** What this guest can choose. "later" and "instalments" need a card saved at the deposit and a departure date. */
+-export function payOptions(o: { balance: number; start: string | null; cardSaved: boolean; now?: Date }): Option[] {
++/** What this guest can choose. "later" and "instalments" need a departure date far enough away. The card they are charged is saved as part of choosing (or is the one already on file). */
++export function payOptions(o: { balance: number; start: string | null; now?: Date }): Option[] {
+   const now = o.now ?? new Date(), days = daysUntil(o.start, now), out: Option[] = [];
+   if (!(o.balance >= 1)) return out;
+   const view = (plan: Plan): Option => { const items = buildSchedule(plan, o.balance, o.start, now); return { plan, count: items.length, amount: o.balance, items: items.map((i) => ({ amount: i.amount, due: i.due })) }; };
+   out.push(view("now"));
+-  if (o.cardSaved && days != null && days > LATE_DAYS) out.push(view("later"));
+-  if (o.cardSaved && instalmentCount(days, o.balance) >= 2) out.push(view("instalments"));
++  if (days != null && days > LATE_DAYS) out.push(view("later"));
++  if (instalmentCount(days, o.balance) >= 2) out.push(view("instalments"));
+   return out;
+ }
+ 
+diff --git a/supabase/functions/_shared/trip-builder.ts b/supabase/functions/_shared/trip-builder.ts
+index 4ec0674..9e8b56b 100644
+--- a/supabase/functions/_shared/trip-builder.ts
++++ b/supabase/functions/_shared/trip-builder.ts
+@@ -1,8 +1,11 @@
+ // Trip builder payments (Charlie, 19 Oct 2026). Ewan's trip builder is served
+-// from public/trip-builder; sending a trip for checking takes a deposit per
+-// person (trip-builder-request), the crew sends the balance from the admin
+-// (trip-builder-admin), and stripe-webhook hands both payments to
+-// handleTripBuilderPaid below. Table: trip_builder_requests.
++// from public/trip-builder. Sending a trip for checking is FREE (Ewan, 23 Oct 2026):
++// trip-builder-request saves it as "submitted" and emails the crew at once
++// (handleTripBuilderSubmitted below). Nothing is paid until the crew has checked the
++// trip and set the price (trip-builder-admin) and the guest has chosen how to pay it
++// (trip-builder-pay); stripe-webhook hands each payment to handleTripBuilderPaid.
++// With the secret TRIP_BUILDER_DEPOSIT_PER_PERSON set, sending takes a deposit per
++// person first, as it did before. Table: trip_builder_requests.
+ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import Stripe from "https://esm.sh/stripe@18.5.0";
+ import { trustedBase } from "./app-base.ts";
+@@ -13,11 +16,12 @@ import {
+   tripBuilderConfirmedEmail,
+   tripBuilderDepositEmail,
+   tripBuilderOpsEmail,
++  tripBuilderReceivedEmail,
+   TRIP_BUILDER_CONTACT,
+ } from "./email.ts";
+ import { crewReviewUrl, guestTripUrl, readSummary, signCrewKey, signGuestKey, suggestBalance } from "./trip-builder-crew.ts";
+ import type { Update } from "./trip-builder-revise.ts";
+-import { allPaid, type Item, type Plan, readSchedule } from "./trip-builder-pay.ts";
++import { allPaid, buildSchedule, daysUntil, type Item, LATE_DAYS, type Plan, readSchedule } from "./trip-builder-pay.ts";
+ 
+ // Trip builder enquiries are Ewan's (Charlie, 19 Oct 2026): every alert goes to
+ // him and every guest email replies to him, not the ALL IN ops list or cs@.
+@@ -29,10 +33,35 @@ export function teamCc(): string[] | undefined {
+   return list.length ? list : undefined;
+ }
+ 
+-export const DEPOSIT_PER_PERSON_USD = 50;
+ export const HOLD_HOURS = 48;
+ export const MAX_PEOPLE = 8;
+ 
++/** US dollars per person taken when a trip is sent. 0, the default, means sending is free: nothing is paid until the crew has checked the trip and the guest
++ *  chooses how to pay. Set the secret TRIP_BUILDER_DEPOSIT_PER_PERSON (e.g. 50) to bring the deposit back, and the builder's DEPOSIT_PER_PERSON to the same
++ *  number. Read on every request, so a change to the secret needs no code change. */
++export function depositPerPerson(): number {
++  let v: string | undefined;
++  try { v = Deno.env.get("TRIP_BUILDER_DEPOSIT_PER_PERSON"); } catch { /* no permission to read it, as in a plain `deno test`: free */ }
++  return parseDeposit(v);
++}
++/** Whole US dollars from 1 to 1000, otherwise 0 (free): a typo in the secret can never charge anyone something odd. */
++export function parseDeposit(v: unknown): number {
++  const n = Math.round(Number(String(v ?? "").trim()));
++  return Number.isFinite(n) && n >= 1 && n <= 1000 ? n : 0;
++}
++/** True while a deposit is owed and not yet paid, so the crew can't act on the trip. A trip sent free has no deposit, so it is never waiting on one. */
++export const needsDeposit = (row: { deposit_amount?: unknown; deposit_paid_at?: unknown }) => Number(row.deposit_amount) > 0 && !row.deposit_paid_at;
++
++/** A first name that is safe to print in an email to somebody else's address: letters and a few marks only, otherwise "there". (A free trip can be sent with anyone's email.) */
++export function plainFirstName(name: unknown): string {
++  const first = String(name ?? "").trim().split(/\s+/)[0] ?? "";
++  return /^[\p{L}][\p{L}\p{M}'’.-]{0,29}$/u.test(first) ? first : "there";
++}
++/** Text that reads as a route or a list of changes ("Hanoi → Hoi An: 4 nights"), or "" when it looks like anything else: a link, an address, a long message of its own. */
++export function plainText(text: unknown, max = 160): string {
++  const t = String(text ?? "").trim();
++  return t.length > 0 && t.length <= max && /^[\p{L}\p{M}\p{N} .,:'’()+&/→>-]+$/u.test(t) && !/\bwww\b|https?|\.(com|net|org|co|io|me|info)\b/i.test(t) ? t : "";
++}
+ export const usd = (n: number) =>
+   `$${Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+ 
+@@ -60,8 +89,10 @@ type Row = Record<string, unknown> & {
+   contact_via: string | null; guest_email: string | null; deposit_paid_at: string | null; balance_paid_at: string | null;
+ };
+ 
+-export const planLabel = (plan: string | null | undefined) =>
+-  plan === "later" ? "pay the rest on the card a week before you leave" : plan === "instalments" ? "pay the rest in instalments" : "pay the rest now";
++export const planLabel = (plan: string | null | undefined, withDeposit = true) => {
++  const rest = withDeposit ? "the rest " : "";
++  return plan === "later" ? `pay ${rest}on the card a week before you leave` : plan === "instalments" ? `pay ${rest}in instalments` : `pay ${rest}now`;
++};
+ 
+ /** A saved payment schedule as rows for an email: "Today $200 Paid", "Mon 12 Jan $200 Due". */
+ export function scheduleRows(items: Item[]): { amount: string; due: string; paid: boolean }[] {
+@@ -81,14 +112,14 @@ export async function notifyBooked(row: Row, items: Item[], origin: string | nul
+   const statusUrl = guestTripUrl(origin, row.ref, key);
+   const plan = String(row.pay_plan ?? "now");
+   if (to) {
+-    const m = tripBuilderBookedEmail({ firstName: first, ref: row.ref, route: row.route ?? "your trip", planLabel: planLabel(plan), deposit: usd(Number(row.deposit_amount)), schedule: scheduleRows(items), statusUrl, startDate: fmtDay(row.start_date) });
++    const m = tripBuilderBookedEmail({ firstName: first, ref: row.ref, route: row.route ?? "your trip", planLabel: planLabel(plan, Number(row.deposit_amount) > 0), deposit: Number(row.deposit_amount) > 0 ? usd(Number(row.deposit_amount)) : "", schedule: scheduleRows(items), statusUrl, startDate: fmtDay(row.start_date) });
+     await sendEmail({ to, subject: m.subject, html: m.html, replyTo: EWAN, templateName: "trip_builder_booked" }).catch((e) => console.warn("trip builder booked email failed", e));
+   }
+   const rows = items.map((i) => `${i.status === "paid" ? "Paid" : "Due"} ${fmtDay(i.due)}: ${usd(i.amount)}`).join("<br>");
+   await sendEmail({
+     to: EWAN, cc: teamCc(),
+-    subject: `Trip builder: ${row.name} is booked and will ${planLabel(plan)} · ${row.ref}`,
+-    html: `<p><strong>${esc(String(row.name))}</strong> approved ${esc(String(row.route ?? ""))} (${row.ref}) and chose to ${esc(planLabel(plan))}. It's booked: make sure the beds are locked in.</p><p>${rows}</p>`,
++    subject: `Trip builder: ${row.name} is booked and will ${planLabel(plan, Number(row.deposit_amount) > 0)} · ${row.ref}`,
++    html: `<p><strong>${esc(String(row.name))}</strong> approved ${esc(String(row.route ?? ""))} (${row.ref}) and chose to ${esc(planLabel(plan, Number(row.deposit_amount) > 0))}. It's booked: make sure the beds are locked in.</p><p>${rows}</p>`,
+     templateName: "trip_builder_booked_ops",
+   }).catch((e) => console.warn("trip builder booked ops email failed", e));
+ }
+@@ -96,7 +127,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
+ 
+ /** The new-trip email to Ewan and the team: the whole trip as the guest built it, with Approve / Not approved / Edit it. With `update` it is the guest's changed version of a trip the crew already has. */
+ export async function notifyCrew(row: Row, guestEmail: string | null, holdUntil: string | null, origin: string | null, update?: Update): Promise<void> {
+-  const deposit = usd(Number(row.deposit_amount));
++  const deposit = Number(row.deposit_amount) > 0 ? usd(Number(row.deposit_amount)) : "";      // "" = free to send
+   const contact = row.contact_via === "whatsapp" ? `WhatsApp ${row.whatsapp ?? ""}` : `Email ${row.email ?? ""}`;
+   // The whole trip as the guest built it (payload.summary), and three one-tap links into the crew review page. Older trips have no summary: the email falls back to the plain itinerary.
+   const summary = readSummary(row.payload);
+@@ -117,7 +148,41 @@ export async function notifyCrew(row: Row, guestEmail: string | null, holdUntil:
+   await sendEmail({ to: EWAN, cc: teamCc(), subject: ops.subject, html: ops.html, replyTo: guestEmail ?? undefined, templateName: update ? "trip_builder_ops_update" : "trip_builder_ops" }).catch((e) => console.warn("trip builder ops email failed", e));
+ }
+ 
+-/** checkout.session.completed with metadata.kind trip_builder_deposit / trip_builder_balance / trip_builder_instalment. Idempotent. */
++const alertEwan = (subject: string, html: string, templateName: string) => sendEmail({ to: EWAN, cc: teamCc(), subject, html, templateName }).catch((e) => console.warn(`${templateName} email failed`, e));
++
++/** A trip sent free is already saved as "submitted": tell the guest we have it (if they gave an email) and tell Ewan and the team, the same email as for a paid trip. */
++export async function handleTripBuilderSubmitted(row: Row, origin: string | null): Promise<void> {
++  const guestEmail = (row.email as string | null) || (row.guest_email as string | null) || null;
++  const holdUntil = (row.hold_until as string | null) || null;
++  if (guestEmail) {
++    const m = tripBuilderReceivedEmail({
++      firstName: plainFirstName(row.name), ref: row.ref, route: plainText(row.route), days: Number(row.days ?? 0), startDate: fmtDay(row.start_date),
++      people: Number(row.party_size ?? 1), holdUntil: fmtDayTime(holdUntil), statusUrl: guestTripUrl(origin, row.ref, await signGuestKey(row.ref)),   // with their key: it's how they change the trip after sending it
++    });
++    await sendEmail({ to: guestEmail, subject: m.subject, html: m.html, replyTo: EWAN, templateName: "trip_builder_received" }).catch((e) => console.warn("trip builder guest email failed", e));
++  }
++  await notifyCrew(row, guestEmail, holdUntil, origin);
++}
++
++/** The card a guest just saved or paid with, read from Stripe (never from the browser) so later payments can be charged to it. */
++async function readCard(session: Stripe.Checkout.Session, pi: string | null, si: string | null): Promise<{ customer: string | null; method: string | null }> {
++  let customer = typeof session.customer === "string" ? session.customer : session.customer?.id ?? null, method: string | null = null;
++  try {
++    const stripe = stripeFromEnv();
++    if (stripe && pi) {
++      const p = await stripe.paymentIntents.retrieve(pi);
++      method = typeof p.payment_method === "string" ? p.payment_method : p.payment_method?.id ?? null;
++      customer = customer ?? (typeof p.customer === "string" ? p.customer : p.customer?.id ?? null);
++    } else if (stripe && si) {
++      const t = await stripe.setupIntents.retrieve(si);
++      method = typeof t.payment_method === "string" ? t.payment_method : t.payment_method?.id ?? null;
++      customer = customer ?? (typeof t.customer === "string" ? t.customer : t.customer?.id ?? null);
++    }
++  } catch (e) { console.warn("trip builder: couldn't read the saved card", e instanceof Error ? e.message : e); }
++  return { customer, method };
++}
++
++/** checkout.session.completed with metadata.kind trip_builder_deposit / trip_builder_balance / trip_builder_instalment / trip_builder_card. Idempotent. */
+ export async function handleTripBuilderPaid(sb: SupabaseClient, session: Stripe.Checkout.Session): Promise<void> {
+   const meta = (session.metadata ?? {}) as Record<string, string>;
+   const ref = meta.ref ?? "";
+@@ -171,6 +236,34 @@ export async function handleTripBuilderPaid(sb: SupabaseClient, session: Stripe.
+     return;
+   }
+ 
++  if (meta.kind === "trip_builder_card") {
++    // The guest chose "pay a week before I leave" and had no card on file, so they were sent to save one on Checkout (nothing is charged). They are booked here, once the card is safe.
++    if (String(row.status) === "approved") return;                              // already booked (the webhook was delivered twice)
++    const si = typeof session.setup_intent === "string" ? session.setup_intent : session.setup_intent?.id ?? null;
++    const card = await readCard(session, null, si);
++    if (!card.method) {
++      await alertEwan(`Trip builder: ${row.name} saved a card but we couldn't read it · ${row.ref}`,
++        `<p><strong>${esc(String(row.name))}</strong> (${row.ref}) chose to pay a week before they leave and finished the card page, but Stripe didn't give us a card. They are NOT booked: ask them to choose again from their trip page.</p>`, "trip_builder_no_card_ops");
++      throw new Error("trip builder card: Stripe gave no saved card");
++    }
++    const cardPatch = { stripe_customer_id: card.customer, stripe_payment_method_id: card.method, guest_email: row.guest_email || guestEmail, updated_at: now.toISOString() };
++    const balance = Number(row.balance_amount), asked = Number(meta.amt);
++    // Only book what they were shown: if the crew changed the price, or the trip moved, while they were on the card page, keep the card and let them choose again.
++    const stillRight = String(row.status) === "ready" && balance >= 1 && Math.abs(balance - asked) < 0.005 && (daysUntil(row.start_date as string | null, now) ?? 0) > LATE_DAYS;
++    if (!stillRight) {
++      await sb.from("trip_builder_requests").update(cardPatch).eq("ref", row.ref);
++      await alertEwan(`Trip builder: ${row.name} saved a card, but the trip changed first · ${row.ref}`,
++        `<p><strong>${esc(String(row.name))}</strong> (${row.ref}) saved a card for "pay a week before I leave", but the price or the trip changed while they were on that page, so they are NOT booked on it. Their card is on file: they can choose again from their trip page.</p>`, "trip_builder_card_changed_ops");
++      return;
++    }
++    const items = buildSchedule("later", balance, row.start_date as string | null, now);
++    const { data: won, error: bErr } = await sb.from("trip_builder_requests").update({ ...cardPatch, status: "approved", pay_plan: "later", pay_schedule: items, plan_chosen_at: now.toISOString() }).eq("ref", row.ref).eq("status", "ready").select("ref");
++    if (bErr) throw new Error(`trip builder card save: ${bErr.message}`);
++    if (!won || !won.length) return;                                            // another delivery booked it first
++    await notifyBooked({ ...row, ...cardPatch, pay_plan: "later", status: "approved" } as Row, items, meta.origin || null, await signGuestKey(row.ref));
++    return;
++  }
++
+   if (meta.kind === "trip_builder_balance" || meta.kind === "trip_builder_instalment") {
+     // A payment the guest made on a Checkout page: "pay it all now", or the first instalment, or a missed one they paid by hand.
+     const n = Number(meta.n) || 1;
+@@ -182,7 +275,15 @@ export async function handleTripBuilderPaid(sb: SupabaseClient, session: Stripe.
+     const complete = items.length ? allPaid(items) : true;
+     const firstBooking = String(row.status) !== "approved"; // read before we save: this payment is what books them
+     const plan = (row.pay_plan as Plan | null) ?? (items.length > 1 ? "instalments" : "now");
++    // Instalments are charged to the card the first payment was made with. A trip sent free has no deposit to have saved one, so take it from this payment.
++    const needsCard = !row.stripe_payment_method_id && items.some((i) => i.how === "card" && i.status !== "paid");
++    const card = needsCard ? await readCard(session, pi, null) : { customer: null, method: null };
++    if (needsCard && !card.method) {
++      await alertEwan(`Trip builder: no card saved for ${row.name}'s instalments · ${row.ref}`,
++        `<p><strong>${esc(String(row.name))}</strong> (${row.ref}) paid the first instalment of ${esc(String(row.route ?? ""))}, but Stripe didn't give us a card to charge the rest to. The later payments can't be taken automatically: ask them to pay each one from their trip page, or take it from them yourself.</p>`, "trip_builder_no_card_ops");
++    }
+     const { error: uErr } = await sb.from("trip_builder_requests").update({
++      ...(card.method ? { stripe_customer_id: card.customer, stripe_payment_method_id: card.method } : {}),
+       status: "approved",
+       pay_plan: plan,
+       pay_schedule: items,
+diff --git a/supabase/functions/stripe-webhook/index.ts b/supabase/functions/stripe-webhook/index.ts
+index c199caa..73826d9 100644
+--- a/supabase/functions/stripe-webhook/index.ts
++++ b/supabase/functions/stripe-webhook/index.ts
+@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
+       const kind = (session.metadata as Record<string, string> | null)?.kind;
+       if (kind === "balance") {
+         await markBalancePaid(session);
+-      } else if (kind === "trip_builder_deposit" || kind === "trip_builder_balance" || kind === "trip_builder_instalment") {
++      } else if (kind === "trip_builder_deposit" || kind === "trip_builder_balance" || kind === "trip_builder_instalment" || kind === "trip_builder_card") {
+         // Ewan's trip builder (public/trip-builder): not an ALL IN booking.
+         await handleTripBuilderPaid(envClient(), session);
+       } else {
+diff --git a/supabase/functions/trip-builder-admin/index.ts b/supabase/functions/trip-builder-admin/index.ts
+index d31c939..824468a 100644
+--- a/supabase/functions/trip-builder-admin/index.ts
++++ b/supabase/functions/trip-builder-admin/index.ts
+@@ -2,7 +2,7 @@
+ // token, or the admin password in the body).
+ //   list                              every request, newest first
+ //   checking   {ref, note?}           a crew member has picked it up
+-//   balance    {ref, amount, note?}   Stripe link for the balance; guest gets "ready" email
++//   balance    {ref, amount, note?}   approve: the price the guest pays (less any deposit); they get the "ready" email and choose how to pay
+ //   decline    {ref, note?, refund}   can't make it work; refunds the deposit when refund=true
+ //   booked     {ref, note?}           paid some other way: mark it done
+ //   note       {ref, note}            save the crew note only
+@@ -19,7 +19,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import { adminAuthHeaderToken, safeEqual, verifyAdminToken } from "../_shared/admin-auth.ts";
+ import { isTrustedOrigin } from "../_shared/app-base.ts";
+ import { sendEmail, TRIP_BUILDER_CONTACT, tripBuilderDeclinedEmail, tripBuilderReadyEmail } from "../_shared/email.ts";
+-import { builderStatusUrl, fmtDay, usd } from "../_shared/trip-builder.ts";
++import { builderStatusUrl, fmtDay, needsDeposit, usd } from "../_shared/trip-builder.ts";
+ import { crewReviewUrl, guestTripUrl, readSummary, signCrewKey, signGuestKey, suggestBalance, verifyCrewKey } from "../_shared/trip-builder-crew.ts";
+ import { LATE_DAYS, payOptions, readSchedule } from "../_shared/trip-builder-pay.ts";
+ import { currentRev, lastRevision } from "../_shared/trip-builder-revise.ts";
+@@ -116,13 +116,13 @@ Deno.serve(async (req) => {
+       return json({ ok: true });
+     }
+     if (action === "checking") {
+-      if (!row.deposit_paid_at) return json({ error: "The deposit isn't paid yet." }, 400);
++      if (needsDeposit(row)) return json({ error: "The deposit isn't paid yet." }, 400);
+       await save({ status: "checking", crew_note: note || null });
+       return json({ ok: true });
+     }
+     if (action === "revise") {
+       // The crew's edited version of the guest's trip (the builder's "Edit it" bar). The guest's own version is kept in payload.original.
+-      if (!row.deposit_paid_at) return json({ error: "The deposit isn't paid yet." }, 400);
++      if (needsDeposit(row)) return json({ error: "The deposit isn't paid yet." }, 400);
+       if (!["submitted", "checking"].includes(String(row.status))) {
+         return json({ error: "The balance link has already gone out. Save a note instead, or use Approve to send a new link." }, 409);
+       }
+@@ -159,22 +159,22 @@ Deno.serve(async (req) => {
+     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+ 
+     if (action === "balance") {
+-      // The crew approves the trip: record the balance and invite the guest to choose how to pay it. No Stripe link is made here:
+-      // the Checkout page is made when they choose, so it never goes stale in their inbox. Their deposit is already counted.
+-      if (!row.deposit_paid_at) return json({ error: "The deposit isn't paid yet." }, 400);
++      // The crew approves the trip: record the price and invite the guest to choose how to pay it. No Stripe link is made here:
++      // the Checkout page is made when they choose, so it never goes stale in their inbox. Any deposit they paid is already counted.
++      if (needsDeposit(row)) return json({ error: "The deposit isn't paid yet." }, 400);
+       if (row.balance_paid_at) return json({ error: "The balance is already paid." }, 400);
+       if (String(row.status) === "approved" && readSchedule(row.pay_schedule).length) return json({ error: "They've already chosen how to pay and are booked. Change a payment from Stripe, or reply to them." }, 409);
+       const amount = Math.round(Number(body.amount) * 100) / 100;
+-      if (!(amount >= 1 && amount <= 50_000)) return json({ error: "Enter the balance in US dollars (after the deposit)." }, 400);
++      if (!(amount >= 1 && amount <= 50_000)) return json({ error: Number(row.deposit_amount) > 0 ? "Enter the balance in US dollars (after the deposit)." : "Enter the price in US dollars." }, 400);
+       await save({ status: "ready", balance_amount: amount, balance_session_id: null, balance_url: null, pay_plan: null, pay_schedule: [], crew_note: note || null });
+       const tripUrl = guestTripUrl(LIVE_ORIGIN, row.ref, await signGuestKey(row.ref));
+       let emailed = false;
+       if (to) {
+-        const opts = payOptions({ balance: amount, start: row.start_date as string | null, cardSaved: !!row.stripe_payment_method_id });
++        const opts = payOptions({ balance: amount, start: row.start_date as string | null });
+         const choices = opts.map((o) => o.plan === "now" ? `Pay all ${usd(amount)} now`
+           : o.plan === "later" ? `Pay ${usd(amount)} automatically on ${fmtDay(o.items[0].due)}, ${LATE_DAYS} days before you leave`
+           : `Pay in ${o.count} instalments of about ${usd(o.items[0].amount)}: the first now, then one every 30 days`);
+-        const m = tripBuilderReadyEmail({ firstName: first, ref: row.ref, route: row.route ?? "your trip", balance: usd(amount), note, payUrl: tripUrl, statusUrl, planUrl: (row.trip_link as string | null) || undefined, choices });
++        const m = tripBuilderReadyEmail({ firstName: first, ref: row.ref, route: row.route ?? "your trip", balance: usd(amount), note, payUrl: tripUrl, statusUrl, planUrl: (row.trip_link as string | null) || undefined, choices, hasDeposit: Number(row.deposit_amount) > 0 });
+         await sendEmail({ to, subject: m.subject, html: m.html, replyTo: TRIP_BUILDER_CONTACT, templateName: "trip_builder_ready" });
+         emailed = true;
+       }
+diff --git a/supabase/functions/trip-builder-login/index.ts b/supabase/functions/trip-builder-login/index.ts
+index 6eed0e1..2c8930b 100644
+--- a/supabase/functions/trip-builder-login/index.ts
++++ b/supabase/functions/trip-builder-login/index.ts
+@@ -2,10 +2,12 @@
+ // plan the next stage from any device. No passwords: the link carries the same signed guest key as the "your trip" emails (_shared/trip-builder-crew.ts).
+ //
+ // The answer is always { ok: true } whether or not that address has a trip, and a throttled address gets the same answer, so this can't be used to find
+-// out who has booked. Only trips whose deposit was paid and that are still live (not declined) are included. A few emails an hour per address.
++// out who has booked. Only trips that are still live (with the crew, being checked, ready or booked: not declined, not waiting on an unpaid deposit) are included.
++// A few emails an hour per address. What is printed about a trip is only plain text (anyone can send a trip with anyone's email, so a route is whatever they typed).
+ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import { sendEmail, tripBuilderLoginEmail } from "../_shared/email.ts";
++import { plainFirstName, plainText } from "../_shared/trip-builder.ts";
+ import { guestTripUrl, signGuestKey } from "../_shared/trip-builder-crew.ts";
+ 
+ const json = (body: unknown, status = 200) =>
+@@ -13,7 +15,7 @@ const json = (body: unknown, status = 200) =>
+ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+ const LIVE = ["submitted", "checking", "ready", "approved"];
+ const MAX_PER_HOUR = 3;
+-const COLS = "ref,name,status,route,days,created_at,deposit_paid_at,email,guest_email";
++const COLS = "ref,name,status,route,days,created_at,email,guest_email";
+ /** An email address as a LIKE pattern that can only match itself ("_" and "%" are wildcards, and "_" is common in an address like a_b@x.com). */
+ const exactLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+ 
+@@ -40,7 +42,7 @@ Deno.serve(async (req) => {
+   ]);
+   const seen = new Set<string>();
+   const rows = [...(byContact.data ?? []), ...(byReceipt.data ?? [])]
+-    .filter((r) => r.deposit_paid_at && (String(r.email ?? "").toLowerCase() === email || String(r.guest_email ?? "").toLowerCase() === email))
++    .filter((r) => String(r.email ?? "").toLowerCase() === email || String(r.guest_email ?? "").toLowerCase() === email)
+     .filter((r) => (seen.has(r.ref) ? false : (seen.add(r.ref), true)))
+     .sort((x, y) => String(y.created_at ?? "").localeCompare(String(x.created_at ?? "")))
+     .slice(0, 5);
+@@ -48,9 +50,9 @@ Deno.serve(async (req) => {
+ 
+   const origin = req.headers.get("origin");
+   const trips = await Promise.all(rows.map(async (r) => ({
+-    ref: String(r.ref), route: String(r.route ?? "your trip"), days: Number(r.days) || 0, status: String(r.status), url: guestTripUrl(origin, r.ref, await signGuestKey(r.ref)),
++    ref: String(r.ref), route: plainText(r.route) || "your trip", days: Number(r.days) || 0, status: String(r.status), url: guestTripUrl(origin, r.ref, await signGuestKey(r.ref)),
+   })));
+-  const first = String(rows[0].name ?? "").trim().split(/\s+/)[0] || "there";
++  const first = plainFirstName(rows[0].name);
+   const m = tripBuilderLoginEmail({ firstName: first, trips });
+   await sendEmail({ to: email, subject: m.subject, html: m.html, templateName: "trip_builder_login", metadata: { trips: trips.length } });
+   return json({ ok: true });
+diff --git a/supabase/functions/trip-builder-pay/index.ts b/supabase/functions/trip-builder-pay/index.ts
+index daa79db..65dd1c0 100644
+--- a/supabase/functions/trip-builder-pay/index.ts
++++ b/supabase/functions/trip-builder-pay/index.ts
+@@ -1,7 +1,8 @@
+-// Trip builder: the guest chooses how to pay the rest (Ewan, 20 Oct 2026). POST JSON { ref, k, plan, n? }.
+-//   plan "now"          pay the whole balance on a Checkout page
+-//   plan "later"        the card they paid the deposit with is charged a week before they leave; they are booked straight away
+-//   plan "instalments"  the first payment on a Checkout page now, the rest charged to that card every 30 days
++// Trip builder: the guest chooses how to pay (Ewan, 20 Oct 2026; free to send since 23 Oct). POST JSON { ref, k, plan, n? }.
++//   plan "now"          pay the whole price on a Checkout page
++//   plan "later"        a card is charged a week before they leave. With a card on file (a deposit was paid) they are booked straight away;
++//                       otherwise they are sent to a Checkout page to SAVE a card (nothing is charged) and booked when it is saved (stripe-webhook, kind trip_builder_card)
++//   plan "instalments"  the first payment on a Checkout page now (that card is saved), the rest charged to it every 30 days
+ //   plan "due"          pay a payment that was missed (or is due) by hand, on a Checkout page
+ // `k` is the key from the link in the "your trip is checked" email (guest key, one trip, 90 days).
+ // The rules (who is offered what) live in _shared/trip-builder-pay.ts; this only applies them and talks to Stripe.
+@@ -38,14 +39,16 @@ Deno.serve(async (req) => {
+   const back = guestTripUrl(origin, ref, gkey);
+   const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+   const now = new Date(), nowIso = now.toISOString();
+-  const checkout = async (amount: number, kind: string, n: number, what: string) => {
++  const guestAddress = (row.guest_email as string | null) || (row.email as string | null) || undefined;
++  // `saveCard`: keep the card they pay with, for the later payments (the first instalment of a trip that has no card on file).
++  const checkout = async (amount: number, kind: string, n: number, what: string, saveCard = false) => {
+     const s = await stripe.checkout.sessions.create({
+       mode: "payment",
+-      ...(row.stripe_customer_id ? { customer: row.stripe_customer_id as string } : { customer_email: (row.guest_email as string | null) || (row.email as string | null) || undefined }),
++      ...(row.stripe_customer_id ? { customer: row.stripe_customer_id as string } : { customer_email: guestAddress, ...(saveCard ? { customer_creation: "always" } : {}) }),
+       line_items: [{ price_data: { currency: "usd", unit_amount: Math.round(amount * 100), product_data: { name: `Mad Monkey trip: ${what}`, description: `${String(row.route ?? "").slice(0, 200)} · ref ${ref}` } }, quantity: 1 }],
+       success_url: back, cancel_url: back,
+       metadata: { kind, ref, n: String(n), origin: origin ?? "" },
+-      payment_intent_data: { description: `Trip builder ${what} · ref ${ref}`, metadata: { kind, ref, n: String(n) } },
++      payment_intent_data: { description: `Trip builder ${what} · ref ${ref}`, metadata: { kind, ref, n: String(n) }, ...(saveCard ? { setup_future_usage: "off_session" } : {}) },
+     });
+     return s.url as string;
+   };
+@@ -67,10 +70,22 @@ Deno.serve(async (req) => {
+     if (String(row.status) !== "ready" || !(Number(row.balance_amount) >= 1)) return json({ error: "The crew hasn't finished checking this trip yet." }, 409);
+ 
+     const balance = Number(row.balance_amount);
+-    const offered = payOptions({ balance, start: row.start_date as string | null, cardSaved: !!row.stripe_payment_method_id, now });
++    const offered = payOptions({ balance, start: row.start_date as string | null, now });
+     if (!offered.some((o) => o.plan === plan)) return json({ error: "That way of paying isn't available for this trip. Pick one of the others." }, 400);
+     const items = buildSchedule(plan as Plan, balance, row.start_date as string | null, now);
+ 
++    if (plan === "later" && !(row.stripe_payment_method_id && row.stripe_customer_id)) {
++      // No card on file (the trip was free to send): save one on a Checkout page first. Nothing is charged there. They are booked when the card is saved, and only
++      // if the price is still the one they were shown (stripe-webhook, kind trip_builder_card).
++      const s = await stripe.checkout.sessions.create({
++        mode: "setup", currency: "usd", payment_method_types: ["card"],
++        ...(row.stripe_customer_id ? { customer: row.stripe_customer_id as string } : { customer_email: guestAddress, customer_creation: "always" }),
++        success_url: back, cancel_url: back,
++        metadata: { kind: "trip_builder_card", ref, plan: "later", amt: String(balance), origin: origin ?? "" },
++        setup_intent_data: { description: `Trip builder card · ref ${ref}`, metadata: { kind: "trip_builder_card", ref } },
++      });
++      return json({ ok: true, checkoutUrl: s.url as string, plan, card: true });
++    }
+     if (plan === "later") {
+       // Booked now, charged to the saved card a week before they leave.
+       const { data: won, error: uErr } = await sb.from("trip_builder_requests").update({ pay_plan: "later", pay_schedule: items, plan_chosen_at: nowIso, status: "approved", updated_at: nowIso }).eq("ref", ref).eq("status", "ready").select("ref");
+@@ -85,7 +100,7 @@ Deno.serve(async (req) => {
+     const { error: uErr } = await sb.from("trip_builder_requests").update({ pay_plan: plan, pay_schedule: items, updated_at: nowIso }).eq("ref", ref);
+     if (uErr) return json({ error: "Couldn't save that. Try again." }, 500);
+     const first = items[0];
+-    const checkoutUrl = await checkout(first.amount, plan === "now" ? "trip_builder_balance" : "trip_builder_instalment", 1, plan === "now" ? "balance" : `payment 1 of ${items.length}`);
++    const checkoutUrl = await checkout(first.amount, plan === "now" ? "trip_builder_balance" : "trip_builder_instalment", 1, plan === "now" ? "balance" : `payment 1 of ${items.length}`, plan === "instalments" && !row.stripe_payment_method_id);
+     return json({ ok: true, checkoutUrl, plan, first: { amount: first.amount, label: usd(first.amount) } });
+   } catch (e) {
+     console.error("trip builder pay failed:", e instanceof Error ? e.message : e);
+diff --git a/supabase/functions/trip-builder-request/index.ts b/supabase/functions/trip-builder-request/index.ts
+index 1be07d3..20a7b50 100644
+--- a/supabase/functions/trip-builder-request/index.ts
++++ b/supabase/functions/trip-builder-request/index.ts
+@@ -1,13 +1,19 @@
+ // Trip builder: "Hold my beds + get it checked" (Charlie, 19 Oct 2026).
+ // The builder (public/trip-builder) posts the guest's whole plan here (Ewan's
+-// lead payload, docs in his repo's docs/LEADS.md, plus deposit.people). We save
+-// it as pending_payment and return a Stripe Checkout link for the deposit:
+-// $50 per person, charged here, never trusted from the browser. stripe-webhook
+-// marks it paid (_shared/trip-builder.ts) and it shows up in Admin > Trip builder.
++// lead payload, docs in his repo's docs/LEADS.md).
++//
++// FREE TO SEND (Ewan, 23 Oct 2026): we save it as "submitted" and email the crew and
++// the guest straight away. Nothing is paid until the crew has checked the trip and the
++// guest chooses how to pay (trip-builder-pay). No Stripe is involved here.
++//
++// With the secret TRIP_BUILDER_DEPOSIT_PER_PERSON set (a switch back to the old way) we
++// save it as pending_payment and return a Stripe Checkout link for the deposit, charged
++// here, never trusted from the browser; stripe-webhook marks it paid
++// (_shared/trip-builder.ts). Either way it shows up in Admin > Trip builder.
+ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import Stripe from "https://esm.sh/stripe@18.5.0";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+-import { DEPOSIT_PER_PERSON_USD, HOLD_HOURS, MAX_PEOPLE } from "../_shared/trip-builder.ts";
++import { depositPerPerson, handleTripBuilderSubmitted, HOLD_HOURS, MAX_PEOPLE } from "../_shared/trip-builder.ts";
+ import { trustedBase } from "../_shared/app-base.ts";
+ import { crewSecret, guestTripUrl, signGuestKey } from "../_shared/trip-builder-crew.ts";
+ import { ownTripLink } from "../_shared/trip-builder-revise.ts";
+@@ -43,7 +49,9 @@ Deno.serve(async (req) => {
+   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+   const url = Deno.env.get("SUPABASE_URL");
+   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+-  if (!stripeKey || !url || !key) return json({ error: "Payments aren't set up yet." }, 503);
++  const perPerson = depositPerPerson();           // 0 = free to send (the default)
++  const free = perPerson === 0;
++  if (!url || !key || (!free && !stripeKey)) return json({ error: free ? "Not set up yet." : "Payments aren't set up yet." }, 503);
+ 
+   const raw = await req.text();
+   if (raw.length > 200_000) return json({ error: "That trip is too big to send." }, 413);
+@@ -67,7 +75,7 @@ Deno.serve(async (req) => {
+   if (!route || days < 1) return json({ error: "Add a stop to your trip first." }, 400);
+ 
+   const people = Math.min(MAX_PEOPLE, Math.max(1, Math.round(Number(deposit.people ?? contact.partySize) || 1)));
+-  const depositUsd = DEPOSIT_PER_PERSON_USD * people;
++  const depositUsd = perPerson * people;
+   const start = typeof trip.start === "string" && DATE.test(trip.start) ? trip.start : null;
+   const origin = req.headers.get("origin");
+   const sb = createClient(url, key);
+@@ -88,13 +96,15 @@ Deno.serve(async (req) => {
+   delete p.ipHash;
+   if (ipHash) p.ipHash = ipHash;
+ 
++  // A free trip is with the crew from the start, and starts its bed hold now; a paid deposit starts the hold when it lands (stripe-webhook).
++  const holdUntil = free && start ? new Date(Date.now() + HOLD_HOURS * 3600_000).toISOString() : null;
+   // Save first, with a fresh reference (retry on the unlikely clash).
+-  let ref = "";
++  let ref = "", saved: Record<string, unknown> = {};
+   for (let i = 0; i < 5 && !ref; i++) {
+     const candidate = newRef();
+-    const { error } = await sb.from("trip_builder_requests").insert({
++    const record = {
+       ref: candidate,
+-      status: "pending_payment",
++      status: free ? "submitted" : "pending_payment",
+       name,
+       contact_via: via,
+       email: email || null,
+@@ -118,13 +128,22 @@ Deno.serve(async (req) => {
+       from_hostel: str(p.fromHostel, 60) || null,
+       payload: p,
+       deposit_amount: depositUsd,
+-    });
+-    if (!error) ref = candidate;
++      hold_until: holdUntil,
++    };
++    const { error } = await sb.from("trip_builder_requests").insert(record);
++    if (!error) { ref = candidate; saved = record; }
+     else if (!/duplicate|unique/i.test(error.message)) return json({ error: "Couldn't save your trip. Please try again." }, 500);
+   }
+   if (!ref) return json({ error: "Couldn't save your trip. Please try again." }, 500);
+ 
+-  const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
++  // Free to send: it's with the crew now. Tell them (and the guest), and hand the guest their key: it's how they change the trip after sending it.
++  if (free) {
++    await handleTripBuilderSubmitted({ ...saved, guest_email: null, deposit_paid_at: null, balance_paid_at: null, balance_amount: null } as never, origin)
++      .catch((e) => console.error("trip builder: new-trip emails failed:", e instanceof Error ? e.message : e));
++    return json({ ref, status: "submitted", key: await signGuestKey(ref), deposit: { amount: 0, perPerson: 0, people }, hold: holdUntil ? { until: holdUntil } : null });
++  }
++
++  const stripe = new Stripe(stripeKey as string, { apiVersion: "2025-08-27.basil" });
+   // The guest's own key goes back to their browser and into their trip page link: it's how they change the trip after sending it.
+   const guestKey = await signGuestKey(ref);
+   const back = guestTripUrl(origin, ref, guestKey);
+@@ -135,7 +154,7 @@ Deno.serve(async (req) => {
+       line_items: [{
+         price_data: {
+           currency: "usd",
+-          unit_amount: DEPOSIT_PER_PERSON_USD * 100,
++          unit_amount: perPerson * 100,
+           product_data: {
+             name: "Mad Monkey trip deposit",
+             description: `${route.slice(0, 200)} · ${days} days · ref ${ref}. Comes off your trip total; refunded if the crew can't make it work.`,
+@@ -166,7 +185,7 @@ Deno.serve(async (req) => {
+       status: "pending_payment",
+       checkoutUrl: session.url,
+       key: guestKey,
+-      deposit: { amount: depositUsd, perPerson: DEPOSIT_PER_PERSON_USD, people },
++      deposit: { amount: depositUsd, perPerson, people },
+       hold: start ? { until: new Date(Date.now() + HOLD_HOURS * 3600_000).toISOString() } : null,
+     });
+   } catch (e) {
+diff --git a/supabase/functions/trip-builder-revise/index.ts b/supabase/functions/trip-builder-revise/index.ts
+index 5e63fbe..648660e 100644
+--- a/supabase/functions/trip-builder-revise/index.ts
++++ b/supabase/functions/trip-builder-revise/index.ts
+@@ -1,13 +1,13 @@
+ // Trip builder: the guest changes the trip they already sent (Ewan, 23 Oct 2026).
+ // POST { ref, k, trip, summary, crewText, itinerary, note?, changes? }  (the same trip shape the builder sends in the first place)
+ //   k is the guest key from their trip page link (the one in their emails), so only they can do it.
+-// It REPLACES the trip on the same request: same reference, same deposit, same beds held. The crew gets an UPDATED email with what moved,
++// It REPLACES the trip on the same request: same reference, same deposit (if there was one), same beds held. The crew gets an UPDATED email with what moved,
+ // so nobody reviews a plan the guest has already moved on from. Rules per status are in _shared/trip-builder-revise.ts.
+ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import { trustedBase } from "../_shared/app-base.ts";
+ import { sendEmail, TRIP_BUILDER_CONTACT, tripBuilderRevisedEmail } from "../_shared/email.ts";
+-import { fmtDay, notifyCrew, usd } from "../_shared/trip-builder.ts";
++import { fmtDay, notifyCrew, plainFirstName, plainText, usd } from "../_shared/trip-builder.ts";
+ import { guestTripUrl, verifyGuestKey } from "../_shared/trip-builder-crew.ts";
+ import { cleanRevision, guestCanEdit, MAX_REVISIONS, revisionPatch, type Update } from "../_shared/trip-builder-revise.ts";
+ 
+@@ -49,8 +49,8 @@ Deno.serve(async (req) => {
+   const { error: uErr } = await sb.from("trip_builder_requests").update({ ...r.patch, updated_at: now }).eq("ref", ref);
+   if (uErr) { console.error("trip builder revise save failed:", uErr.message); return json({ error: "Couldn't save your changes. Please try again." }, 500); }
+ 
+-  // The crew only knows about it once the deposit is paid; before that nobody has seen the first version, so there is nobody to tell.
+-  if (row.deposit_paid_at) {
++  // The crew only knows about it once the trip is with them (not while it waits for a deposit); before that nobody has seen the first version, so there is nobody to tell.
++  if (String(row.status) !== "pending_payment") {
+     const update: Update = {
+       rev: r.rev, changes: c.changes, note: c.note, wasStatus: String(row.status), withdrawn: r.withdrawn,
+       was: { route: String(row.route ?? ""), days: Number(row.days ?? 0), total: row.est_total_usd != null ? usd(Number(row.est_total_usd)) : "", start: fmtDay(row.start_date) },
+@@ -59,9 +59,10 @@ Deno.serve(async (req) => {
+     await notifyCrew(fresh, (row.guest_email as string | null) || null, (row.hold_until as string | null) || null, origin, update)
+       .catch((e) => console.warn("trip builder revise: crew email failed", e));
+     const to = (row.guest_email as string | null) || (row.email as string | null);
+-    if (to) {
+-      const first = String(row.name ?? "").trim().split(/\s+/)[0] || "there";
+-      const m = tripBuilderRevisedEmail({ firstName: first, ref, route: c.f.route, days: c.f.days, changes: c.changes, withdrawn: r.withdrawn, statusUrl: guestTripUrl(origin, ref, String(b.k)) });
++    // A trip that was sent free and that nobody on the crew has picked up yet gets no confirmation email: the page has already told them, and an email would carry whatever
++    // was typed into it to an address nobody has checked. Once the crew has it (or a deposit was paid) they get one, with only plain text in it.
++    if (to && (Number(row.deposit_amount) > 0 || String(row.status) !== "submitted")) {
++      const m = tripBuilderRevisedEmail({ firstName: plainFirstName(row.name), ref, route: plainText(c.f.route) || "your trip", days: c.f.days, changes: c.changes.map((x) => plainText(x, 140)).filter(Boolean), withdrawn: r.withdrawn, statusUrl: guestTripUrl(origin, ref, String(b.k)) });
+       await sendEmail({ to, subject: m.subject, html: m.html, replyTo: TRIP_BUILDER_CONTACT, templateName: "trip_builder_revised" }).catch((e) => console.warn("trip builder revise: guest email failed", e));
+     }
+   }
+diff --git a/supabase/functions/trip-builder-status/index.ts b/supabase/functions/trip-builder-status/index.ts
+index dff54f4..926b0ec 100644
+--- a/supabase/functions/trip-builder-status/index.ts
++++ b/supabase/functions/trip-builder-status/index.ts
+@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
+   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+   const { data: r, error } = await sb
+     .from("trip_builder_requests")
+-    .select("ref,status,route,days,start_date,trip_link,crew_note,party_size,dates_flex,payload,hold_until,deposit_amount,deposit_url,deposit_paid_at,refunded_at,balance_amount,balance_paid_at,stripe_payment_method_id,pay_plan,pay_schedule")
++    .select("ref,status,route,days,start_date,trip_link,crew_note,party_size,dates_flex,payload,hold_until,deposit_amount,deposit_url,deposit_paid_at,refunded_at,balance_amount,balance_paid_at,pay_plan,pay_schedule")
+     .eq("ref", ref)
+     .maybeSingle();
+   if (error) return json({ error: "Couldn't look that up" }, 500);
+@@ -47,8 +47,10 @@ Deno.serve(async (req) => {
+     datesFlex: r.dates_flex ?? "",
+     // How they can pay the rest, once the crew has checked the trip (needs their key).
+     pay: keyed && r.status === "ready" && balance != null
+-      ? { balance, daysToGo: daysUntil(r.start_date), options: payOptions({ balance, start: r.start_date, cardSaved: !!r.stripe_payment_method_id }) }
++      ? { balance, daysToGo: daysUntil(r.start_date), options: payOptions({ balance, start: r.start_date }) }
+       : null,
++    // The crew has set the price, so the guest can pay (the page tells them to open the link from their email when they haven't got their key).
++    canPay: r.status === "ready" && balance != null,
+     // Their payments once they are booked, and anything overdue they can pay by hand (needs their key).
+     plan: keyed ? r.pay_plan : null,
+     schedule: keyed ? items.map((i) => ({ n: i.n, amount: i.amount, due: i.due, status: i.status })) : [],
+diff --git a/supabase/functions/trip-builder-test-emails/index.ts b/supabase/functions/trip-builder-test-emails/index.ts
+index 5ac558a..4ae944f 100644
+--- a/supabase/functions/trip-builder-test-emails/index.ts
++++ b/supabase/functions/trip-builder-test-emails/index.ts
+@@ -16,10 +16,10 @@ import {
+   tripBuilderBookedEmail,
+   tripBuilderConfirmedEmail,
+   tripBuilderDeclinedEmail,
+-  tripBuilderDepositEmail,
+   tripBuilderOpsEmail,
+   tripBuilderPaymentFailedEmail,
+   tripBuilderReadyEmail,
++  tripBuilderReceivedEmail,
+   tripBuilderReceiptEmail,
+   tripBuilderReminderEmail,
+ } from "../_shared/email.ts";
+@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
+     stops: [...SAMPLE_TRIP.stops], countries: [...SAMPLE_TRIP.countries], est_total_usd: SAMPLE_TRIP.est, all_in_match: "cambodia",
+     trip_link: `https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/${SAMPLE_TRIP.state}`, itinerary: SAMPLE_TRIP.crewText,
+     notes: "This is a sample trip so you can try the Approve, Not approved and Edit it buttons. Nothing here is a real booking.",
+-    deposit_amount: 100, deposit_paid_at: nowIso, deposit_payment_intent: null, deposit_session_id: null, deposit_url: null, hold_until: null,
++    deposit_amount: 0, deposit_paid_at: null, deposit_payment_intent: null, deposit_session_id: null, deposit_url: null, hold_until: null,      // free to send: nothing paid
+     balance_amount: null, balance_session_id: null, balance_url: null, balance_payment_intent: null, balance_paid_at: null, refund_id: null, refunded_at: null,
+     crew_note: null, updated_at: nowIso,
+     payload: { v: 1, source: "trip-builder-sample", summary: SAMPLE_TRIP.summary, crewText: SAMPLE_TRIP.crewText },
+@@ -74,22 +74,23 @@ Deno.serve(async (req) => {
+     { tpl: "trip_builder_test_ops", m: tripBuilderOpsEmail({
+       ref: SAMPLE_REF, name: "Charlie (sample)", contact: `Email ${TRIP_BUILDER_CONTACT}`, guestEmail: TRIP_BUILDER_CONTACT,
+       guestWhatsapp: "", people: 2, route: SAMPLE_TRIP.route, days: SAMPLE_TRIP.days, startDate: "", dates: "flex", estTotal: `$${SAMPLE_TRIP.est} (builder estimate)`,
+-      deposit: "$100", allInMatch: "cambodia", notes: SAMPLE.notes, itinerary: SAMPLE_TRIP.crewText,
++      deposit: "", allInMatch: "cambodia", notes: SAMPLE.notes, itinerary: SAMPLE_TRIP.crewText,
+       tripLink: SAMPLE.trip_link, adminUrl: "https://madmonkeyhostels.com/all-in-trips/admin", holdUntil: "",
+       summary: sampleSummary, reviewUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey), approveUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey, "approve"),
+       declineUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey, "decline"), editUrl: crewReviewUrl(null, SAMPLE_REF, sampleKey, "edit"),
+-      suggestedBalance: `$${suggestBalance(sampleSummary, 100)}`,
++      suggestedBalance: `$${suggestBalance(sampleSummary, 0)}`,
+     }) },
+-    { tpl: "trip_builder_test_deposit", m: tripBuilderDepositEmail({
+-      firstName: "Charlie", ref, route, days: 13, startDate: "", deposit: "$100", people: 2, holdUntil: "", statusUrl,
++    { tpl: "trip_builder_test_received", m: tripBuilderReceivedEmail({
++      firstName: "Charlie", ref, route, days: 13, startDate: "", people: 2, holdUntil: "", statusUrl,
+     }) },
+     { tpl: "trip_builder_test_ready", m: tripBuilderReadyEmail({
+       firstName: "Charlie", ref, route, balance: "$512",
+       note: "All checked. We swapped the Kampot bus for a morning minivan so you arrive in daylight.", payUrl: guestTripUrl(null, SAMPLE_REF, await signGuestKey(SAMPLE_REF)), statusUrl,
+       planUrl: SAMPLE.trip_link, choices: ["Pay all $512 now", "Pay $512 automatically on Mon 4 Jan, 7 days before you leave", "Pay in 3 instalments of about $171: the first now, then one every 30 days"],
++      hasDeposit: false,
+     }) },
+     { tpl: "trip_builder_test_booked", m: tripBuilderBookedEmail({
+-      firstName: "Charlie", ref, route, planLabel: "pay the rest in instalments", deposit: "$100", statusUrl, startDate: "Mon 11 Jan 2027",
++      firstName: "Charlie", ref, route, planLabel: "pay in instalments", deposit: "", statusUrl, startDate: "Mon 11 Jan 2027",
+       schedule: [{ amount: "$171", due: "Today", paid: true }, { amount: "$171", due: "Wed 18 Nov", paid: false }, { amount: "$170", due: "Fri 18 Dec", paid: false }],
+     }) },
+     { tpl: "trip_builder_test_reminder", m: tripBuilderReminderEmail({ firstName: "Charlie", ref, route, amount: "$171", due: "Wed 18 Nov", statusUrl }) },
+@@ -97,7 +98,7 @@ Deno.serve(async (req) => {
+     { tpl: "trip_builder_test_payment_failed", m: tripBuilderPaymentFailedEmail({ firstName: "Charlie", ref, route, amount: "$171", nextTry: "Fri 20 Nov", final: false, statusUrl }) },
+     { tpl: "trip_builder_test_confirmed", m: tripBuilderConfirmedEmail({ firstName: "Charlie", ref, route, paid: "$512", statusUrl }) },
+     { tpl: "trip_builder_test_declined", m: tripBuilderDeclinedEmail({
+-      firstName: "Charlie", ref, route, note: "Koh Sdach is full on those nights. Want to swap it for Koh Rong Samloem?", refunded: "$100", statusUrl,
++      firstName: "Charlie", ref, route, note: "Koh Sdach is full on those nights. Want to swap it for Koh Rong Samloem?", refunded: "", statusUrl,
+     }) },
+   ];
+   const sent: string[] = [];
+-- 
+2.39.5 (Apple Git-154)
+

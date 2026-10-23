@@ -1,14 +1,20 @@
-From e45c3c341eb3da07211a083bc2c0e5fc87ccdc93 Mon Sep 17 00:00:00 2001
+From 9289e55cbc80cea6fd506792c73fb5b1e2209342 Mon Sep 17 00:00:00 2001
 From: Ewan McIntyre <ewan3568@me.com>
 Date: Fri, 23 Oct 2026 15:58:16 +0800
-Subject: [PATCH 6/6] Trip builder: Where to? search, best order, stages + log
- in, Ask Ewan, security, accessibility
+Subject: [PATCH 6/7] Trip builder: free to send, Where to? search, best order,
+ stages + log in, Ask Ewan, security, accessibility
 
-A sync of public/trip-builder from the builder repo (node scripts/sync-allin.mjs), 24 files.
+A sync of public/trip-builder from the builder repo (node scripts/sync-allin.mjs).
+
+Free to send:
+- Sending a trip costs nothing. The form says so, the trip page and the "choose how to pay" screen no longer talk about a
+  deposit for a trip that didn't take one, and the page follows what the backend answers (a payment link in the reply means
+  "go and pay it first"). Needs backend patch 0007 and DEPOSIT_PER_PERSON: 0 in config.js (patch 0007 sets it).
+- Paying after approval: all now, a week before they leave (a card is saved first, nothing charged) or instalments.
 
 Easier to use:
 - "Where to?" on the home page and in the builder: type a hostel, country, tour, ALL IN trip or classic route
-  (typos forgiven), pick it, and it starts a trip or adds it where it adds the least travel.
+  (typos forgiven), pick it, and it starts a trip or adds it where it adds the least travel (after where you land on a tie).
 - Best order: puts the stops in the order that costs the least travel; Undo takes it back.
 - A quiz you can leave after the landing point ("Skip the rest and show my routes").
 
@@ -25,51 +31,51 @@ A real person checks every trip:
 Safer:
 - Content-Security-Policy, no inline handlers, everything a guest typed is escaped, links only if http(s).
 - "Forget my trip and details on this device" for shared computers.
+- A trip page no longer redraws over the screen the guest has moved on to.
 
 Accessibility and phones: axe-core clean on every screen and modal; labelled, trapped and returned focus in modals;
-a route announcer, a skip link, one h1 per screen; the 320px header and hero fixed.
+a route announcer, a skip link, one h1 per screen; the 320px header and hero fixed; 44px tap targets on touch.
 
-Speed: small WebP copies of the photos where PHOTO_BASE is set (the live copy hot-links, so unchanged here).
+Speed: small WebP copies of the photos where PHOTO_BASE or THUMB_BASE is set. The live copy hot-links the full photos, so
+it gets the small ones with `node scripts/sync-allin.mjs <site> --with-thumbs` (optional, not in this patch).
 Exchange rates updated to 22 Oct 2026.
-
-config.js gains LOGIN_ENDPOINT.
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 ---
- public/trip-builder/app.js             | 321 ++++++++++++++++++++-----
+ public/trip-builder/app.js             | 336 +++++++++++++++++++------
  public/trip-builder/config.js          |   4 +
  public/trip-builder/crew.css           |   3 +-
  public/trip-builder/crew.js            |  17 +-
  public/trip-builder/data/activities.js |   2 +-
- public/trip-builder/data/media.js      |   7 +
+ public/trip-builder/data/media.js      |  23 ++
  public/trip-builder/data/places.js     |  23 ++
  public/trip-builder/edit.js            |  56 ++++-
  public/trip-builder/extras.js          |   5 +-
  public/trip-builder/group.js           |   4 +-
- public/trip-builder/index.html         |  68 +++---
+ public/trip-builder/index.html         |  68 ++---
  public/trip-builder/logic.js           | 211 ++++++++++------
- public/trip-builder/search.js          | 177 ++++++++++++++
+ public/trip-builder/search.js          | 177 +++++++++++++
  public/trip-builder/styles.css         | 127 ++++++++--
- public/trip-builder/ui-crew.js         |  59 +++--
+ public/trip-builder/ui-crew.js         |  69 ++---
  public/trip-builder/ui-extras.js       |   9 +-
  public/trip-builder/ui-group.js        |  14 +-
  public/trip-builder/ui-live.js         |  20 +-
  public/trip-builder/ui-map.js          |  14 +-
- public/trip-builder/ui-pack.js         |   6 +-
- public/trip-builder/ui-review.js       |  41 ++--
- public/trip-builder/ui-search.js       | 109 +++++++++
+ public/trip-builder/ui-pack.js         |   8 +-
+ public/trip-builder/ui-review.js       | 103 ++++----
+ public/trip-builder/ui-search.js       | 109 ++++++++
  public/trip-builder/ui-stage.js        | 158 ++++++++++++
  public/trip-builder/ui-tour.js         |  10 +-
- 24 files changed, 1197 insertions(+), 268 deletions(-)
+ 24 files changed, 1263 insertions(+), 307 deletions(-)
  create mode 100644 public/trip-builder/search.js
  create mode 100644 public/trip-builder/ui-search.js
  create mode 100644 public/trip-builder/ui-stage.js
 
 diff --git a/public/trip-builder/app.js b/public/trip-builder/app.js
-index 51bcc7c..bbf6e6e 100644
+index 51bcc7c..8739f78 100644
 --- a/public/trip-builder/app.js
 +++ b/public/trip-builder/app.js
-@@ -15,6 +15,14 @@
+@@ -15,24 +15,71 @@
  
    /* ---------- utils ---------- */
    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -84,8 +90,23 @@ index 51bcc7c..bbf6e6e 100644
    var $ = function (s, r) { return (r || document).querySelector(s); };
    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
    var money = function (usd) { return MM.money(usd, app.cur); };
-@@ -29,10 +37,48 @@
-     cta: function () { return dep() ? 'A $' + dep() + ' deposit per person holds your beds, the crew reviews the routes, dates and prices, and you approve before you pay the rest.' : 'We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.'; },
+-  // Money wording shared by every screen. A deposit is taken when MM_CONFIG.DEPOSIT_PER_PERSON > 0 (the live ALL IN site); without one, nothing is paid until the guest approves the checked plan.
++  // Money wording shared by every screen. Sending a trip is free (MM_CONFIG.DEPOSIT_PER_PERSON = 0, the default): nothing is paid until the guest has seen the checked plan and said yes.
++  // With DEPOSIT_PER_PERSON > 0 a deposit per person is taken when the trip is sent, and it comes off the total.
+   var dep = function () { return +C.DEPOSIT_PER_PERSON || 0; };
+   var TERMS = {
+-    hold: function () { return dep() ? 'A $' + dep() + ' deposit per person holds the beds on a trip you build while they do it, and you only pay the rest once you\'ve approved the plan.' : 'We can hold your beds while they do it, and you approve before you pay a penny.'; },
+-    step2: function () { return dep() ? 'Send it for checking with a $' + dep() + ' deposit per person and we hold the nights while we look.' : 'Send it for checking and we hold the nights while we look.'; },
+-    step4: function () { return dep() ? 'You get the checked plan and the final price. Happy? Pay the rest now, later or in instalments. Can\'t make it work? Your deposit comes back.' : 'You get a confirmed plan. Happy? Pay the deposit. Not? No harm done.'; },
+-    send: function () { return dep() ? 'Send it for checking and a real person looks over every bus, bed and price before you pay the rest.' : 'One tap sends your plan to a real person who can book it.'; },
+-    box: function () { return dep() ? 'Hit "Hold my beds" ($' + dep() + ' deposit per person) and the crew reviews your whole trip before you pay the rest.' : 'Hit "Hold my beds" and the crew reviews your whole trip before you pay a penny.'; },
+-    cta: function () { return dep() ? 'A $' + dep() + ' deposit per person holds your beds, the crew reviews the routes, dates and prices, and you approve before you pay the rest.' : 'We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.'; },
++    hold: function () { return dep() ? 'A $' + dep() + ' deposit per person holds the beds on a trip you build while they do it, and you only pay the rest once you\'ve approved the plan.' : 'Sending it is free. We hold your beds while they check it, and you pay nothing until you\'ve said yes.'; },
++    step2: function () { return dep() ? 'Send it for checking with a $' + dep() + ' deposit per person and we hold the nights while we look.' : 'Send it for checking. It\'s free, and we hold the nights while we look.'; },
++    step4: function () { return dep() ? 'You get the checked plan and the final price. Happy? Pay the rest now, later or in instalments. Can\'t make it work? Your deposit comes back.' : 'You get the checked plan and the final price. Happy? Say yes and pay your way. Not? No harm done: you\'ve paid nothing.'; },
++    send: function () { return dep() ? 'Send it for checking and a real person looks over every bus, bed and price before you pay the rest.' : 'Sending it is free, and a real person looks over every bus, bed and price before you pay anything.'; },
++    box: function () { return dep() ? 'Hit "Hold my beds" ($' + dep() + ' deposit per person) and the crew reviews your whole trip before you pay the rest.' : 'Hit "Hold my beds" (it\'s free) and the crew reviews your whole trip before you pay a penny.'; },
++    cta: function () { return dep() ? 'A $' + dep() + ' deposit per person holds your beds, the crew reviews the routes, dates and prices, and you approve before you pay the rest.' : 'It\'s free to send. We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.'; },
      before: function () { return dep() ? 'before you pay the rest' : 'before you pay anything'; }
    };
 +  /* ---------- "Ask Ewan": a real person, one tap away, from every screen ---------- */
@@ -133,7 +154,7 @@ index 51bcc7c..bbf6e6e 100644
    var SID = (function () { try { var s = sessionStorage.getItem('mm-sid'); if (!s) { s = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('mm-sid', s); } return s; } catch (e) { return 'x'; } })();
    function track(name, props) {
      try { (window.dataLayer = window.dataLayer || []).push({ event: 'mm_' + name, props: props || {} }); } catch (e) { /* analytics is optional */ }
-@@ -45,12 +91,18 @@
+@@ -45,12 +92,18 @@
      while (toastRoot.children.length > 2) toastRoot.removeChild(toastRoot.firstChild);   // never more than three at once
      toastRoot.appendChild(t); setTimeout(function () { t.remove(); }, o && o.undo ? 6500 : 2400);
    }
@@ -153,7 +174,7 @@ index 51bcc7c..bbf6e6e 100644
    var hours = U.hoursLabel;
    function tomorrow() { var d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1)); }
    function baseUrl() { return (C.SITE_URL || (location.origin + location.pathname)).replace(/#.*$/, ''); }
-@@ -61,7 +113,7 @@
+@@ -61,7 +114,7 @@
    /* ---------- state ---------- */
    /* ---------- undo / redo: every change to the trip keeps the version before it, so anything can be taken back (the AI's changes, "Start over", a surprise...) ---------- */
    var HIST_MAX = 60, H = app.hist = { past: [], future: [], cur: null, busy: false };
@@ -162,7 +183,7 @@ index 51bcc7c..bbf6e6e 100644
    function recordHist() {
      var sn = snapState(app.state); if (H.cur === null) { H.cur = sn; return; } if (sn === H.cur) return;
      if (!H.busy) { H.past.push(H.cur); if (H.past.length > HIST_MAX) H.past.shift(); H.future = []; }
-@@ -92,12 +144,15 @@
+@@ -92,12 +145,15 @@
    /* ---------- "Start building" is a blank sheet. The trip you had is kept, and the home page offers to pick it back up ---------- */
    function savedTrip() {
      var cand = [app.state, (store('mm-trip') || {}).state, (store('mm-trip-last') || {}).state];
@@ -180,7 +201,7 @@ index 51bcc7c..bbf6e6e 100644
      store('mm-trip', { state: app.state, cur: app.cur });
    }
    function resumeStrip() {
-@@ -105,10 +160,6 @@
+@@ -105,10 +161,6 @@
      var pl = MM.plan(sv), names = pl.places.map(function (id) { return P[id].n; });
      return '<div class="resume"><div><span class="over">Pick up where you left off</span><b>' + esc(names.slice(0, 4).join(' → ') + (names.length > 4 ? ' → …' : '')) + '</b><span class="fine">' + pl.totals.days + ' days · about ' + money(pl.totals.total) + ' a person</span></div><button class="btn btn--sm btn--paper" data-act="resume" type="button">Continue this trip</button></div>';
    }
@@ -191,7 +212,7 @@ index 51bcc7c..bbf6e6e 100644
    function stopFor(p, n) { return MM.edit.newStop(p, n); }
    function mutate(fn, opts) { app.auto = false; fn(app.state); persist(); refreshBuilder(opts); }
  
-@@ -127,13 +178,58 @@
+@@ -127,13 +179,58 @@
      if (sameAddress(location.hash, h)) { route(); return; }
      location.hash = h;
    }
@@ -251,7 +272,7 @@ index 51bcc7c..bbf6e6e 100644
      }
      if (r.view === 'build') syncHist();
      app.view = r.view; document.body.setAttribute('data-view', r.view);
-@@ -142,6 +238,7 @@
+@@ -142,6 +239,7 @@
      window.scrollTo(0, 0);
      if (app.views[r.view]) app.views[r.view](r.rest); else ({ home: renderHome, quiz: renderQuiz, results: renderResults, build: renderBuilder })[r.view]();
      track('view', { view: r.view });
@@ -259,7 +280,7 @@ index 51bcc7c..bbf6e6e 100644
      if (r.view === 'build' && app.tourPending) { app.tourPending = false; if (app.tour) setTimeout(function () { if (app.view === 'build' && !app.state.items.length) app.tour.start(); }, 500); }
    }
  
-@@ -159,7 +256,7 @@
+@@ -159,7 +257,7 @@
      return '<article class="tcard">' +
        '<div class="tcard__pill pill ' + (soon ? 'pill--pink' : 'pill--black') + ' pill--sm">' + (soon ? 'Launching soon' : 'Every ' + U.DOWN[t.dep]) + '</div>' + spotsPill(t) +
        '<div class="tcard__price"><div class="burst"><span>' + (soon ? 'rrp' : 'from') + '<b>' + money(t.usd) + '</b></span></div></div>' +
@@ -268,7 +289,7 @@ index 51bcc7c..bbf6e6e 100644
        '<div class="tcard__body"><div class="over dim">' + esc(t.kicker) + '</div><h3>' + esc(t.n) + '</h3><div class="tcard__route">' + esc(t.tag) + '</div>' +
        '<div class="tcard__meta"><span class="pill pill--paper pill--sm">' + t.days + ' days</span><span class="pill pill--paper pill--sm">Max ' + t.max + '</span><span class="pill pill--paper pill--sm">$' + MM.DEPOSIT + ' holds your spot</span></div>' +
        '<p style="font-size:13.5px;font-weight:500;margin-top:4px">' + esc(t.pitch) + '</p>' +
-@@ -170,23 +267,25 @@
+@@ -170,23 +268,25 @@
    function specialHTML(g) {
      if (!g) return '';
      var stats = [[g.days, 'days'], [g.stops.length, 'stops']].concat(g.stats || []).concat([[g.gbp ? 'from £' + g.gbp.toLocaleString('en-GB') : g.usd ? 'from ' + money(g.usd) : '', 'per person']]).filter(function (s) { return s[0] !== '' && s[0] != null; });
@@ -299,7 +320,7 @@ index 51bcc7c..bbf6e6e 100644
        '</div></div></section>' +
        '<div class="ticker" aria-hidden="true"><span>' + (ticker + ticker + ticker + ticker) + '</span></div>' +
  
-@@ -204,19 +303,29 @@
+@@ -204,19 +304,29 @@
        '</div></section>' +
  
        '<section class="sec sec--pink" id="humans"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">The human bit</div><h2 class="disp">Humans check<br>everything.</h2></div><p style="max-width:32em;font-weight:600">No robot books your trip. Every plan you send is read by a real Mad Monkey crew member who checks the routes, the beds, the dates and the prices. ' + TERMS.hold() + '</p></div>' +
@@ -334,7 +355,7 @@ index 51bcc7c..bbf6e6e 100644
    }
  
    /* ============================================================
-@@ -253,11 +362,11 @@
+@@ -253,11 +363,11 @@
        body = '<div class="qopts">' + list.map(function (o) { return '<button class="qopt" data-act="qmulti" data-v="' + o.v + '" aria-pressed="' + (a[s.k].indexOf(o.v) > -1) + '" type="button"><b>' + esc(o.t) + '</b>' + (o.s ? '<span>' + esc(o.s) + '</span>' : '') + '</button>'; }).join('') + '</div>';
      }
      var canNext = s.type === 'multi' ? (s.optional || a[s.k].length > 0) : s.type === 'single' ? !!a[s.k] : true;
@@ -349,7 +370,7 @@ index 51bcc7c..bbf6e6e 100644
      var rng = $('#qdays'); if (rng) rng.addEventListener('input', function () { a.days = +rng.value; $('.qbig').firstChild.nodeValue = a.days; $$('[data-act="qdays"]').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-v') === a.days)); }); });
    }
    function quizAdvance() {
-@@ -267,7 +376,7 @@
+@@ -267,7 +377,7 @@
    function finishQuiz() {
      var a = app.quiz.a, g = MM.GATEWAYS.filter(function (x) { return x.id === a.start; })[0] || MM.GATEWAYS[MM.GATEWAYS.length - 1];
      app.profile = { start: g.place, startId: g.id, days: a.days, month: a.month == null ? null : a.month, year: a.year, vibes: a.vibes.slice(), must: a.must.slice(), budget: a.budget || 'mid', crew: a.crew || 'mates' };
@@ -358,7 +379,7 @@ index 51bcc7c..bbf6e6e 100644
      track('quiz_done', app.profile);
      setTimeout(function () { app.results = MM.suggest(app.profile); store('mm-quiz', app.quiz.a); go('results'); }, 900);
    }
-@@ -283,7 +392,7 @@
+@@ -283,7 +393,7 @@
    function renderResults() {
      var pr = app.profile, g = MM.GATEWAYS.filter(function (x) { return x.id === pr.startId; })[0];
      var chips = ['Landing: ' + (g ? g.n : 'anywhere'), pr.days + ' days', pr.month != null ? U.MONTHN[pr.month] : 'Any month'].concat(pr.vibes.map(function (v) { return MM.VIBES.filter(function (x) { return x.k === v; })[0].n; }), pr.must.map(function (v) { return MM.MUSTS.filter(function (x) { return x.k === v; })[0].n; }), [({ cheap: 'Every dollar counts', mid: 'Comfortable', splash: 'Happy to spend' })[pr.budget]]);
@@ -367,7 +388,7 @@ index 51bcc7c..bbf6e6e 100644
        '<div class="res__prof">' + chips.map(function (c) { return '<span class="chip">' + esc(c) + '</span>'; }).join('') + '<button class="chip" data-act="qedit" type="button" style="background:var(--lime)">Edit answers</button></div>' +
        '<div class="rcards">' + app.results.map(function (r, i) { return resultCard(r, i); }).join('') + '</div>' +
        '<div style="margin-top:var(--s-7);display:flex;gap:var(--s-3);flex-wrap:wrap"><button class="btn btn--pink" data-go="build" data-new="1" type="button">Start from a blank map</button></div></div></section>' + footer();
-@@ -330,12 +439,12 @@
+@@ -330,12 +440,12 @@
      if (app.view !== 'build') return;
      var y = window.scrollY; plan = MM.plan(app.state); if (app.fareHook) app.fareHook(plan);
      var panel = $('#bpanel'); if (!panel) return;
@@ -382,7 +403,7 @@ index 51bcc7c..bbf6e6e 100644
      MM.BuilderMap.update(plan, app.state, app.focus);
      if (!(opts && opts.instant)) window.scrollTo(0, y);
    }
-@@ -350,22 +459,24 @@
+@@ -350,22 +460,24 @@
    function panelHTML(pl) {
      var s = app.state, t = pl.totals, items = s.items, h = app.revise && app.reviseBar ? app.reviseBar() : '';
      if (items.length) h += '<div class="print-head"><img src="assets/logo/mad-monkey-black.png" alt="Mad Monkey"><h1>' + esc(MM.routeLine(pl)) + '</h1><p>' + t.days + ' days · ' + plural(pl.countries.length, 'country', 'countries') + ' · about ' + money(t.total) + ' per person (estimate)' + (s.start ? ' · starting ' + U.fmtDate(U.parseDate(s.start)) : '') + '</p><p class="print-link">Open this trip: ' + esc(shareLink()) + '</p></div>';
@@ -412,7 +433,7 @@ index 51bcc7c..bbf6e6e 100644
      if (!items.length) {
        h += '<div class="empty"><h3>Tap the map.<br>Start anywhere.</h3><p>Every Mad Monkey is a pin. Add a few and we\'ll work out the buses, boats and flights between them, the cost, and the days.</p><div class="row">' +
          (app.meta.from && P[app.meta.from] ? '<button class="btn btn--sm btn--pink" data-act="addplace" data-p="' + app.meta.from + '" type="button">I\'m at ' + esc(P[app.meta.from].n) + '</button>' : '') +
-@@ -382,13 +493,14 @@
+@@ -382,13 +494,14 @@
      h += missHTML();
      /* add bar */
      var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
@@ -428,7 +449,7 @@ index 51bcc7c..bbf6e6e 100644
      pl.segs.forEach(function (sg, i) {
        h += sg.kind === 'allin' ? blockCard(sg, i, pl) : stopCard(sg, i, pl);
        var leg = pl.legs.filter(function (l) { return l.index === i; })[0];
-@@ -410,7 +522,7 @@
+@@ -410,7 +523,7 @@
      h += X('calendar', pl) + X('guide', pl);
      h += entryHTML(pl);
      /* CTA */
@@ -437,7 +458,7 @@ index 51bcc7c..bbf6e6e 100644
        '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes to the crew' : 'Hold my beds + get it checked') + '</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="openpack" type="button">Trip pack</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
        '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability ' + TERMS.before() + '.</p></div>';
      return h;
-@@ -424,12 +536,14 @@
+@@ -424,12 +537,14 @@
      if (!plannerOn()) return [];
      var sd = U.parseDate(app.state.start), month = sd ? sd.getUTCMonth() : (app.state.month != null ? app.state.month : null);
      var key = [app.focus.slice().sort().join(','), app.recoDays, pbudget(), month, app.pv.join(','), app.pm.join(',')].join('|');
@@ -453,7 +474,7 @@ index 51bcc7c..bbf6e6e 100644
      app.state = st; app.auto = true; persist(); track('reco_apply', { countries: app.focus.join(',') });
    }
    // Picking countries re-plans for you, as long as you haven't started editing by hand.
-@@ -464,7 +578,7 @@
+@@ -464,7 +579,7 @@
        show.map(function (x) {
          var isP = x.kind === 'place', a = isP ? null : MM.ACTS[x.act], img = isP ? MM.hostelImg(x.p) : (MM.actImg(a) || MM.hostelImg(x.p));
          var title = isP ? P[x.p].n : a.n, cost = (x.dDays > 0 ? '+' + x.dDays + (x.dDays === 1 ? ' day' : ' days') + ' · ' : '') + (x.dCost > 0 ? '+' + money(x.dCost) : a && a.usd == null ? 'Pay on the day' : 'No extra cost');
@@ -462,7 +483,7 @@ index 51bcc7c..bbf6e6e 100644
            '<div class="miss__ft"><span class="miss__cost">' + cost + '</span><button class="btn btn--sm btn--pink" type="button" data-act="' + (isP ? 'nmadd' : 'nmact') + '" data-k="' + esc(x.k) + '">' + (isP ? 'Add ' + esc(P[x.p].n) : 'Add it') + '</button>' +
            '<button class="miss__no" type="button" data-act="nmoff" data-k="' + esc(x.k) + '">Not for me</button></div></div></div>';
        }).join('') +
-@@ -482,7 +596,7 @@
+@@ -482,7 +597,7 @@
    function X(fn) { try { return window.MMX && window.MMX[fn] ? window.MMX[fn].apply(null, [].slice.call(arguments, 1)) : ''; } catch (e) { return ''; } }
    function nextBar(fromId, title) {
      var p = P[fromId]; if (!p) return '';
@@ -471,7 +492,7 @@ index 51bcc7c..bbf6e6e 100644
      if (!ranked.length) return '';
      return '<div class="nextbar"><span class="over">' + esc(title) + '</span>' + ranked.map(function (x) {
        var r = MM.route(fromId, x.id, app.state.pref || 'balanced');
-@@ -490,7 +604,7 @@
+@@ -490,7 +605,7 @@
      }).join('') + '</div>';
    }
    function tweakRow() {
@@ -480,7 +501,7 @@ index 51bcc7c..bbf6e6e 100644
      if (app.open.suggest) {
        var sg = MM.suggestNext(app.state);
        h += '<div class="nextbar"><span class="over">Picked for your route</span>' + (sg.length ? sg.map(function (x) { return '<button class="nextchip" data-act="addplace" data-p="' + x.id + '" type="button"><b>' + esc(P[x.id].n) + '</b> <small>' + hours(x.leg.h) + ' · ~' + money(x.leg.u) + '</small><em class="whytag">' + esc(x.why.slice(0, 2).join(' · ')) + '</em></button>'; }).join('') : '<small>Nothing else fits within a day\'s travel.</small>') + '</div>';
-@@ -533,10 +647,15 @@
+@@ -533,10 +648,15 @@
    }
    function galleryStrip(id) {
      var g = MM.gallery(id); if (g.length < 2) return '';
@@ -497,7 +518,7 @@ index 51bcc7c..bbf6e6e 100644
    function downloadICS(pl, state) {
      var ics = buildICS(pl, state); if (!ics) { toast('Pick a start date first so the days land in your calendar'); return; }
      var bl = new Blob([ics], { type: 'text/calendar' }), al = document.createElement('a'); al.href = URL.createObjectURL(bl); al.download = 'my-mad-monkey-trip.ics'; al.click(); setTimeout(function () { URL.revokeObjectURL(al.href); }, 2000); track('ics');
-@@ -547,7 +666,7 @@
+@@ -547,7 +667,7 @@
      function push(title, from, to, desc) { ev.push({ t: title, a: from, b: U.addDays(to, 1), d: desc || '' }); }
      pl.days.forEach(function (d) {
        if (!d.date || d.kind === 'depart') return;
@@ -506,7 +527,7 @@ index 51bcc7c..bbf6e6e 100644
        var key = d.kind + ':' + d.si + ':' + name;
        if (cur && cur.key === key && U.isoDate(U.addDays(cur.last, 1)) === U.isoDate(d.date)) cur.last = d.date; else { cur = { key: key, name: name, first: d.date, last: d.date, kind: d.kind }; ev.push(cur); cur.__raw = true; }
        if (d.travel && d.kind === 'stay') push('Travel: ' + P[d.travel.from].n + ' → ' + P[d.travel.to].n, d.date, d.date, d.travel.chosen.modeLabel + ' · about ' + hours(d.travel.chosen.h) + ' · arrives about ' + d.travel.chosen.arrive);
-@@ -559,7 +678,7 @@
+@@ -559,7 +679,7 @@
        else { a1 = e.a; b1 = e.b; title = e.t; desc = e.d; }
        out.push('BEGIN:VEVENT', 'UID:mm-' + i + '-' + stamp + '@madmonkeyhostels.com', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + icsDate(a1), 'DTEND;VALUE=DATE:' + icsDate(b1), 'SUMMARY:' + icsEscape(title), 'DESCRIPTION:' + icsEscape((desc ? desc + '\n' : '') + 'Estimates only. Your trip: ' + shareLink()), 'END:VEVENT');
      });
@@ -515,7 +536,7 @@ index 51bcc7c..bbf6e6e 100644
    }
    function openGallery(id, k) {
      var g = MM.gallery(id); if (!g.length) return; k = Math.max(0, Math.min(g.length - 1, k));
-@@ -571,10 +690,9 @@
+@@ -571,10 +691,9 @@
  
    function stopCard(sg, i, pl) {
      var p = P[sg.p], it = app.state.items[i], open = !!app.open['acts' + i], chosen = sg.acts;
@@ -527,7 +548,7 @@ index 51bcc7c..bbf6e6e 100644
        '<div><h3><span class="dotc" data-c="' + p.c + '"></span>' + esc(p.n) + (p.partner ? ' ' + chip('Partner', 'pill--yellow') : '') + '</h3><div class="stopc__sub">' + sub.join(' · ') + '</div></div>' +
        '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
  '</div></div>' +
-@@ -592,8 +710,9 @@
+@@ -592,8 +711,9 @@
      var price = a.usd == null ? 'Pay on the day' : (a.est ? '~' : '') + money(a.usd), small = a.usd == null ? '' : a.live ? 'live' : a.est ? 'est.' : 'from';
      var length = a.multi ? (a.multi.d > 1 ? a.multi.d + ' days' + (a.multi.n ? ' · ' + a.multi.n + (a.multi.n === 1 ? ' night' : ' nights') + ' away' : '') : SLOT[a.slot]) : SLOT[a.slot];
      var url = MM.actUrl(a);
@@ -539,7 +560,7 @@ index 51bcc7c..bbf6e6e 100644
        '<div class="px">' + price + (small ? '<small>' + small + '</small>' : '') + '</div></div>';
    }
    function actsPanel(sg, i) {
-@@ -607,9 +726,9 @@
+@@ -607,9 +727,9 @@
  
    function legCard(leg) {
      var from = P[leg.from].n, to = P[leg.to].n, ex = MM.explainLeg(leg), whyOpen = !!app.open['why' + leg.index];
@@ -551,7 +572,7 @@ index 51bcc7c..bbf6e6e 100644
          '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.fare ? '<i class="live-pill">fare for your date</i>' : o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span>' + (o.fare && o.fare.max > o.fare.min ? '<span class="nt">Fares that day: ' + money(o.fare.min) + ' to ' + money(o.fare.max) + '. We have used the lowest.</span>' : '') + '</div><div class="tm">' + (o.fare ? '' : '~') + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
      });
      h += '</div><button class="why" data-act="toggle" data-k="why' + leg.index + '" aria-expanded="' + whyOpen + '" type="button">Why this leg? <b>' + (whyOpen ? '−' : '+') + '</b></button>';
-@@ -632,7 +751,7 @@
+@@ -632,7 +752,7 @@
    }
  
    function matchCard(m, pl) {
@@ -560,7 +581,7 @@ index 51bcc7c..bbf6e6e 100644
      var nd = U.fmtDate(m.next);
      var names = m.hit.map(function (p) { return P[p].n; }).join(' + ');
      return '<div class="match"><span class="pill pill--sm pill--black">ALL IN match</span><h3>This looks a lot like ALL IN ' + esc(t.n) + '.</h3>' +
-@@ -655,7 +774,7 @@
+@@ -655,7 +775,7 @@
      return null;
    }
    function daysHTML(pl) {
@@ -569,7 +590,7 @@ index 51bcc7c..bbf6e6e 100644
      var blockNo = {}; pl.days.forEach(function (d, i) { if (d.kind === 'block') { blockNo[d.blockTrip.id + d.si] = (blockNo[d.blockTrip.id + d.si] || 0) + 1; d._bk = blockNo[d.blockTrip.id + d.si]; } });
      pl.days.forEach(function (d) {
        var title = d.title, extra = '';
-@@ -706,6 +825,49 @@
+@@ -706,6 +826,49 @@
      if ((a && !ra) || (b && !rb)) return null;
      return { h: Math.max(0, (ra ? ra.h : 0) + (rb ? rb.h : 0) - (rab ? rab.h : 0)), u: Math.round((ra ? ra.u : 0) + (rb ? rb.u : 0) - (rab ? rab.u : 0)) };
    }
@@ -619,7 +640,7 @@ index 51bcc7c..bbf6e6e 100644
    function openPicker(o) {
      var n = app.state.items.length, pl0 = plan;
      function stopName(k) { var sg = pl0 && pl0.segs[k]; return sg ? (sg.kind === 'allin' ? 'ALL IN ' + sg.trip.n : P[sg.p].n) : 'the last stop'; }
-@@ -731,9 +893,9 @@
+@@ -731,9 +894,9 @@
      openModal('<div class="modal__hd"><div><div class="over">Your trip</div><h2 class="disp">' + esc(o.title) + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' + where + '<p class="qhelp pkhint" style="margin-bottom:var(--s-3)">' + hintText() + '</p>' +
        '<div class="field"><label for="pksearch">Search</label><input class="input" id="pksearch" type="search" placeholder="a place or a country" autocomplete="off"></div>' +
        '<ul class="picker">' + rowsHTML() + '</ul></div>', function (m) {
@@ -631,7 +652,7 @@ index 51bcc7c..bbf6e6e 100644
          var w = $('#pkwhere', m);
          if (w) w.addEventListener('change', function () { o.position = +w.value; o.near = nearFor(o.position - 1); $('.picker', m).innerHTML = rowsHTML(); $('.pkhint', m).textContent = hintText(); filter(); });
        });
-@@ -742,19 +904,37 @@
+@@ -742,19 +905,37 @@
    /* ============================================================
       MODALS
       ============================================================ */
@@ -672,7 +693,7 @@ index 51bcc7c..bbf6e6e 100644
        '<input type="hidden" name="via" value="' + via + '">' +
        '<input class="input cpick__wa" name="whatsapp" type="tel" autocomplete="tel" placeholder="WhatsApp number with country code, e.g. +44 7700 900123" aria-label="WhatsApp number" value="' + esc(q.whatsapp || '') + '">' +
        '<input class="input cpick__em" name="email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email" value="' + esc(q.email || '') + '"></div>';
-@@ -768,7 +948,7 @@
+@@ -768,7 +949,7 @@
    document.addEventListener('click', function (e) {
      var b = e.target.closest('.cpick [data-via]'); if (!b) return;
      var box = b.closest('.cpick'), via = b.getAttribute('data-via'); box.setAttribute('data-via', via); box.querySelector('[name=via]').value = via;
@@ -681,7 +702,7 @@ index 51bcc7c..bbf6e6e 100644
      var inp = box.querySelector(via === 'email' ? '.cpick__em' : '.cpick__wa'); if (inp) inp.focus();
    });
  
-@@ -797,7 +977,7 @@
+@@ -797,7 +978,7 @@
      var raw = ($('#meetin') || {}).value || '', out = $('#meetout'); if (!out) return;
      var say = function (h) { out.innerHTML = h; };
      var mBuild = raw.match(/#\/build\/([^\s]+)/), mShort = raw.match(/\/t\/([a-z0-9]{7})/);
@@ -690,7 +711,7 @@ index 51bcc7c..bbf6e6e 100644
      got.then(function (enc) {
        var theirs = MM.decodeState(enc); if (!theirs.items || !theirs.items.length) throw 0;
        var o = MM.overlap(app.state, theirs), tp = MM.plan(theirs);
-@@ -819,7 +999,6 @@
+@@ -819,7 +1000,6 @@
       EVENTS
       ============================================================ */
    document.addEventListener('click', function (e) {
@@ -698,7 +719,7 @@ index 51bcc7c..bbf6e6e 100644
      var door = e.target.closest('.door'); if (door) track('door', { door: door.getAttribute('data-go') || door.getAttribute('data-to') || 'x' });
      var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } if (go_.hasAttribute('data-new')) { track('start_fresh', { had: app.state.items.length ? 1 : 0 }); startFresh(); go('build', ''); return; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
      var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } autoReco(); if (app.auto) persist(); refreshBuilder(); return; }
-@@ -844,18 +1023,30 @@
+@@ -844,18 +1024,30 @@
        case 'mapfit': MM.BuilderMap.reset(); break;
        case 'scroll': { var t = document.getElementById(el.getAttribute('data-to')); if (t) t.scrollIntoView({ behavior: 'smooth' }); break; }
        case 'close': closeModal(); break;
@@ -732,7 +753,7 @@ index 51bcc7c..bbf6e6e 100644
        case 'customiseblock': { var blk = S.items[i], tp = MM.ALL_IN.filter(function (x) { return x.id === blk.trip; })[0]; var ns = tp.stops.map(function (st) { return { kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }; }); mutate(function (s2) { s2.items.splice.apply(s2.items, [i, 1].concat(ns)); }); toast('Now it\'s yours: edit anything'); break; }
        case 'swapallin': { var id2 = el.getAttribute('data-id'), tr = MM.ALL_IN.filter(function (x) { return x.id === id2; })[0], inTrip = {}; tr.stops.forEach(function (st) { inTrip[st.p] = 1; }); mutate(function (s2) { var extras = s2.items.filter(function (it) { return it.kind === 'stop' && !inTrip[it.p]; }); s2.items = [{ kind: 'allin', trip: id2 }].concat(extras); }); track('swap_allin', { id: id2 }); break; }
        /* builder */
-@@ -881,11 +1072,11 @@
+@@ -881,11 +1073,11 @@
        case 'pickplace': { var pid = el.getAttribute('data-p'), sw = el.getAttribute('data-swap'), pos = +el.getAttribute('data-pos'); closeModal(); if (sw !== null && sw !== '') applyEdit([{ op: 'swap_stop', stop: +sw + 1, place: pid }]); else if (applyEdit([{ op: 'add_stop', place: pid, position: pos }])) { var nc = document.getElementById('stop' + (pos - 1)); if (nc) nc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } break; }
        case 'dayrm': applyEdit([{ op: 'remove_tour', stop: i + 1, tour: el.getAttribute('data-a') }]); break;
        case 'toggle': { var key = el.getAttribute('data-k'); app.open[key] = !app.open[key]; refreshBuilder(); break; }
@@ -747,7 +768,7 @@ index 51bcc7c..bbf6e6e 100644
        case 'lead': if (app.review) app.review.open(); break;
        case 'share': openShare(); break;
        case 'story': openStory(); break;
-@@ -899,7 +1090,6 @@
+@@ -899,7 +1091,6 @@
    });
    document.addEventListener('keydown', function (e) {
      if (e.key === 'Escape' && modalRoot.firstChild) closeModal();
@@ -755,7 +776,7 @@ index 51bcc7c..bbf6e6e 100644
    });
    document.addEventListener('change', function (e) {
      var t = e.target;
-@@ -938,14 +1128,13 @@
+@@ -938,14 +1129,13 @@
      }
      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
    });
@@ -855,19 +876,35 @@ index d7778c7..695dd45 100644
  
    if (typeof module !== 'undefined') module.exports = { ACTS: MM.ACTS };
 diff --git a/public/trip-builder/data/media.js b/public/trip-builder/data/media.js
-index dc54863..d30b610 100644
+index dc54863..945c3ba 100644
 --- a/public/trip-builder/data/media.js
 +++ b/public/trip-builder/data/media.js
-@@ -56,6 +56,13 @@
+@@ -56,6 +56,29 @@
    MM.hostelImg = function (id) { return HOSTEL[id] ? (own() ? own() + '/hostel/' + id + '.jpg' : BASE + 'property/' + id + '/' + HOSTEL[id] + '.jpg') : null; };
    MM.tourImg = function (slug) { return slug && TOUR[slug] ? (own() ? own() + '/tour/' + slug + '.jpg' : BASE + 'tour/' + slug + '/' + TOUR[slug] + '.jpg') : null; };
    MM.actImg = function (a) { return MM.tourImg(a.slug); };
 +  // Small copies of the same photos (scripts/make-thumbs.mjs): 's' is 320px wide for thumbnails and strips, 'm' is 720px wide for the big cards.
-+  // Only our own copies have them, so hot-linked photos come back unchanged. The page falls back to the full photo if a small one is missing.
++  // Two ways to have them:
++  //   PHOTO_BASE   we host full copies of the photos too, and the small ones sit beside them: <base>/s/hostel/<id>.webp
++  //   THUMB_BASE   only the small copies are hosted next to the builder (about 13 MB instead of 61) and the full photos are still hot-linked from madmonkeyhostels.com:
++  //                <thumb base>/s/hostel/<id>.webp. This is how the live ALL IN site gets them.
++  // A photo with no small copy comes back unchanged, and the page falls back to the full photo if a small one is missing.
++  var thumbBase = function () { return (r.MM_CONFIG && r.MM_CONFIG.THUMB_BASE || '').replace(/\/$/, ''); };
++  var NAMES = null;     // a hot-linked photo's address -> its name in assets/photos ("hostel/hanoi"), worked out the first time it is needed
++  function names() {
++    if (NAMES) return NAMES;
++    NAMES = {};
++    Object.keys(HOSTEL).forEach(function (id) { NAMES[BASE + 'property/' + id + '/' + HOSTEL[id] + '.jpg'] = 'hostel/' + id; });
++    Object.keys(TOUR).forEach(function (slug) { NAMES[BASE + 'tour/' + slug + '/' + TOUR[slug] + '.jpg'] = 'tour/' + slug; });
++    if (MM.gallery && MM.PLACES) Object.keys(MM.PLACES).forEach(function (id) { MM.gallery(id).forEach(function (u, k) { NAMES[u] = 'gallery/' + id + '-' + k; }); });
++    return NAMES;
++  }
 +  MM.thumb = function (url, size) {
-+    var b = own(), cfg = r.MM_CONFIG || {};
-+    if (!url || !b || cfg.PHOTO_THUMBS === false || (size !== 's' && size !== 'm') || url.indexOf(b + '/') !== 0) return url;
-+    return b + '/' + size + '/' + url.slice(b.length + 1).replace(/\.jpe?g$/i, '.webp');
++    var cfg = r.MM_CONFIG || {}, b = own();
++    if (!url || cfg.PHOTO_THUMBS === false || (size !== 's' && size !== 'm')) return url;
++    if (b) return url.indexOf(b + '/') === 0 ? b + '/' + size + '/' + url.slice(b.length + 1).replace(/\.jpe?g$/i, '.webp') : url;
++    var t = thumbBase(), name = t && names()[url];
++    return name ? t + '/' + size + '/' + name + '.webp' : url;
 +  };
  
    if (typeof module !== 'undefined') module.exports = { HOSTEL: HOSTEL, TOUR: TOUR };
@@ -1051,7 +1088,7 @@ index c6d7dc9..ddb15c9 100644
      },
      routeVotes: function (g) { var t = { a: 0, b: 0 }; g.members.forEach(function (m) { var v = m.votes.route; if (v === 'a' || v === 'b') t[v]++; }); return t; },
 diff --git a/public/trip-builder/index.html b/public/trip-builder/index.html
-index bd259c7..5c5cf3a 100644
+index bd259c7..5da0a24 100644
 --- a/public/trip-builder/index.html
 +++ b/public/trip-builder/index.html
 @@ -6,6 +6,9 @@
@@ -1070,8 +1107,8 @@ index bd259c7..5c5cf3a 100644
    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
 -  <link rel="stylesheet" href="styles.css?v=50">
 -  <link rel="stylesheet" href="crew.css?v=50">
-+  <link rel="stylesheet" href="styles.css?v=83">
-+  <link rel="stylesheet" href="crew.css?v=83">
++  <link rel="stylesheet" href="styles.css?v=87">
++  <link rel="stylesheet" href="crew.css?v=87">
  </head>
  <body data-view="home">
 +  <a class="skip" href="#app">Skip to the content</a>
@@ -1119,35 +1156,35 @@ index bd259c7..5c5cf3a 100644
 -  <script src="ui-pack.js?v=50"></script>
 -  <script src="ui-crew.js?v=50"></script>
 -  <script src="ui-tour.js?v=50"></script>
-+  <script src="data/map-data.js?v=83"></script>
-+  <script src="data/places.js?v=83"></script>
-+  <script src="data/activities.js?v=83"></script>
-+  <script src="data/media.js?v=83"></script>
-+  <script src="data/legs.js?v=83"></script>
-+  <script src="data/trips.js?v=83"></script>
-+  <script src="data/entry.js?v=83"></script>
-+  <script src="data/gallery.js?v=83"></script>
-+  <script src="data/rules.js?v=83"></script>
-+  <script src="data/guide.js?v=83"></script>
-+  <script src="logic.js?v=83"></script>
-+  <script src="extras.js?v=83"></script>
-+  <script src="crew.js?v=83"></script>
-+  <script src="edit.js?v=83"></script>
-+  <script src="search.js?v=83"></script>
-+  <script src="group.js?v=83"></script>
-+  <script src="config.js?v=83"></script>
-+  <script src="ui-map.js?v=83"></script>
-+  <script src="ui-story.js?v=83"></script>
-+  <script src="app.js?v=83"></script>
-+  <script src="ui-review.js?v=83"></script>
-+  <script src="ui-group.js?v=83"></script>
-+  <script src="ui-live.js?v=83"></script>
-+  <script src="ui-extras.js?v=83"></script>
-+  <script src="ui-pack.js?v=83"></script>
-+  <script src="ui-crew.js?v=83"></script>
-+  <script src="ui-tour.js?v=83"></script>
-+  <script src="ui-search.js?v=83"></script>
-+  <script src="ui-stage.js?v=83"></script>
++  <script src="data/map-data.js?v=87"></script>
++  <script src="data/places.js?v=87"></script>
++  <script src="data/activities.js?v=87"></script>
++  <script src="data/media.js?v=87"></script>
++  <script src="data/legs.js?v=87"></script>
++  <script src="data/trips.js?v=87"></script>
++  <script src="data/entry.js?v=87"></script>
++  <script src="data/gallery.js?v=87"></script>
++  <script src="data/rules.js?v=87"></script>
++  <script src="data/guide.js?v=87"></script>
++  <script src="logic.js?v=87"></script>
++  <script src="extras.js?v=87"></script>
++  <script src="crew.js?v=87"></script>
++  <script src="edit.js?v=87"></script>
++  <script src="search.js?v=87"></script>
++  <script src="group.js?v=87"></script>
++  <script src="config.js?v=87"></script>
++  <script src="ui-map.js?v=87"></script>
++  <script src="ui-story.js?v=87"></script>
++  <script src="app.js?v=87"></script>
++  <script src="ui-review.js?v=87"></script>
++  <script src="ui-group.js?v=87"></script>
++  <script src="ui-live.js?v=87"></script>
++  <script src="ui-extras.js?v=87"></script>
++  <script src="ui-pack.js?v=87"></script>
++  <script src="ui-crew.js?v=87"></script>
++  <script src="ui-tour.js?v=87"></script>
++  <script src="ui-search.js?v=87"></script>
++  <script src="ui-stage.js?v=87"></script>
  </body>
  </html>
 diff --git a/public/trip-builder/logic.js b/public/trip-builder/logic.js
@@ -2031,7 +2068,7 @@ index 065fe79..6cffef9 100644
 +.beenpick__i input{width:18px;height:18px;accent-color:var(--black);flex:none}
 +@media print{.stagebar__act,.yourtrips{display:none}}
 diff --git a/public/trip-builder/ui-crew.js b/public/trip-builder/ui-crew.js
-index c1219f7..f795062 100644
+index c1219f7..f905d75 100644
 --- a/public/trip-builder/ui-crew.js
 +++ b/public/trip-builder/ui-crew.js
 @@ -18,17 +18,19 @@
@@ -2076,7 +2113,7 @@ index c1219f7..f795062 100644
      });
    }
  
-@@ -64,8 +66,8 @@
+@@ -64,14 +66,14 @@
      setSess({ ref: r.ref, k: q.k, name: r.name, first: first, people: r.party_size, dates: r.dates_flex, from: r.from_place, notes: r.notes, editing: false, rev: d.rev });
  
      var h = '<section class="quiz crew"><div class="wrap">' +
@@ -2087,6 +2124,13 @@ index c1219f7..f795062 100644
        (gr ? guestChangeHTML(gr, first) : '') +
        (banner ? '<div class="cbanner cbanner--ok" role="status">' + banner + '</div>' : '') +
        (!can ? '<div class="cbanner">' + (r.status === 'approved' ? 'This trip is booked. Nothing left to action.' : r.status === 'declined' ? 'This trip was declined' + (r.refunded_at ? ' and the deposit refunded' : '') + '.' : r.status === 'pending_payment' ? 'The deposit isn\'t paid yet, so there is nothing to action.' : 'Nothing to action.') + '</div>' : '') +
+       '<div class="crew__acts" role="group" aria-label="Decide about this trip">' +
+         act('approve', 'yes', 'Approve', r.status === 'ready' ? 'Change the price' : 'Send ' + first + ' the final price', can, open) +
+-        act('decline', 'no', 'Not approved', 'Say no and refund the deposit', can, open) +
++        act('decline', 'no', 'Not approved', num(r.deposit_amount) > 0 ? 'Say no and refund the deposit' : 'Say no, with a reason', can, open) +
+         act('edit', 'edit', 'Edit it', canEdit || !can ? 'Change it, add our input' : 'Balance link already sent', canEdit, open) + '</div>' +
+       '<div id="cpanel"></div>' +
+       '<div class="crew__grid"><div class="crew__main">' + (sum ? tripHTML(sum, d.suggestedBalance, r) : '<div class="cbox"><p>This trip can\'t be shown here. Open it in the builder below.</p></div>') + '</div>' +
 @@ -95,19 +97,26 @@
    }
  
@@ -2129,7 +2173,7 @@ index c1219f7..f795062 100644
 +      (num(s.people) > 1 ? row('For all ' + num(s.people), usd(b.tripCostAllPeople) + ' trip cost · ' + usd(b.totalAllPeople) + ' with spending money', true) : '') +
        (b.guestBudget ? row('Their own budget', usd(b.guestBudget) + ' each', false, b.budgetLeft == null ? '' : b.budgetLeft >= 0 ? usd(b.budgetLeft) + ' to spare' : usd(-b.budgetLeft) + ' over') : '') +
 -      '<tfoot><tr><td colspan="2">Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (s.people > 1 ? ' for ' + s.people : '') + ' less the deposit)</i></td></tr></tfoot></table>';
-+      '<tfoot><tr><td colspan="2">Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (num(s.people) > 1 ? ' for ' + num(s.people) : '') + ' less the deposit)</i></td></tr></tfoot></table>';
++      '<tfoot><tr><td colspan="2">' + (num(r.deposit_amount) > 0 ? 'Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (num(s.people) > 1 ? ' for ' + num(s.people) : '') + ' less the deposit)</i>' : 'Free to send, nothing paid yet · suggested price <b>' + usd(suggested) + '</b> <i>(the trip cost' + (num(s.people) > 1 ? ' for ' + num(s.people) : '') + ')</i>') + '</td></tr></tfoot></table>';
      if (r.notes) h += '<div class="cbox cbox--note"><h3>' + esc(firstName(r.name)) + '\'s note</h3><p>' + esc(r.notes).replace(/\n/g, '<br>') + '</p></div>';
      return h;
    }
@@ -2152,7 +2196,16 @@ index c1219f7..f795062 100644
      if (wa.length >= 8) h += '<a class="btn btn--sm btn--paper" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">WhatsApp ' + esc(first) + '</a>';
      if (r.email) h += '<a class="btn btn--sm btn--paper" href="mailto:' + esc(r.email) + '">Email ' + esc(first) + '</a>';
      else if (r.guest_email) h += '<a class="btn btn--sm btn--paper" href="mailto:' + esc(r.guest_email) + '">Email ' + esc(first) + '</a>';
-@@ -155,12 +164,12 @@
+@@ -142,7 +151,7 @@
+       (r.guest_email && r.guest_email !== r.email ? '<dt>Receipts</dt><dd>' + esc(r.guest_email) + '</dd>' : '') +
+       '<dt>Dates</dt><dd>' + esc({ fixed: 'Fixed', flex: 'Flexible', open: 'Not decided' }[r.dates_flex] || '—') + '</dd>' +
+       '<dt>Sent</dt><dd>' + esc(when(r.created_at)) + '</dd>' +
+-      '<dt>Deposit</dt><dd>' + usd(r.deposit_amount) + (r.deposit_paid_at ? ' paid' : ' not paid') + (r.refunded_at ? ', refunded' : '') + '</dd>' +
++      '<dt>Deposit</dt><dd>' + (num(r.deposit_amount) > 0 ? usd(r.deposit_amount) + (r.deposit_paid_at ? ' paid' : ' not paid') + (r.refunded_at ? ', refunded' : '') : 'None: free to send') + '</dd>' +
+       (r.hold_until && ['submitted', 'checking'].indexOf(r.status) > -1 ? '<dt>Beds held</dt><dd>until ' + esc(when(r.hold_until)) + '</dd>' : '') +
+       (r.all_in_match ? '<dt>Looks like</dt><dd>ALL IN ' + esc(r.all_in_match) + '</dd>' : '') +
+       (r.campaign_ref ? '<dt>Came from</dt><dd>' + esc(r.campaign_ref) + '</dd>' : '') + (r.from_hostel ? '<dt>QR at</dt><dd>' + esc(r.from_hostel) + '</dd>' : '') + '</dl></div>';
+@@ -155,23 +164,23 @@
      var h = '<div class="cbox"><h3>History</h3>';
      if (rev) {
        h += '<p>Edited by the crew ' + esc(when(rev.at)) + '.' + (rev.note ? ' Note: “' + esc(rev.note) + '”' : '') + '</p>';
@@ -2167,19 +2220,27 @@ index c1219f7..f795062 100644
      return h + '</div>';
    }
  
-@@ -170,8 +179,8 @@
-       var sug = d.suggestedBalance || '';
+   /* ---------- the three panels ---------- */
+   function panelHTML(which, r, sum, d, first, dep) {
+     if (which === 'approve') {
+-      var sug = d.suggestedBalance || '';
++      var sug = d.suggestedBalance || '', hasDep = num(r.deposit_amount) > 0;
        return '<div class="cpanel cpanel--yes"><h3>' + (r.status === 'ready' ? 'Update ' + esc(first) + '\'s price' : 'Send ' + esc(first) + ' the final price') + '</h3>' +
-         '<p>The trip checks out. ' + esc(first) + ' gets an email to choose how to pay the rest: all now, a week before they leave, or in instalments if they leave 2+ months out. The ' + dep + ' deposit is already counted, and nothing is charged until they choose.</p>' +
+-        '<p>The trip checks out. ' + esc(first) + ' gets an email to choose how to pay the rest: all now, a week before they leave, or in instalments if they leave 2+ months out. The ' + dep + ' deposit is already counted, and nothing is charged until they choose.</p>' +
 -        '<div class="field"><label for="cbal">Balance to charge (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? r.balance_amount : (sug || '')) + '" inputmode="decimal">' +
 -        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (sum.people > 1 ? ' for ' + sum.people : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ') less the ' + dep + ' deposit. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : 'Work out the balance after the deposit.') + '</p></div>' +
-+        '<div class="field"><label for="cbal">Balance to charge (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? num(r.balance_amount) : (num(sug) || '')) + '" inputmode="decimal">' +
-+        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (num(sum.people) > 1 ? ' for ' + num(sum.people) : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ') less the ' + dep + ' deposit. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : 'Work out the balance after the deposit.') + '</p></div>' +
++        '<p>The trip checks out. ' + esc(first) + ' gets an email to choose how to pay' + (hasDep ? ' the rest' : '') + ': all now, a week before they leave, or in instalments if they leave 2+ months out. ' + (hasDep ? 'The ' + dep + ' deposit is already counted, and nothing' : 'They haven\'t paid anything yet, and nothing') + ' is charged until they choose.</p>' +
++        '<div class="field"><label for="cbal">' + (hasDep ? 'Balance to charge' : 'Price to charge') + ' (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? num(r.balance_amount) : (num(sug) || '')) + '" inputmode="decimal">' +
++        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (num(sum.people) > 1 ? ' for ' + num(sum.people) : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ')' + (hasDep ? ' less the ' + dep + ' deposit' : '') + '. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : (hasDep ? 'Work out the balance after the deposit.' : 'Work out the price for everyone.')) + '</p></div>' +
          '<div class="field"><label for="cnote">Note to ' + esc(first) + ' (optional, goes in the email)</label><textarea class="input" id="cnote" placeholder="e.g. All checked. We swapped the night bus for a day minivan so you arrive in daylight.">' + esc(r.crew_note || '') + '</textarea></div>' +
          '<p class="cerr" id="cerr" role="alert" hidden></p><button class="btn btn--lg" id="cgo" type="button">' + (r.status === 'ready' ? 'Send ' + esc(first) + ' the new price' : 'Send ' + esc(first) + ' the final price') + '</button></div>';
      }
-@@ -204,7 +213,7 @@
-         if (!(amt >= 1 && amt <= 50000)) return fail(new Error('Enter the balance in US dollars, after the deposit.'));
+@@ -201,10 +210,10 @@
+       go.disabled = true; go.textContent = 'Working…';
+       if (which === 'approve') {
+         var amt = Math.round(parseFloat($('#cbal', root).value) * 100) / 100;
+-        if (!(amt >= 1 && amt <= 50000)) return fail(new Error('Enter the balance in US dollars, after the deposit.'));
++        if (!(amt >= 1 && amt <= 50000)) return fail(new Error(num(r.deposit_amount) > 0 ? 'Enter the balance in US dollars, after the deposit.' : 'Enter the price in US dollars.'));
          call({ action: 'balance', ref: q.ref, key: q.k, amount: amt, note: noteV, rev: d.rev }).then(function (res) {
            setSess(null);
 -          load(root, q, '', 'Sent. ' + esc(first) + ' can now choose how to pay the <b>' + usd(amt) + '</b>' + (res.emailed ? ', by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(res.url || '') + '">choose how to pay</a>.'));
@@ -2363,7 +2424,7 @@ index 53f6ee2..b7af9df 100644
        for (var i = 1; i < path.length; i++) {
          var a = path[i - 1].p, b = path[i].p; if (a === b) continue;
 diff --git a/public/trip-builder/ui-pack.js b/public/trip-builder/ui-pack.js
-index 90dc972..37be55c 100644
+index 90dc972..ba87d84 100644
 --- a/public/trip-builder/ui-pack.js
 +++ b/public/trip-builder/ui-pack.js
 @@ -24,8 +24,8 @@
@@ -2377,6 +2438,15 @@ index 90dc972..37be55c 100644
      var pl = MM.plan(st), rec = packRec(enc), checked = rec && (rec.status === 'ready' || rec.status === 'approved'), T = pl.totals, pass = A.passport || '';
      var first = pl.places[0], last = pl.places[pl.places.length - 1];
      var contact = [C.WHATSAPP ? 'WhatsApp +' + C.WHATSAPP.replace(/^\+/, '') : '', C.CREW_EMAIL || ''].filter(Boolean).join('  ·  ');
+@@ -36,7 +36,7 @@
+       '<div class="pack__facts"><div><b>' + T.days + '</b><span>days</span></div><div><b>' + T.nights + '</b><span>nights</span></div><div><b>' + pl.places.length + '</b><span>stops</span></div><div><b>' + pl.countries.length + '</b><span>' + (pl.countries.length === 1 ? 'country' : 'countries') + '</span></div><div><b>~' + money(T.total, A.cur) + '</b><span>est. each</span></div></div>' +
+       (st.start ? '<p class="pack__dates">' + fmtD(U.parseDate(st.start)) + ' to ' + fmtD(U.addDays(U.parseDate(st.start), T.days - 1)) + ', ' + U.parseDate(st.start).getUTCFullYear() + '</p>' : '<p class="pack__dates">Dates not set yet. Add a start date in the builder and your pack fills in.</p>') +
+       (rec ? '<p class="pack__ref">Reference <b>' + esc(rec.ref) + '</b></p>' : '') +
+-      (checked ? '' : '<p class="pack__note">This is a draft of your trip, not a booking. Hold your beds' + (C.DEPOSIT_PER_PERSON > 0 ? ' with a $' + C.DEPOSIT_PER_PERSON + ' deposit per person' : '') + ' and a real crew member checks the routes, dates and prices before you pay' + (C.DEPOSIT_PER_PERSON > 0 ? ' the rest' : '') + '.</p>') + '</header>';
++      (checked ? '' : '<p class="pack__note">This is a draft of your trip, not a booking. Hold your beds' + (C.DEPOSIT_PER_PERSON > 0 ? ' with a $' + C.DEPOSIT_PER_PERSON + ' deposit per person' : ' (sending it is free)') + ' and a real crew member checks the routes, dates and prices before you pay' + (C.DEPOSIT_PER_PERSON > 0 ? ' the rest' : '') + '.</p>') + '</header>';
+ 
+     // 1. where you sleep
+     h += '<section class="pack__sec"><h2 class="disp">Where you\'re sleeping</h2><div class="pack__stays">' + pl.segs.map(function (sg, i) {
 @@ -82,7 +82,7 @@
  
      // 6. packing + costs
@@ -2387,11 +2457,49 @@ index 90dc972..37be55c 100644
      root.innerHTML = h;
      $('#packprint').addEventListener('click', function () { u.track('pack_print'); window.print(); });
 diff --git a/public/trip-builder/ui-review.js b/public/trip-builder/ui-review.js
-index 009c74e..c7f7cb6 100644
+index 009c74e..7a1c425 100644
 --- a/public/trip-builder/ui-review.js
 +++ b/public/trip-builder/ui-review.js
-@@ -39,7 +39,7 @@
-     var S = steps(), at = S.map(function (s) { return s.k; }).indexOf(status === 'pending_payment' ? 'submitted' : status);
+@@ -6,11 +6,12 @@
+      • the trip status page  #/trip/<ref>[?k=<key>]  including choosing how to pay once the crew has approved
+ 
+    Two modes, set by MM_CONFIG:
++     DEPOSIT_PER_PERSON = 0  (the default) free to send: nothing is paid until the guest has approved the checked plan.
++                             Once the crew approves, the guest picks how to pay: all now, a week before they leave, or in
++                             instalments when they leave 60+ days out (PAY_ENDPOINT). A card is collected at that point.
+      DEPOSIT_PER_PERSON > 0  a deposit is taken when the trip is sent (LEAD_ENDPOINT answers with a Stripe `checkoutUrl`).
+                              It holds the beds, counts towards the trip, and is refunded if the crew can't make it work.
+-                             Once the crew approves, the guest picks how to pay the rest: now, a week before they leave
+-                             (card saved with the deposit), or in instalments when they leave 60+ days out (PAY_ENDPOINT).
+-     DEPOSIT_PER_PERSON = 0  hold only: nothing is paid until the guest has approved the checked plan.
++   Whichever the config says, the page follows what the backend answers: a `checkoutUrl` in the reply to a send means go and pay it.
+    With no LEAD_ENDPOINT it runs in demo mode: nothing is sent or charged.
+    Contract: docs/LEADS.md (send), docs/PAYMENTS.md (status + pay).
+    ============================================================ */
+@@ -25,21 +26,23 @@
+   var payEndpoint = function () { return C.PAY_ENDPOINT || (C.STATUS_ENDPOINT ? C.STATUS_ENDPOINT.replace(/trip-builder-status/, 'trip-builder-pay') : ''); };
+   var reviseEndpoint = function () { return C.REVISE_ENDPOINT || (C.STATUS_ENDPOINT ? C.STATUS_ENDPOINT.replace(/trip-builder-status/, 'trip-builder-revise') : ''); };
+   var EDITABLE = ['pending_payment', 'submitted', 'checking', 'ready'];
+-  function steps() {
++  // `withDep` is whether THIS trip took a deposit (a trip page knows; the send form goes by the config).
++  function steps(withDep) {
++    var d = withDep === undefined ? deposit() : !!withDep;
+     return [
+-      { k: 'submitted', t: 'You send it', d: deposit() ? 'A ' + usd(per()) + ' deposit per person holds your beds and sends your plan to the crew.' : 'Your whole plan lands with the crew.' },
++      { k: 'submitted', t: 'You send it', d: d ? 'A ' + usd(per()) + ' deposit per person holds your beds and sends your plan to the crew.' : 'Free. Your whole plan lands with the crew.' },
+       { k: 'checking', t: 'A human checks it', d: 'A real crew member checks the routes, beds, dates and prices.' },
+-      { k: 'ready', t: 'You approve', d: deposit() ? 'You get the checked plan and the final price. Then you choose how to pay the rest.' : 'You get a confirmed plan back. Change anything you like.' },
+-      { k: 'approved', t: deposit() ? 'You\'re booked' : 'Deposit + done', d: deposit() ? 'Your deposit counts towards the total. Pay the rest now, later or in instalments, your way.' : 'Only now do you pay. Beds locked in.' }];
++      { k: 'ready', t: 'You approve', d: d ? 'You get the checked plan and the final price. Then you choose how to pay the rest.' : 'You get the checked plan and the final price. Change anything you like.' },
++      { k: 'approved', t: 'You\'re booked', d: d ? 'Your deposit counts towards the total. Pay the rest now, later or in instalments, your way.' : 'Only now do you pay, your way. Beds locked in.' }];
+   }
+   function ref() { var s = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', o = 'MM-'; for (var i = 0; i < 6; i++) o += s[Math.floor(Math.random() * s.length)]; return o; }
+   function fmtDT(iso) { var d = new Date(iso); return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+   function fmtDay(iso) { var d = U.parseDate(iso); return d ? U.fmtDate(d) + (d.getUTCFullYear() !== new Date().getUTCFullYear() ? ' ' + d.getUTCFullYear() : '') : ''; }
+-  function stepsHTML(status) {
+-    var S = steps(), at = S.map(function (s) { return s.k; }).indexOf(status === 'pending_payment' ? 'submitted' : status);
++  function stepsHTML(status, withDep) {
++    var S = steps(withDep), at = S.map(function (s) { return s.k; }).indexOf(status === 'pending_payment' ? 'submitted' : status);
      return '<ol class="steps">' + S.map(function (s, i) { return '<li class="' + (i < at ? 'done' : i === at ? 'now' : '') + '"><i>' + (i < at ? '✓' : i + 1) + '</i><div><b>' + s.t + '</b><span>' + s.d + '</span></div></li>'; }).join('') + '</ol>';
    }
 -  function parseRef(rest) { var p = decodeURIComponent(rest || '').split('?'), q = {}; (p[1] || '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); }); return { ref: (p[0] || '').toUpperCase(), k: q.k || '' }; }
@@ -2399,16 +2507,16 @@ index 009c74e..c7f7cb6 100644
  
    /* ---------- the modal ---------- */
    function open() {
-@@ -51,7 +51,7 @@
+@@ -51,7 +54,7 @@
      u.openModal('<div class="modal__hd"><div><div class="over">Checked by a human</div><h2 class="disp">Hold my beds.<br>Get it checked.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
        '<p style="font-weight:500">Nobody books this for you by robot. A <b>real Mad Monkey crew member</b> checks your whole trip. ' + (dep
          ? 'A <b>' + usd(per()) + ' deposit per person</b> holds your beds while they do, and it comes off your trip total. If the crew can\'t make it work, you get it back.'
 -        : 'You pay nothing until you\'ve seen the checked plan and said yes.') + '</p>' + stepsHTML('submitted') +
-+        : 'You pay nothing until you\'ve seen the checked plan and said yes.') + ' <span class="nowrap">Not sure about something? ' + u.ask('btn btn--sm btn--paper') + ' first.</span></p>' + stepsHTML('submitted') +
++        : '<b>Sending it is free.</b> You pay nothing until you\'ve seen the checked plan and said yes.') + ' <span class="nowrap">Not sure about something? ' + u.ask('btn btn--sm btn--paper') + ' first.</span></p>' + stepsHTML('submitted') +
        '<form id="leadf" novalidate><div class="form2"><div class="field"><label for="lf-name">First name</label><input class="input" id="lf-name" name="name" autocomplete="given-name" required value="' + esc(q.name || '') + '"></div>' +
        u.contactPick(q) +
        '<div class="field"><label for="lf-from">Where are you now?</label><input class="input" id="lf-from" name="from" placeholder="city or country" value="' + esc(q.from || '') + '"></div>' +
-@@ -85,7 +85,7 @@
+@@ -85,7 +88,7 @@
      u.store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
      var plan = u.getPlan(), wantHold = !!A.state.start, people = Math.min(8, Math.max(1, +v.size || 1)), dep = deposit();
      var payload = MM.leadPayload(A.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: people, dates: v.flex, notes: v.notes || '', consent: true },
@@ -2417,7 +2525,7 @@ index 009c74e..c7f7cb6 100644
      payload.type = 'review_request'; payload.status = 'submitted'; payload.hold = { requested: wantHold, hours: hold() };
      if (dep) payload.deposit = { perPersonUsd: per(), people: people };
      u.track('review_request', { stops: plan.places.length, days: plan.totals.days, hold: wantHold });
-@@ -93,15 +93,15 @@
+@@ -93,15 +96,16 @@
      function record(data, demo) {
        var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
          hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: !!demo, name: v.name, email: ct.email, whatsapp: ct.whatsapp, via: ct.via,
@@ -2429,15 +2537,16 @@ index 009c74e..c7f7cb6 100644
 -    fetch(C.LEAD_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
 -      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || (dep && !d.checkoutUrl)) throw new Error(d.error || ('HTTP ' + res.status)); return d; }); })
 +    u.timed(C.LEAD_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 30000)
-+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || (dep && !u.url(d.checkoutUrl, true))) throw new Error(d.error || ('HTTP ' + res.status)); return d; }); })
++      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || (dep && d.status !== 'submitted' && !u.url(d.checkoutUrl, true))) throw new Error(d.error || ('HTTP ' + res.status)); return d; }); })
        .then(function (data) {
          var rec = record(data, false); A._lastLead = payload;
 -        if (dep) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = data.checkoutUrl; }
-+        if (dep) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = u.url(data.checkoutUrl, true); }
++        // The backend decides: a `checkoutUrl` means it wants the deposit paid first (the trip isn't with the crew until it is); without one the trip is already with them.
++        if (u.url(data.checkoutUrl, true)) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = u.url(data.checkoutUrl, true); }
          else success(rec, payload);
        })
        .catch(function (x) { btn.disabled = false; btn.textContent = label; show((x && x.message && x.message.indexOf('HTTP') !== 0 ? x.message + ' ' : '') + (dep ? 'Nothing has been charged. ' : '') + 'Try again, or copy your plan and message the crew' + (C.CREW_EMAIL ? ' at ' + C.CREW_EMAIL : '') + '.'); });
-@@ -115,7 +115,7 @@
+@@ -115,7 +119,7 @@
        (rec.demo ? '<div class="demo">DEMO MODE: nothing was sent, nothing was charged and no beds were held. Set <code>LEAD_ENDPOINT</code> in config.js and this goes straight to the crew.</div>' : '') +
        '<div class="refbox"><span class="over">Your reference</span><b>' + esc(rec.ref) + '</b></div>' +
        (rec.hold ? '<p style="font-weight:600">' + (rec.demo ? 'In live mode we\'d hold your beds until ' : 'We\'re holding your beds until ') + '<b>' + fmtDT(rec.hold.until) + '</b> while a real person checks the trip.</p>' : '') + stepsHTML(rec.status) +
@@ -2446,7 +2555,7 @@ index 009c74e..c7f7cb6 100644
        '<button class="btn btn--sm btn--paper" data-act="copylead" type="button">Copy review card</button><button class="btn btn--sm btn--ghost" data-act="close" type="button">Done</button></div><input type="hidden" id="statusurl" value="' + esc(statusUrl) + '"></div>');
    }
  
-@@ -127,7 +127,7 @@
+@@ -127,7 +131,7 @@
      var enc = stateOf(x.link), st = enc ? MM.decodeState(enc) : null;
      if (!st || !st.items.length) { u.toast('That trip has no plan to open.'); return; }
      A.state = st; A.auto = false; A.focus = []; A.open = {}; A.tourPending = false;
@@ -2455,7 +2564,7 @@ index 009c74e..c7f7cb6 100644
      u.store('mm-revise', A.revise); u.persist(); u.track('revise_start', { status: x.status }); u.go('build', MM.encodeState(st));
    }
    function endRevise() { A.revise = null; u.store('mm-revise', null); }
-@@ -157,7 +157,7 @@
+@@ -157,7 +161,7 @@
      var R = A.revise, plan = u.getPlan(), btn = $('#rv-go', m), err = $('#reverr', m), label = btn.textContent;
      function show(msg) { err.style.display = 'grid'; $('span', err).textContent = msg; btn.disabled = false; btn.textContent = label; }
      btn.disabled = true; btn.textContent = 'Sending…'; err.style.display = 'none';
@@ -2464,7 +2573,7 @@ index 009c74e..c7f7cb6 100644
      var body = { ref: R.ref, k: R.k, note: note, changes: ch.slice(0, 8), trip: payload.trip, summary: payload.summary, crewText: payload.crewText, itinerary: payload.itinerary };
      function done(d) {
        var rec = subs().filter(function (x) { return x.ref === R.ref; })[0];
-@@ -167,7 +167,7 @@
+@@ -167,7 +171,7 @@
        u.toast(withdrawn ? 'Changes sent. The crew will check it again.' : d && d.unchanged ? 'That\'s the trip the crew already has.' : 'Changes sent. The crew will check this version.');
      }
      if (!reviseEndpoint()) return setTimeout(function () { done({}); }, 400);
@@ -2473,40 +2582,83 @@ index 009c74e..c7f7cb6 100644
        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || d.ok === false) { var e = new Error(d.error || ('Something went wrong (' + res.status + ')')); e.locked = !!d.locked; throw e; } return d; }); })
        .then(done)
        .catch(function (e) { show(e.message + (e.locked ? '' : ' Nothing was sent. Try again, or message the crew' + (C.CREW_EMAIL ? ' at ' + C.CREW_EMAIL : '') + '.')); });
-@@ -181,7 +181,7 @@
+@@ -180,21 +184,24 @@
+ 
    /* ---------- how to pay the rest ---------- */
    // options: [{ plan: 'now'|'later'|'instalments', count, amount, items: [{ amount, due }] }] from the status endpoint (the rules live on the server).
-   function optionCopy(o, startDays) {
+-  function optionCopy(o, startDays) {
 -    var first = o.items[0], last = o.items[o.items.length - 1];
++  // `withDep`: this trip took a deposit, so there is already a card on file; otherwise the card is collected as part of choosing.
++  function optionCopy(o, withDep) {
 +    var first = o.items[0];
      if (o.plan === 'now') return { t: 'Pay it all now', big: usd(o.amount), d: 'One payment today, and you\'re fully paid up.', go: 'Pay ' + usd(o.amount) + ' now' };
-     if (o.plan === 'later') return { t: 'Pay on ' + fmtDay(first.due), big: usd(o.amount), d: 'You\'re booked today. We charge the card you paid your deposit with, a week before you leave, and email you a reminder first.', go: 'Book my trip' };
-     return { t: 'Pay in ' + o.count + ' instalments', big: usd(first.amount) + ' today', d: 'Then ' + o.items.slice(1).map(function (i) { return usd(i.amount) + ' on ' + fmtDay(i.due); }).join(', ') + '. Charged to the card you paid your deposit with, and the last one lands before the final week.', go: 'Pay ' + usd(first.amount) + ' and book' };
-@@ -191,7 +191,7 @@
+-    if (o.plan === 'later') return { t: 'Pay on ' + fmtDay(first.due), big: usd(o.amount), d: 'You\'re booked today. We charge the card you paid your deposit with, a week before you leave, and email you a reminder first.', go: 'Book my trip' };
+-    return { t: 'Pay in ' + o.count + ' instalments', big: usd(first.amount) + ' today', d: 'Then ' + o.items.slice(1).map(function (i) { return usd(i.amount) + ' on ' + fmtDay(i.due); }).join(', ') + '. Charged to the card you paid your deposit with, and the last one lands before the final week.', go: 'Pay ' + usd(first.amount) + ' and book' };
++    if (o.plan === 'later') return withDep
++      ? { t: 'Pay on ' + fmtDay(first.due), big: usd(o.amount), d: 'You\'re booked today. We charge the card you paid your deposit with, a week before you leave, and email you a reminder first.', go: 'Book my trip' }
++      : { t: 'Pay on ' + fmtDay(first.due), big: usd(o.amount), d: 'You\'re booked once you\'ve added a card. Nothing is charged today: we charge it a week before you leave, and email you a reminder first.', go: 'Add a card and book' };
++    return { t: 'Pay in ' + o.count + ' instalments', big: usd(first.amount) + ' today', d: 'Then ' + o.items.slice(1).map(function (i) { return usd(i.amount) + ' on ' + fmtDay(i.due); }).join(', ') + '. Charged to the card you ' + (withDep ? 'paid your deposit with' : 'pay the first one with') + ', and the last one lands before the final week.', go: 'Pay ' + usd(first.amount) + ' and book' };
+   }
+   function payPickerHTML(x) {
+     var opts = (x.pay && x.pay.options) || [];
      if (!opts.length) return '';
-     var sel = x._sel || opts[0].plan;
-     return '<fieldset class="paypick" role="radiogroup" aria-label="How would you like to pay the rest?"><legend class="over">How would you like to pay the rest?</legend>' + opts.map(function (o) {
+-    var sel = x._sel || opts[0].plan;
+-    return '<fieldset class="paypick" role="radiogroup" aria-label="How would you like to pay the rest?"><legend class="over">How would you like to pay the rest?</legend>' + opts.map(function (o) {
 -      var c = optionCopy(o); return '<label class="payopt' + (sel === o.plan ? ' payopt--on' : '') + '"><input type="radio" name="payplan" value="' + o.plan + '"' + (sel === o.plan ? ' checked' : '') + '><span class="payopt__b"><b>' + esc(c.t) + '</b><em>' + esc(c.big) + '</em><small>' + esc(c.d) + '</small></span></label>';
-+      var c = optionCopy(o); return '<label class="payopt' + (sel === o.plan ? ' payopt--on' : '') + '"><input type="radio" name="payplan" value="' + esc(o.plan) + '"' + (sel === o.plan ? ' checked' : '') + '><span class="payopt__b"><b>' + esc(c.t) + '</b><em>' + esc(c.big) + '</em><small>' + esc(c.d) + '</small></span></label>';
++    var sel = x._sel || opts[0].plan, withDep = !!(x.deposit && x.deposit.amount), what = withDep ? 'How would you like to pay the rest?' : 'How would you like to pay?';
++    return '<fieldset class="paypick" role="radiogroup" aria-label="' + what + '"><legend class="over">' + what + '</legend>' + opts.map(function (o) {
++      var c = optionCopy(o, withDep); return '<label class="payopt' + (sel === o.plan ? ' payopt--on' : '') + '"><input type="radio" name="payplan" value="' + esc(o.plan) + '"' + (sel === o.plan ? ' checked' : '') + '><span class="payopt__b"><b>' + esc(c.t) + '</b><em>' + esc(c.big) + '</em><small>' + esc(c.d) + '</small></span></label>';
      }).join('') + '</fieldset>' +
-       '<p class="fine">Your ' + usd(x.deposit && x.deposit.amount) + ' deposit is already counted. Every payment is a secure Stripe payment, and you can pay any of them sooner.</p>' +
-       '<div class="qnav" style="margin-top:var(--s-3)"><button class="btn btn--pink btn--lg" data-act="paygo" type="button">' + esc(optionCopy(opts.filter(function (o) { return o.plan === sel; })[0] || opts[0]).go) + '</button></div>';
-@@ -213,12 +213,12 @@
-     try { var pg = (sessionStorage.getItem('mm-paying') || '').split(':'); if (pg[0] === r) wait = pg[1] || 'pending_payment'; } catch (x) { /* private mode */ }
+-      '<p class="fine">Your ' + usd(x.deposit && x.deposit.amount) + ' deposit is already counted. Every payment is a secure Stripe payment, and you can pay any of them sooner.</p>' +
+-      '<div class="qnav" style="margin-top:var(--s-3)"><button class="btn btn--pink btn--lg" data-act="paygo" type="button">' + esc(optionCopy(opts.filter(function (o) { return o.plan === sel; })[0] || opts[0]).go) + '</button></div>';
++      '<p class="fine">' + (withDep ? 'Your ' + usd(x.deposit.amount) + ' deposit is already counted. ' : '') + 'Every payment is a secure Stripe payment, and you can pay any of them sooner.</p>' +
++      '<div class="qnav" style="margin-top:var(--s-3)"><button class="btn btn--pink btn--lg" data-act="paygo" type="button">' + esc(optionCopy(opts.filter(function (o) { return o.plan === sel; })[0] || opts[0], withDep).go) + '</button></div>';
+   }
+   function scheduleHTML(x) {
+     var sch = x.schedule || []; if (!sch.length) return '';
+@@ -202,39 +209,42 @@
+     return '<div class="paysched"><div class="over">Your payments</div><ul>' + sch.map(function (i) {
+       var late = owing.some(function (o) { return o.n === i.n; });
+       return '<li class="' + (i.status === 'paid' ? 'paid' : late ? 'late' : '') + '"><span>' + esc(i.due === new Date().toISOString().slice(0, 10) ? 'Today' : fmtDay(i.due)) + '</span><b>' + usd(i.amount) + '</b><i>' + (i.status === 'paid' ? 'Paid' : late ? 'Needs paying' : 'Due') + '</i></li>';
+-    }).join('') + '</ul>' + (owing.length ? '<p class="warn warn--warn" style="margin:var(--s-3) 0"><i>!</i><span>A payment didn\'t go through. Pay it now to keep your beds, or we\'ll try the card again shortly.</span></p><button class="btn btn--pink" data-act="payowing" type="button">Pay ' + usd(owing[0].amount) + ' now</button>' : '<p class="fine">Payments after today come out of the card you paid your deposit with. We email a reminder a few days before each one.</p>') + '</div>';
++    }).join('') + '</ul>' + (owing.length ? '<p class="warn warn--warn" style="margin:var(--s-3) 0"><i>!</i><span>A payment didn\'t go through. Pay it now to keep your beds, or we\'ll try the card again shortly.</span></p><button class="btn btn--pink" data-act="payowing" type="button">Pay ' + usd(owing[0].amount) + ' now</button>' : '<p class="fine">Payments after today come out of the card ' + (x.deposit && x.deposit.amount ? 'you paid your deposit with' : 'you saved with us') + '. We email a reminder a few days before each one.</p>') + '</div>';
+   }
+ 
+   /* ---------- status page ---------- */
+   A.views.trip = function (restArg) {
+     var pr = parseRef(restArg), r = pr.ref, key = pr.k;
+-    var root = document.getElementById('app'), rec = subs().filter(function (s) { return s.ref === r; })[0], polls = 0, wait = null, busy = false;
++    var root = document.getElementById('app'), rec = subs().filter(function (s) { return s.ref === r; })[0], polls = 0, wait = null, waitPlan = '', busy = false, alive = true;
+     if (!key && rec && rec.key) key = rec.key;       // sent from this browser: it already has the guest's key
+-    try { var pg = (sessionStorage.getItem('mm-paying') || '').split(':'); if (pg[0] === r) wait = pg[1] || 'pending_payment'; } catch (x) { /* private mode */ }
++    try { var pg = (sessionStorage.getItem('mm-paying') || '').split(':'); if (pg[0] === r) { wait = pg[1] || 'pending_payment'; waitPlan = pg[2] || ''; } } catch (x) { /* private mode */ }
      var sel = null;
      function paint(x, note) {
 -      if (!x) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip status</span><h2 class="disp">' + (C.STATUS_ENDPOINT ? 'Looking up your trip…' : 'Can\'t find that trip.') + '</h2><p class="qhelp">' + (C.STATUS_ENDPOINT ? '' : 'We can only look up trips sent from this device. If you sent one, check your confirmation email for the reference.') + '</p><div class="qnav"><button class="btn" data-go="build" type="button">Open the builder</button></div></div></div></section>' + u.footer(); return; }
 +      if (!x) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip status</span><h1 class="disp">' + (C.STATUS_ENDPOINT ? 'Looking up your trip…' : 'Can\'t find that trip.') + '</h1><p class="qhelp">' + (C.STATUS_ENDPOINT ? '' : 'We can only look up trips sent from this device. If you sent one, check your confirmation email for the reference.') + '</p><div class="qnav"><button class="btn" data-go="build" type="button">Open the builder</button></div></div></div></section>' + u.footer(); return; }
        var waiting = wait && x.status === wait;
-       var titles = { pending_payment: waiting ? 'Confirming your payment…' : 'Deposit not paid yet.', submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: waiting ? 'Confirming your payment…' : 'Ready for your OK.', approved: deposit() || (x.deposit && x.deposit.amount) ? 'You\'re booked.' : 'You\'re all set.', declined: 'We need to tweak it.' };
+-      var titles = { pending_payment: waiting ? 'Confirming your payment…' : 'Deposit not paid yet.', submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: waiting ? 'Confirming your payment…' : 'Ready for your OK.', approved: deposit() || (x.deposit && x.deposit.amount) ? 'You\'re booked.' : 'You\'re all set.', declined: 'We need to tweak it.' };
        var demo = !C.LEAD_ENDPOINT || x.demo, dep = x.deposit || {}, bal = x.balance || {}, depMode = !!(dep.amount);
++      // booked through the pay-your-way screen (a plan and a schedule), with or without a deposit
++      var hasPlan = !!(x.plan || (x.schedule && x.schedule.length));
++      var titles = { pending_payment: waiting ? 'Confirming your payment…' : 'Deposit not paid yet.', submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: waiting ? (waitPlan === 'later' ? 'Saving your card…' : 'Confirming your payment…') : 'Ready for your OK.', approved: depMode || hasPlan ? 'You\'re booked.' : 'You\'re all set.', declined: 'We need to tweak it.' };
        x._sel = sel; var ready = x.status === 'ready' && !waiting;
 -      root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip ' + esc(x.ref) + '</span><h2 class="disp">' + (titles[x.status] || titles.submitted) + '</h2><p class="qhelp">' + esc(x.route) + ' · ' + x.days + ' days' + (x.start ? ' · from ' + esc(fmtDay(x.start)) : '') + '. Every trip is checked by a real person before you pay the rest.</p>' +
-+      root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip ' + esc(x.ref) + '</span><h1 class="disp">' + (titles[x.status] || titles.submitted) + '</h1><p class="qhelp">' + esc(x.route) + ' · ' + (Math.round(+x.days) || 0) + ' days' + (x.start ? ' · from ' + esc(fmtDay(x.start)) : '') + '. Every trip is checked by a real person before you pay the rest.</p>' +
-         (x.status === 'declined' || x.status === 'approved' ? '' : stepsHTML(x.status)) +
+-        (x.status === 'declined' || x.status === 'approved' ? '' : stepsHTML(x.status)) +
++      root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip ' + esc(x.ref) + '</span><h1 class="disp">' + (titles[x.status] || titles.submitted) + '</h1><p class="qhelp">' + esc(x.route) + ' · ' + (Math.round(+x.days) || 0) + ' days' + (x.start ? ' · from ' + esc(fmtDay(x.start)) : '') + '. Every trip is checked by a real person before you pay' + (depMode ? ' the rest' : ' anything') + '.</p>' +
++        (x.status === 'declined' || x.status === 'approved' ? '' : stepsHTML(x.status, depMode)) +
          (x.status === 'pending_payment' && !waiting ? '<div class="humans" style="margin-top:0"><b>Your trip is saved.</b> Pay the ' + usd(dep.amount) + ' deposit to send it to the crew and hold your beds.</div>' : '') +
          (dep.paid && x.status !== 'declined' && x.status !== 'approved' ? '<div class="humans" style="margin-top:0"><b>Deposit paid: ' + usd(dep.amount) + '.</b> It comes off your trip total.</div>' : '') +
-@@ -232,9 +232,10 @@
+         (x.status === 'declined' ? '<div class="humans" style="margin-top:0"><b>Don\'t worry.</b> A crew member couldn\'t make this exact trip work and wants to find you a better one. ' + (dep.refunded ? 'Your ' + usd(dep.amount) + ' deposit has been refunded to your card. ' : '') + (note ? '' : 'They\'ll be in touch.') + '</div>' : '') +
+         (note ? '<div class="humans" style="margin-top:0"><b>From the crew:</b> ' + esc(note) + '</div>' : '') +
+-        (ready && bal.amount ? '<div class="humans" style="margin-top:0;background:var(--lime)"><b>The rest to pay: ' + usd(bal.amount) + '.</b> ' + (depMode ? 'Your deposit is already taken off.' : 'Pay it to lock in your beds.') + '</div>' : '') +
++        (ready && bal.amount ? '<div class="humans" style="margin-top:0;background:var(--lime)"><b>' + (depMode ? 'The rest to pay: ' : 'To pay: ') + usd(bal.amount) + '.</b> ' + (depMode ? 'Your deposit is already taken off.' : x.pay ? 'Choose how to pay below to lock in your beds.' : 'Pay it to lock in your beds.') + '</div>' : '') +
+         (ready && x.pay ? payPickerHTML(x) : '') +
+-        (ready && !x.pay && depMode && !demo ? '<div class="humans" style="margin-top:0"><b>Choose how to pay.</b> Open this page from the button in the "your trip is checked" email we sent you, so we know it\'s you. Can\'t find it? Message the crew and we\'ll resend it.</div>' : '') +
++        (ready && !x.pay && (depMode || x.canPay) && !demo ? '<div class="humans" style="margin-top:0"><b>Choose how to pay.</b> Open this page from the button in the "your trip is checked" email we sent you, so we know it\'s you. Can\'t find it? Message the crew and we\'ll resend it.</div>' : '') +
+         (x.status === 'approved' && bal.paid ? '<div class="humans" style="margin-top:0;background:var(--lime)"><b>Paid in full.</b> Your beds are locked in. See you out there.</div>' : '') +
+-        (x.status === 'approved' && !bal.paid && depMode ? '<div class="humans" style="margin-top:0;background:var(--lime)"><b>You\'re booked.</b> Your beds are locked in. The rest is paid the way you chose, below.</div>' : '') +
++        (x.status === 'approved' && !bal.paid && (depMode || hasPlan) ? '<div class="humans" style="margin-top:0;background:var(--lime)"><b>You\'re booked.</b> Your beds are locked in. The rest is paid the way you chose, below.</div>' : '') +
          (x.status === 'approved' ? scheduleHTML(x) : '') +
          (x.hold && (x.status === 'submitted' || x.status === 'checking') ? '<div class="humans" style="background:var(--yellow)"><b>Beds held</b> until ' + fmtDT(x.hold.until) + ' while we check it.</div>' : '') +
          changeHTML(x, demo) +
@@ -2520,7 +2672,19 @@ index 009c74e..c7f7cb6 100644
          (ready && demo && !x.pay ? '<button class="btn btn--pink" data-act="approve" type="button">Approve plan</button>' : '') + '</div>' +
          '<p class="qerr warn" id="payerr" style="display:none;margin-top:var(--s-3)" role="alert"><i>!</i><span></span></p>' +
          (demo ? '<div class="demo" style="margin-top:var(--s-5)">DEMO: move it along to see each state. <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' + steps().map(function (s) { return '<button class="chip" data-act="demostatus" data-s="' + s.k + '" type="button">' + s.t + '</button>'; }).join('') + '</div></div>' : '') +
-@@ -264,10 +265,10 @@
+@@ -251,9 +261,10 @@
+     function fetchStatus() {
+       if (!C.STATUS_ENDPOINT) return;
+       fetch(C.STATUS_ENDPOINT + (C.STATUS_ENDPOINT.indexOf('?') > -1 ? '&' : '?') + 'ref=' + encodeURIComponent(r) + (key ? '&k=' + encodeURIComponent(key) : '')).then(function (res) { return res.json(); }).then(function (d) {
++        if (!alive) return;                     // they have moved on to another screen: don't draw this one over it
+         if (!d || !d.status) { var h = root.querySelector('.disp'); if (!rec && h) h.textContent = 'Can\'t find that trip.'; return; }
+         rec = Object.assign(rec || {}, { ref: r, key: key || (rec && rec.key) || '', canEdit: !!d.canEdit, people: d.people || (rec && rec.people) || 1, datesFlex: d.datesFlex || (rec && rec.datesFlex) || '', status: d.status, route: d.route || (rec && rec.route) || '', days: d.days || (rec && rec.days) || 0, start: d.start || '', link: d.link || (rec && rec.link) || '#/build',
+-          payLink: d.payLink || '', hold: d.hold ? { until: d.hold.until } : null, deposit: d.deposit || {}, balance: d.balance || {}, pay: d.pay || null, schedule: d.schedule || [], owing: d.owing || [], plan: d.plan || null, demo: false });
++          payLink: d.payLink || '', hold: d.hold ? { until: d.hold.until } : null, deposit: d.deposit || {}, balance: d.balance || {}, pay: d.pay || null, canPay: !!d.canPay, schedule: d.schedule || [], owing: d.owing || [], plan: d.plan || null, demo: false });
+         saveRec(Object.assign({}, rec, { pay: null, schedule: [], owing: [] }));
+         // Back from Stripe before the payment webhook has landed: check again for up to 30 seconds.
+         if (wait && d.status === wait && polls++ < 10) setTimeout(fetchStatus, 3000);
+@@ -264,10 +275,10 @@
      function perr(msg) { var e = $('#payerr', root); if (e) { e.style.display = msg ? 'grid' : 'none'; if (msg) $('span', e).textContent = msg; } }
      function choose(plan, label) {
        if (busy) return; busy = true; perr(''); var b = root.querySelector('[data-act="paygo"],[data-act="payowing"]'), txt = b && b.textContent; if (b) { b.disabled = true; b.textContent = 'One moment…'; }
@@ -2529,10 +2693,19 @@ index 009c74e..c7f7cb6 100644
          .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || d.ok === false) throw new Error(d.error || 'Something went wrong. Try again.'); return d; }); })
          .then(function (d) {
 -          if (d.checkoutUrl) { try { sessionStorage.setItem('mm-paying', r + ':' + (rec.status || 'ready')); } catch (x) { /* ignore */ } window.location.href = d.checkoutUrl; return; }
-+          if (d.checkoutUrl) { try { sessionStorage.setItem('mm-paying', r + ':' + (rec.status || 'ready')); } catch (x) { /* ignore */ } if (u.url(d.checkoutUrl, true)) { window.location.href = u.url(d.checkoutUrl, true); return; } throw new Error('Something went wrong. Try again.'); }
++          if (d.checkoutUrl) { try { sessionStorage.setItem('mm-paying', r + ':' + (rec.status || 'ready') + ':' + (/^[a-z]{1,12}$/.test(plan) ? plan : '')); } catch (x) { /* ignore */ } if (u.url(d.checkoutUrl, true)) { window.location.href = u.url(d.checkoutUrl, true); return; } throw new Error('Something went wrong. Try again.'); }
            busy = false; wait = null; fetchStatus(); u.toast(d.booked ? 'You\'re booked' : 'Done');
          }).catch(function (e) { busy = false; if (b) { b.disabled = false; b.textContent = txt; } perr(e.message); });
      }
+@@ -284,7 +295,7 @@
+       if (act === 'payowing') choose('due');
+     }
+     root.addEventListener('change', onChange); root.addEventListener('click', onClick);
+-    A._unwatch = function () { root.removeEventListener('change', onChange); root.removeEventListener('click', onClick); };
++    A._unwatch = function () { alive = false; root.removeEventListener('change', onChange); root.removeEventListener('click', onClick); };
+   };
+ 
+   A.review = { open: open };
 diff --git a/public/trip-builder/ui-search.js b/public/trip-builder/ui-search.js
 new file mode 100644
 index 0000000..058febf

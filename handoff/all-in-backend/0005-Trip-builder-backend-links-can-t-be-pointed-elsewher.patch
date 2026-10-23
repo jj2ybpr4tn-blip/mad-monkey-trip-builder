@@ -1,7 +1,7 @@
 From 61dee09df20faa4063d91fc4c3a0dd6af6dda4be Mon Sep 17 00:00:00 2001
 From: Ewan McIntyre <ewan3568@me.com>
 Date: Fri, 23 Oct 2026 15:42:32 +0800
-Subject: [PATCH 5/6] Trip builder backend: links can't be pointed elsewhere,
+Subject: [PATCH 5/7] Trip builder backend: links can't be pointed elsewhere,
  log in by email, later stages
 
 Security (found in a review of the trip builder):
