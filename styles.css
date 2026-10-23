@@ -859,7 +859,7 @@ picture{display:contents}
 .paypick{border:0;margin:var(--s-4) 0 0;padding:0;display:grid;gap:var(--s-3)} .paypick legend{padding:0;margin-bottom:var(--s-2)}
 .payopt{display:flex;gap:var(--s-3);align-items:flex-start;border:var(--bw) solid var(--black);background:var(--paper);padding:var(--s-3) var(--s-4);cursor:pointer;box-shadow:4px 4px 0 var(--black);text-align:left}
 .payopt:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--black)} .payopt:focus-within{outline:var(--bw) solid var(--blue);outline-offset:2px}
-.payopt--on{background:var(--lime)} .payopt input{flex:0 0 auto;margin-top:6px;width:20px;height:20px;accent-color:var(--black)}
+.payopt--on{background:var(--lime)} .payopt input{flex:0 0 auto;margin-top:4px;width:24px;height:24px;accent-color:var(--black)}
 .payopt__b{display:grid;gap:3px;min-width:0} .payopt__b b{font-weight:900;text-transform:uppercase;letter-spacing:.02em;font-size:15px} .payopt__b em{font-style:normal;font-weight:900;font-size:24px;line-height:1.1}
 .payopt__b small{font-size:13px;font-weight:500;line-height:1.45;color:var(--ink-dim)} .payopt--on small{color:#2a2a22}
 .paysched{margin:var(--s-4) 0 0} .paysched ul{list-style:none;margin:var(--s-2) 0 var(--s-3);padding:0;border:var(--bw) solid var(--black);background:var(--paper)}

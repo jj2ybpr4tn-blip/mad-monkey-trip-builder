@@ -53,7 +53,7 @@
 .cstop__b>p{font-size:12.5px;font-weight:500;color:#333;margin:2px 0 8px}
 .cstop ul{list-style:none;margin:0;padding:0} .cstop li{display:flex;justify-content:space-between;gap:14px;font-size:14px;font-weight:500;padding:4px 0}
 .cstop li>span:last-child{text-align:right;white-space:nowrap} .cstop li i{display:block;font-style:normal;font-size:11.5px;color:var(--ink-dim)}
-.cstop li.none{color:#777} .cstop li em{font-style:normal;font-weight:900;font-size:10.5px;background:var(--yellow);padding:0 5px;border:2px solid var(--black);text-transform:uppercase}
+.cstop li.none{color:#5c5c5c} .cstop li em{font-style:normal;font-weight:900;font-size:10.5px;background:var(--yellow);padding:0 5px;border:2px solid var(--black);text-transform:uppercase}
 .cstop__next{margin-top:8px;padding-top:8px;border-top:2px dashed var(--black);font-size:13px;font-weight:500}
 
 .cmoney{width:100%;border-collapse:collapse;border:var(--bw) solid var(--black);background:var(--paper);margin:var(--s-4) 0 0;font-size:14px}
