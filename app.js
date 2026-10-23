@@ -827,10 +827,11 @@
   }
   /* ---------- the search box (ui-search.js): what happens when someone picks a result ----------
      mode 'start' is the home page (it begins a new trip); 'add' is the builder (it adds to this one, or begins one if the sheet is blank). */
-  // Where a new place fits the journey best: the gap where it adds the least travel (1 = before the first stop).
+  // Where a new place fits the journey best: the gap where it adds the least travel (1 = before the first stop). It is tried from the end backwards and an
+  // earlier gap has to save a quarter of an hour to win, so a tie (one stop plus Hoi An costs the same either way round) puts the new place after, not before, where you land.
   function bestPosition(id) {
     plan = MM.plan(app.state); var n = app.state.items.length, best = n + 1, bh = Infinity;
-    for (var i = 0; i <= n; i++) { var d = detour(nearFor(i), id); if (d && d.h < bh - 0.01) { bh = d.h; best = i + 1; } }
+    for (var i = n; i >= 0; i--) { var d = detour(nearFor(i), id); if (d && d.h < bh - 0.25) { bh = d.h; best = i + 1; } }
     return best;
   }
   function searchPick(res, mode) {
