@@ -94,9 +94,9 @@
     u.track('review_request', { stops: plan.places.length, days: plan.totals.days, hold: wantHold });
     var btn = $('button[type=submit]', f), label = btn.textContent; btn.disabled = true; btn.textContent = dep && C.LEAD_ENDPOINT ? 'Opening secure payment…' : 'Sending…';
     function record(data, demo) {
-      var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
+      var r = (data && data.ref) || ref(), now = new Date(), had = subs().filter(function (x) { return x.ref === r; })[0], rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
         hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: !!demo, name: v.name, email: ct.email, whatsapp: ct.whatsapp, via: ct.via,
-        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || '', people: people, datesFlex: v.flex || '', stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null };
+        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || (had && had.key) || '', people: people, datesFlex: v.flex || '', stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null };
       saveRec(rec); return rec;
     }
     if (!C.LEAD_ENDPOINT) return setTimeout(function () { A._lastLead = payload; success(record(null, true), payload); }, 400);

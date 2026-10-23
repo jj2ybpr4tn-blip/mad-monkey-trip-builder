@@ -50,6 +50,15 @@
       expect('the sent trip is remembered with its key, no deposit and the status the backend gave', rec.ref === 'MM-FREE22' && rec.key === 'guestkey1' && !rec.deposit && rec.status === 'submitted', JSON.stringify(rec));
       var close = document.querySelector('#modal-root [data-act="close"]'); if (close) close.click(); await wait(300);
 
+      // sending it again (a retry after a dropped connection): the backend says it already has it and doesn't repeat the key, so the one this browser has is kept
+      var again = document.querySelector('[data-act="lead"]'); if (again) again.click(); await wait(500);
+      var f1 = document.querySelector('#leadf'); f1.querySelector('input[name=consent]').checked = true;
+      answer = { ref: 'MM-FREE22', status: 'submitted', duplicate: true, deposit: { amount: 0, perPerson: 0, people: 1 }, hold: { until: '2027-02-28T10:00:00Z' } };
+      f1.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); await wait(900);
+      var rec2 = (JSON.parse(localStorage.getItem('mm-subs') || '[]')[0]) || {};
+      expect('sending the same trip again keeps the key this browser already has (the answer does not repeat it)', rec2.ref === 'MM-FREE22' && rec2.key === 'guestkey1', JSON.stringify(rec2));
+      var close1 = document.querySelector('#modal-root [data-act="close"]'); if (close1) close1.click(); await wait(300);
+
       // an older backend that still wants a deposit answers with a payment link: the page goes and pays it rather than saying "sent"
       location.hash = '#/build/i=s.hanoi.4~s.hoi-an.4&d=2027-03-01&t=' + (seq++); await wait(1200);
       var open2 = document.querySelector('[data-act="lead"]'); if (open2) open2.click(); await wait(500);
