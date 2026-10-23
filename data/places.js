@@ -26,9 +26,32 @@
     PH: { n: 'Philippines', col: 'blue',   visa: 'Visa-free for most Western passports (30 days). Check yours.' }
   };
 
+  // Other things people type when they mean a place (search.js finds hostels, edit.js understands them). Several places may share a word ("bali").
+  MM.PLACE_TERMS = {
+    bangkok: ['bkk', 'khao san', 'krung thep'], 'chiang-mai': ['chiangmai', 'cnx', 'doi suthep'], pai: ['mae hong son'], phuket: ['phi phi', 'patong', 'bangla road', 'kata', 'karon'],
+    'luang-prabang': ['luangprabang', 'lpb', 'kuang si', 'kuang si falls'], 'vang-vieng': ['vangvieng', 'tubing', 'blue lagoon'],
+    hanoi: ['ha noi', 'old quarter', 'train street', 'ha long', 'halong', 'lan ha', 'cat ba', 'ha giang', 'ninh binh'], 'hoi-an': ['hoian', 'da nang', 'danang', 'ancient town'],
+    saigon: ['ho chi minh', 'ho chi minh city', 'hcmc', 'hcm city', 'sai gon', 'mekong'], 'phnom-penh': ['phnompenh', 'pnh', 'killing fields'], 'siem-reap': ['siemreap', 'angkor', 'angkor wat', 'pub street'],
+    'koh-rong': ['kohrong', 'sihanoukville', 'koh rong samloem'], 'koh-sdach': ['kohsdach'], kampot: ['kep', 'bokor'],
+    uluwatu: ['bali', 'bingin', 'padang padang', 'bukit'], 'nusa-lembongan': ['nusa penida', 'penida', 'lembongan', 'bali'], 'gili-trawangan': ['gili t', 'gili', 'gilis'], 'kuta-lombok': ['lombok', 'rinjani', 'mandalika'],
+    manila: ['intramuros', 'binondo'], 'nacpan-beach': ['el nido', 'elnido', 'palawan', 'nacpan'], panglao: ['bohol', 'balicasag', 'chocolate hills'], dumaguete: ['apo island', 'negros'], siargao: ['cloud 9', 'general luna']
+  };
+  MM.COUNTRY_TERMS = { TH: ['thai', 'siam'], LA: ['lao'], VN: ['viet nam'], KH: ['khmer'], ID: ['indo'], PH: ['pinoy', 'filipino', 'phils'] };
+
+  // "Opens 1 Nov." is only true until the day it opens. A hostel with an `opens` date keeps its hook without that sentence, and the sentence is added
+  // while the date is still ahead (placeHook(place) for today, placeHook(place, '2026-11-01') for any other day), so nobody has to remember to remove it.
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  MM.placeHook = function (p, today) {
+    var t = today || new Date().toISOString().slice(0, 10);
+    return p.opens && p.opens > t ? p._hook + ' Opens ' + (+p.opens.slice(8, 10)) + ' ' + MON[+p.opens.slice(5, 7) - 1] + '.' : p._hook;
+  };
   function P(id, n, c, ll, bed, sug, min, tags, hook, ap, next, seas, extra) {
     var o = { id: id, n: n, c: c, ll: ll, bed: bed, sug: sug, min: min, tags: tags.split(' '), hook: hook, ap: ap || [], next: next ? next.split(' ') : [], seas: seas };
     if (extra) for (var k in extra) o[k] = extra[k];
+    if (o.opens) {
+      Object.defineProperty(o, '_hook', { value: hook.replace(/\s*Opens [^.]*\.\s*$/, ''), enumerable: false });
+      Object.defineProperty(o, 'hook', { enumerable: true, configurable: true, get: function () { return MM.placeHook(o); } });
+    }
     MM.PLACES[id] = o; MM.PLACE_ORDER.push(id);
   }
   MM.PLACES = {}; MM.PLACE_ORDER = [];

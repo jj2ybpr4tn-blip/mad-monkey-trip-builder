@@ -5,7 +5,7 @@ export default class Stripe {
     const id = "cs_test_" + (++n);
     const li = (p.line_items as { price_data: { unit_amount: number }; quantity: number }[])[0];
     const g = globalThis as unknown as { __checkouts?: unknown[] };
-    (g.__checkouts ??= []).push({ id, amount: li.price_data.unit_amount / 100, qty: li.quantity, meta: p.metadata, customer: p.customer, email: p.customer_email, create: p.customer_creation, setup: (p.payment_intent_data as Record<string, unknown> | undefined)?.setup_future_usage });
+    (g.__checkouts ??= []).push({ id, amount: li.price_data.unit_amount / 100, qty: li.quantity, meta: p.metadata, customer: p.customer, email: p.customer_email, success: p.success_url, create: p.customer_creation, setup: (p.payment_intent_data as Record<string, unknown> | undefined)?.setup_future_usage });
     return { id, url: (Deno.env.get("CHECKOUT_BASE") ?? "https://checkout.stripe.test/pay/") + id };
   } } };
   paymentIntents = {

@@ -44,7 +44,15 @@ const hasFile = (rel) => fs.existsSync(path.join(ROOT, rel));
 function hostelPhoto(id) { return hasFile(`assets/photos/hostel/${id}.jpg`) ? href(`/assets/photos/hostel/${id}.jpg`) : null; }
 function galleryPhotos(id) { const out = []; for (let i = 0; i < 8; i++) if (hasFile(`assets/photos/gallery/${id}-${i}.jpg`)) out.push(href(`/assets/photos/gallery/${id}-${i}.jpg`)); return out; }
 function actPhoto(a) { return a.slug && hasFile(`assets/photos/tour/${a.slug}.jpg`) ? href(`/assets/photos/tour/${a.slug}.jpg`) : null; }
-const img = (src, alt, cls) => src ? `<img${cls ? ` class="${cls}"` : ''} src="${esc(src)}" alt="${esc(alt)}" loading="lazy" decoding="async" width="640" height="420">` : '';
+// A page loads the small WebP copy (scripts/make-thumbs.mjs) when there is one, and the JPEG in browsers that can't show WebP.
+// size: 'm' (720px wide, heroes and cards) or 's' (320px wide, small thumbnails and the strip of extra photos)
+function img(src, alt, cls, size = 'm') {
+  if (!src) return '';
+  const site = BASE && src.startsWith(BASE + '/') ? src.slice(BASE.length) : src;
+  const web = site.replace(/^\/assets\/photos\//, `/assets/photos/${size}/`).replace(/\.jpe?g$/i, '.webp');
+  const tag = `<img${cls ? ` class="${cls}"` : ''} src="${esc(src)}" alt="${esc(alt)}" loading="lazy" decoding="async" width="640" height="420">`;
+  return web !== site && hasFile(web.slice(1)) ? `<picture><source type="image/webp" srcset="${esc(BASE + web)}">${tag}</picture>` : tag;
+}
 
 /* ---------- the page shell ---------- */
 function shell({ path: p, title, desc, h1, crumbs, body, ld, image }) {
@@ -194,7 +202,7 @@ routeList.forEach(([a, b]) => {
   if (!opts.length) return;
   const pkgs = MM.LEG_PKGS[a + '|' + b] || MM.LEG_PKGS[b + '|' + a], tix = MM.TICKETS[a + '|' + b] || MM.TICKETS[b + '|' + a];
   const crossing = A.c !== B.c, bordNote = (() => { const s = [A.c, B.c].sort().join('-'); return s === 'KH-TH' && !MM.BORDERS['TH-KH'].open ? MM.BORDERS['TH-KH'].note : ''; })();
-  const st = stateOf([[a, A.sug], [b, B.sug]]), pl = MM.plan(st);
+  const st = stateOf([[a, A.sug], [b, B.sug]]);
   const faq = [
     [`How do I get from ${A.n} to ${B.n}?`, `${best.label}: ${best.modeLabel.toLowerCase()}, about ${U.hoursLabel(best.h)} door to door and roughly ${usd(best.u)}. ${opts.length > 1 ? 'There are other options below, including the cheapest and the fastest.' : 'It is the only sensible way to do it.'}`],
     [`How long is the journey from ${A.n} to ${B.n}?`, `${opts.map((o) => `${o.label.toLowerCase()} is about ${U.hoursLabel(o.h)}`).join('; ')}.`],
@@ -225,8 +233,8 @@ listHostels().forEach((id) => {
   const ld = [{ '@context': 'https://schema.org', '@type': 'Hostel', name: `Mad Monkey ${p.n}`, description: p.hook, brand: { '@type': 'Brand', name: 'Mad Monkey' }, image: hostelPhoto(id) || undefined, areaServed: p.n + ', ' + C[p.c].n }, faqLd(faq)];
   const body = `<header class="seo__hd"><span class="doc__tag">${esc(C[p.c].n)}</span><h1 class="disp">Mad Monkey ${esc(p.n)}</h1><p class="seo__lede">${esc(p.hook)}</p><div class="seo__facts"><div><b>${usd(p.bed)}</b><span>dorm from</span></div><div><b>${p.sug}</b><span>nights is typical</span></div><div><b>${acts.length}</b><span>things to do</span></div></div>${cta(st, `Add ${p.n} to a trip`)}</header>
 ${hostelPhoto(id) ? `<div class="seo__hero">${img(hostelPhoto(id), `Mad Monkey ${p.n}`)}</div>` : ''}
-${gal.length > 1 ? `<div class="seo__gal">${gal.slice(1, 6).map((g, i) => img(g, `Inside Mad Monkey ${p.n}, photo ${i + 2}`)).join('')}</div>` : ''}
-<section class="seo__sec"><h2 class="disp">Things to do in ${esc(p.n)}</h2>${dm ? `<div class="seo__dm"><span class="doc__tag">Don't miss</span><b>${esc(dm.act.n)}</b><p>${esc(dm.pitch)}</p></div>` : ''}<ul class="seo__acts2">${acts.map((a) => `<li>${actPhoto(a) ? img(actPhoto(a), a.n) : ''}<div><b>${esc(a.n)}</b><span>${a.usd == null ? 'Pay on the day' : (a.est ? '~' : 'from ') + usd(a.usd)}${a.star ? ' · top pick' : ''}</span>${a.slug ? `<a href="https://madmonkeyhostels.com/tours-events/${esc(a.slug)}" rel="noopener">Book on madmonkeyhostels.com</a>` : ''}</div></li>`).join('')}</ul></section>
+${gal.length > 1 ? `<div class="seo__gal">${gal.slice(1, 6).map((g, i) => img(g, `Inside Mad Monkey ${p.n}, photo ${i + 2}`, '', 's')).join('')}</div>` : ''}
+<section class="seo__sec"><h2 class="disp">Things to do in ${esc(p.n)}</h2>${dm ? `<div class="seo__dm"><span class="doc__tag">Don't miss</span><b>${esc(dm.act.n)}</b><p>${esc(dm.pitch)}</p></div>` : ''}<ul class="seo__acts2">${acts.map((a) => `<li>${actPhoto(a) ? img(actPhoto(a), a.n, '', 's') : ''}<div><b>${esc(a.n)}</b><span>${a.usd == null ? 'Pay on the day' : (a.est ? '~' : 'from ') + usd(a.usd)}${a.star ? ' · top pick' : ''}</span>${a.slug ? `<a href="https://madmonkeyhostels.com/tours-events/${esc(a.slug)}" rel="noopener">Book on madmonkeyhostels.com</a>` : ''}</div></li>`).join('')}</ul></section>
 <section class="seo__sec"><h2 class="disp">When to go</h2><p>${esc(m.text)}</p>${seasonBars([id])}</section>
 ${nextTo.length ? `<section class="seo__sec"><h2 class="disp">Where to go next</h2><ul class="seo__links">${nextTo.map((n) => { const r = MM.route(id, n, 'balanced'); return `<li><a href="${href('/routes/' + routeSlug(id, n) + '/')}">${esc(p.n)} to ${esc(P[n].n)}</a>${r ? ` <span>${U.hoursLabel(r.h)} · about ${usd(r.u)}</span>` : ''}</li>`; }).join('')}</ul></section>` : ''}
 <section class="seo__sec"><h2 class="disp">Local knowledge</h2><ul>${(MM.GUIDE.places[id] || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul><p class="fine"><a href="${href('/guides/' + C[p.c].n.toLowerCase() + '/')}">The full ${esc(C[p.c].n)} guide</a></p></section>

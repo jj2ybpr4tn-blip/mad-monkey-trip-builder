@@ -18,17 +18,19 @@
 
   function endpoint() { return C.CREW_ENDPOINT || (C.STATUS_ENDPOINT ? C.STATUS_ENDPOINT.replace(/trip-builder-status/, 'trip-builder-admin') : ''); }
   function usd(n) { return '$' + Math.round(+n || 0).toLocaleString('en-US'); }
+  function num(v) { var n = +v; return isFinite(n) ? n : 0; }                           // a number, whatever the server sent: nothing in a number can be markup
+  function link(l, text) { var h = u.url(l); return h ? ' · <a href="' + esc(h) + '">' + text + '</a>' : ''; }   // only http(s) and #/ links are links
   function day(iso, year) { var d = U.parseDate(iso); return d ? U.fmtDate(d) + (year ? ' ' + d.getUTCFullYear() : '') : ''; }
   function when(ts) { var d = ts ? new Date(ts) : null; return d && !isNaN(d) ? d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : ''; }
   function firstName(n) { return String(n || '').trim().split(/\s+/)[0] || 'them'; }
   function sess() { try { return JSON.parse(sessionStorage.getItem(SKEY)); } catch (e) { return null; } }
   function setSess(s) { try { if (s) sessionStorage.setItem(SKEY, JSON.stringify(s)); else sessionStorage.removeItem(SKEY); } catch (e) { /* private mode */ } }
   function parse(rest) {
-    var p = decodeURIComponent(rest || '').split('?'), q = {}; (p[1] || '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); });
+    var p = u.dec(rest || '').split('?'), q = {}; (p[1] || '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = u.dec(kv.slice(i + 1)); });
     return { ref: (p[0] || '').toUpperCase(), k: q.k || '', doo: q.do || '' };
   }
   function call(body) {
-    return fetch(endpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) {
+    return u.timed(endpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 30000).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
         if (!r.ok || d.ok === false) { var e = new Error(d.error || ('Something went wrong (' + r.status + ')')); e.status = r.status; throw e; }
         return d;
@@ -46,15 +48,15 @@
   A.views.crew = function (rest) {
     var root = document.getElementById('app'), q = parse(rest);
     removeBar();
-    if (!endpoint()) return note(root, '<h2 class="disp">Not switched on here.</h2><p class="qhelp">Crew review needs <code>CREW_ENDPOINT</code> in config.js.</p>');
-    if (!q.ref || !q.k) return note(root, '<h2 class="disp">That link looks cut off.</h2><p class="qhelp">Open the trip from a button in the new-trip email, or from Admin &gt; Trip builder.</p>');
-    note(root, '<h2 class="disp">Opening ' + esc(q.ref) + '…</h2>');
+    if (!endpoint()) return note(root, '<h1 class="disp">Not switched on here.</h1><p class="qhelp">Crew review needs <code>CREW_ENDPOINT</code> in config.js.</p>');
+    if (!q.ref || !q.k) return note(root, '<h1 class="disp">That link looks cut off.</h1><p class="qhelp">Open the trip from a button in the new-trip email, or from Admin &gt; Trip builder.</p>');
+    note(root, '<h1 class="disp">Opening ' + esc(q.ref) + '…</h1>');
     load(root, q, q.doo, '');
   };
 
   function load(root, q, open, banner) {
     call({ action: 'view', ref: q.ref, key: q.k }).then(function (d) { paint(root, q, d, open, banner); }).catch(function (e) {
-      note(root, '<h2 class="disp">' + (e.status === 401 ? 'That link has run out.' : 'Couldn\'t open that trip.') + '</h2><p class="qhelp">' + esc(e.message) + '</p>');
+      note(root, '<h1 class="disp">' + (e.status === 401 ? 'That link has run out.' : 'Couldn\'t open that trip.') + '</h1><p class="qhelp">' + esc(e.message) + '</p>');
     });
   }
 
@@ -64,8 +66,8 @@
     setSess({ ref: r.ref, k: q.k, name: r.name, first: first, people: r.party_size, dates: r.dates_flex, from: r.from_place, notes: r.notes, editing: false, rev: d.rev });
 
     var h = '<section class="quiz crew"><div class="wrap">' +
-      '<div class="crew__top"><span class="over">Crew review · ' + esc(r.ref) + '</span><h2 class="disp">' + esc(r.name) + '\'s trip</h2>' +
-      '<p class="crew__sub">' + esc(r.route || '') + ' · ' + (r.days || 0) + ' days' + (r.start_date ? ' · from ' + esc(day(r.start_date, true)) : '') + ' <span class="cpill cpill--' + st[1] + '">' + esc(st[0]) + '</span>' + (rev ? ' <span class="cpill cpill--edit">Edited by the crew</span>' : '') + (gr ? ' <span class="cpill cpill--upd">Changed by ' + esc(first) + ' · v' + gr.rev + '</span>' : '') + '</p></div>' +
+      '<div class="crew__top"><span class="over">Crew review · ' + esc(r.ref) + '</span><h1 class="disp">' + esc(r.name) + '\'s trip</h1>' +
+      '<p class="crew__sub">' + esc(r.route || '') + ' · ' + num(r.days) + ' days' + (r.start_date ? ' · from ' + esc(day(r.start_date, true)) : '') + ' <span class="cpill cpill--' + st[1] + '">' + esc(st[0]) + '</span>' + (rev ? ' <span class="cpill cpill--edit">Edited by the crew</span>' : '') + (gr ? ' <span class="cpill cpill--upd">Changed by ' + esc(first) + ' · v' + num(gr.rev) + '</span>' : '') + '</p></div>' +
       (gr ? guestChangeHTML(gr, first) : '') +
       (banner ? '<div class="cbanner cbanner--ok" role="status">' + banner + '</div>' : '') +
       (!can ? '<div class="cbanner">' + (r.status === 'approved' ? 'This trip is booked. Nothing left to action.' : r.status === 'declined' ? 'This trip was declined' + (r.refunded_at ? ' and the deposit refunded' : '') + '.' : r.status === 'pending_payment' ? 'The deposit isn\'t paid yet, so there is nothing to action.' : 'Nothing to action.') + '</div>' : '') +
@@ -95,19 +97,26 @@
   }
 
   /* ---------- the trip itself ---------- */
+  function stageHTML(g, r) {
+    var a = g.arrival, f = g.from;
+    return '<div class="cbox cbox--stage"><h3>Stage ' + num(g.n) + ' of their journey</h3><p><b>' + esc(firstName(r.name)) + ' is already travelling.</b> Only the new stops below need checking.</p>' +
+      (f ? '<p>Starting from <b>' + esc(f.name) + '</b>' + (a ? ': ' + esc(a.mode) + ' to ' + esc(a.to) + ' · ' + esc(a.hours) + ' · ' + usd(a.usd) + (a.overnight ? ' · overnight' : '') : '') + '.</p>' : '') +
+      (g.been && g.been.length ? '<p>Already been to ' + g.been.map(function (x) { return esc(x); }).join(', ') + '. None of these were suggested.</p>' : '') +
+      (g.parent ? '<p class="cdim">The earlier stage is ' + esc(g.parent) + ' (find it in Admin &gt; Trip builder).</p>' : '') + '</div>';
+  }
   function tripHTML(s, suggested, r) {
-    var b = s.budget, h = '';
-    h += '<div class="cglance"><div><span>Length</span><b>' + s.days + ' days</b><i>' + s.nights + ' nights</i></div><div><span>Stops</span><b>' + s.stopCount + '</b><i>' + esc((s.countries || []).join(' + ')) + '</i></div>' +
+    var b = s.budget, h = s.stage ? stageHTML(s.stage, r) : '';
+    h += '<div class="cglance"><div><span>Length</span><b>' + num(s.days) + ' days</b><i>' + num(s.nights) + ' nights</i></div><div><span>Stops</span><b>' + num(s.stopCount) + '</b><i>' + esc((s.countries || []).join(' + ')) + '</i></div>' +
       '<div><span>Dates</span><b>' + (s.start ? esc(day(s.start)) : 'Not set') + '</b><i>' + (s.start ? 'to ' + esc(day(s.end, true)) : esc(s.datesLabel || 'Needs dates')) + '</i></div>' +
-      '<div><span>Estimate</span><b>' + usd(b.total) + '</b><i>each' + (s.people > 1 ? ' · ' + usd(b.totalAllPeople) + ' for ' + s.people : '') + '</i></div></div>';
-    if (s.flags && s.flags.length) h += '<div class="cbox cbox--flags"><h3>Heads up before you decide</h3><ul>' + s.flags.map(function (f) { return '<li class="' + f.level + '">' + (f.level === 'warn' ? '<b>!</b> ' : '') + esc(f.text) + '</li>'; }).join('') + '</ul></div>';
+      '<div><span>Estimate</span><b>' + usd(b.total) + '</b><i>each' + (num(s.people) > 1 ? ' · ' + usd(b.totalAllPeople) + ' for ' + num(s.people) : '') + '</i></div></div>';
+    if (s.flags && s.flags.length) h += '<div class="cbox cbox--flags"><h3>Heads up before you decide</h3><ul>' + s.flags.map(function (f) { var warn = f.level === 'warn'; return '<li class="' + (warn ? 'warn' : 'info') + '">' + (warn ? '<b>!</b> ' : '') + esc(f.text) + '</li>'; }).join('') + '</ul></div>';
     h += '<h3 class="crew__h">The trip, stop by stop</h3>';
     h += s.stops.map(function (p, i) {
       var date = p.from ? day(p.from) + ' to ' + day(p.to) : '';
-      var head = p.kind === 'allin' ? esc(p.name) + ' <small>· ' + p.days + ' days · ' + usd(p.usd) + '</small>' : esc(p.name) + (p.country ? ' <small>· ' + esc(p.country) + '</small>' : '');
-      var sub = p.kind === 'allin' ? esc(p.route || '') : p.nights + (p.nights === 1 ? ' night' : ' nights') + (date ? ' · ' + esc(date) : '') + ' · bed from ' + usd(p.bedUsd) + ' a night' + (p.partner ? ' (partner hostel, estimate)' : '');
+      var head = p.kind === 'allin' ? esc(p.name) + ' <small>· ' + num(p.days) + ' days · ' + usd(p.usd) + '</small>' : esc(p.name) + (p.country ? ' <small>· ' + esc(p.country) + '</small>' : '');
+      var sub = p.kind === 'allin' ? esc(p.route || '') : num(p.nights) + (num(p.nights) === 1 ? ' night' : ' nights') + (date ? ' · ' + esc(date) : '') + ' · bed from ' + usd(p.bedUsd) + ' a night' + (p.partner ? ' (partner hostel, estimate)' : '');
       var tours = (p.tours || []).map(function (t) {
-        return '<li><span>' + (t.fits ? '' : '<em>No room</em> ') + esc(t.name) + '</span><span>' + (t.payOnDay ? 'pay on the day' : usd(t.usd) + (t.est ? ' est.' : '')) + (t.date ? '<i>' + esc(day(t.date)) + '</i>' : t.day ? '<i>day ' + t.day + '</i>' : '') + '</span></li>';
+        return '<li><span>' + (t.fits ? '' : '<em>No room</em> ') + esc(t.name) + '</span><span>' + (t.payOnDay ? 'pay on the day' : usd(t.usd) + (t.est ? ' est.' : '')) + (t.date ? '<i>' + esc(day(t.date)) + '</i>' : t.day ? '<i>day ' + num(t.day) + '</i>' : '') + '</span></li>';
       }).join('') || (p.kind === 'allin' ? '' : '<li class="none"><span>No tours picked</span></li>');
       var next = p.next ? '<div class="cstop__next"><b>Then</b> ' + esc(p.next.mode) + ' to ' + esc(p.next.to) + ' · ' + esc(p.next.hours) + ' · ' + usd(p.next.usd) + (p.next.overnight ? ' · overnight' : '') + (p.next.date ? ' · ' + esc(day(p.next.date)) : '') + '</div>' : '';
       return '<article class="cstop"><div class="cstop__n">' + (i + 1) + '</div><div class="cstop__b"><h4>' + head + '</h4><p>' + sub + '</p><ul>' + tours + '</ul>' + next + '</div></article>';
@@ -116,9 +125,9 @@
     h += '<table class="cmoney"><caption>The money · each person, US dollars</caption>' + row('Beds', usd(b.beds)) + row('Tours', usd(b.tours)) + row('Getting around', usd(b.transport)) + (b.allIn ? row('ALL IN trip', usd(b.allIn)) : '') +
       (b.squadDiscount ? row('Squad discount', '-' + usd(-b.squadDiscount)) : '') + row('Trip cost', usd(b.tripCost), true) +
       row('Their spending money', usd(b.spendFund), false, usd(b.spendPerDay) + ' a day for food and fun. Theirs to spend, not charged by us.') + row('Estimated total', usd(b.total), true) +
-      (s.people > 1 ? row('For all ' + s.people, usd(b.tripCostAllPeople) + ' trip cost · ' + usd(b.totalAllPeople) + ' with spending money', true) : '') +
+      (num(s.people) > 1 ? row('For all ' + num(s.people), usd(b.tripCostAllPeople) + ' trip cost · ' + usd(b.totalAllPeople) + ' with spending money', true) : '') +
       (b.guestBudget ? row('Their own budget', usd(b.guestBudget) + ' each', false, b.budgetLeft == null ? '' : b.budgetLeft >= 0 ? usd(b.budgetLeft) + ' to spare' : usd(-b.budgetLeft) + ' over') : '') +
-      '<tfoot><tr><td colspan="2">Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (s.people > 1 ? ' for ' + s.people : '') + ' less the deposit)</i></td></tr></tfoot></table>';
+      '<tfoot><tr><td colspan="2">Deposit paid <b>' + usd(r.deposit_amount) + '</b> · suggested balance <b>' + usd(suggested) + '</b> <i>(trip cost' + (num(s.people) > 1 ? ' for ' + num(s.people) : '') + ' less the deposit)</i></td></tr></tfoot></table>';
     if (r.notes) h += '<div class="cbox cbox--note"><h3>' + esc(firstName(r.name)) + '\'s note</h3><p>' + esc(r.notes).replace(/\n/g, '<br>') + '</p></div>';
     return h;
   }
@@ -126,15 +135,15 @@
   // The guest changed a trip they had already sent: what moved, what it replaced, and what that does to an approval.
   function guestChangeHTML(g, first) {
     var w = g.was || {};
-    return '<div class="cbanner cbanner--upd" role="status"><b>' + esc(first) + ' changed this trip after sending it</b> (version ' + g.rev + (g.at ? ', ' + esc(when(g.at)) : '') + '). What you see below is their latest plan.' +
+    return '<div class="cbanner cbanner--upd" role="status"><b>' + esc(first) + ' changed this trip after sending it</b> (version ' + num(g.rev) + (g.at ? ', ' + esc(when(g.at)) : '') + '). What you see below is their latest plan.' +
       (g.changes && g.changes.length ? '<ul>' + g.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '') +
       (g.note ? '<p>“' + esc(g.note) + '”</p>' : '') +
-      '<p class="cdim">Before: ' + esc(w.route || '') + (w.days ? ' · ' + w.days + ' days' : '') + (w.estTotalUsd != null ? ' · ' + usd(w.estTotalUsd) + ' est.' : '') + (w.link ? ' · <a href="' + esc(w.link) + '">open it</a>' : '') + '</p>' +
+      '<p class="cdim">Before: ' + esc(w.route || '') + (num(w.days) ? ' · ' + num(w.days) + ' days' : '') + (w.estTotalUsd != null ? ' · ' + usd(w.estTotalUsd) + ' est.' : '') + link(w.link, 'open it') + '</p>' +
       (g.wasStatus === 'ready' ? '<p><b>You had approved the earlier version.</b> That approval and the balance are withdrawn, so nothing is waiting for ' + esc(first) + ' to pay. Approve this one when you\'re happy.</p>' : '') + '</div>';
   }
 
   function guestHTML(r, first, enc) {
-    var wa = String(r.whatsapp || '').replace(/\D/g, ''), h = '<div class="cbox"><h3>Who</h3><p class="cwho"><b>' + esc(r.name) + '</b><br>' + (r.party_size > 1 ? 'Party of ' + r.party_size : 'Travelling solo') + (r.from_place ? ' · from ' + esc(r.from_place) : '') + '</p><p class="clinks">';
+    var wa = String(r.whatsapp || '').replace(/\D/g, ''), h = '<div class="cbox"><h3>Who</h3><p class="cwho"><b>' + esc(r.name) + '</b><br>' + (num(r.party_size) > 1 ? 'Party of ' + num(r.party_size) : 'Travelling solo') + (r.from_place ? ' · from ' + esc(r.from_place) : '') + '</p><p class="clinks">';
     if (wa.length >= 8) h += '<a class="btn btn--sm btn--paper" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">WhatsApp ' + esc(first) + '</a>';
     if (r.email) h += '<a class="btn btn--sm btn--paper" href="mailto:' + esc(r.email) + '">Email ' + esc(first) + '</a>';
     else if (r.guest_email) h += '<a class="btn btn--sm btn--paper" href="mailto:' + esc(r.guest_email) + '">Email ' + esc(first) + '</a>';
@@ -155,12 +164,12 @@
     var h = '<div class="cbox"><h3>History</h3>';
     if (rev) {
       h += '<p>Edited by the crew ' + esc(when(rev.at)) + '.' + (rev.note ? ' Note: “' + esc(rev.note) + '”' : '') + '</p>';
-      if (original && original.trip) h += '<p class="cdim">' + esc(first) + '\'s own version: ' + esc(original.trip.route || '') + ' · ' + (original.trip.days || 0) + ' days' + (original.trip.estTotalUsd != null ? ' · ' + usd(original.trip.estTotalUsd) + ' est.' : '') + (original.trip.link ? ' · <a href="' + esc(original.trip.link) + '">open it</a>' : '') + '</p>';
+      if (original && original.trip) h += '<p class="cdim">' + esc(first) + '\'s own version: ' + esc(original.trip.route || '') + ' · ' + num(original.trip.days) + ' days' + (original.trip.estTotalUsd != null ? ' · ' + usd(original.trip.estTotalUsd) + ' est.' : '') + link(original.trip.link, 'open it') + '</p>';
     }
     if (r.crew_note) h += '<p>Note on file: “' + esc(r.crew_note) + '”</p>';
     if (r.status === 'ready' && r.balance_amount) h += '<p>Waiting for ' + esc(first) + ' to choose how to pay the <b>' + usd(r.balance_amount) + '</b>.</p>';
     var sch = Array.isArray(r.pay_schedule) ? r.pay_schedule : [];
-    if (r.pay_plan && sch.length) h += '<p><b>' + esc({ now: 'Paying it all now', later: 'Paying a week before they leave', instalments: 'Paying in instalments' }[r.pay_plan] || r.pay_plan) + '</b></p><ul class="cplan">' + sch.map(function (i) { return '<li class="' + i.status + '"><span>' + esc(day(i.due, true)) + '</span><b>' + usd(i.amount) + '</b><i>' + esc({ paid: 'Paid', pending: 'Due', failed: 'Failed, retrying', gave_up: 'Not taken' }[i.status] || i.status) + '</i></li>'; }).join('') + '</ul>';
+    if (r.pay_plan && sch.length) h += '<p><b>' + esc({ now: 'Paying it all now', later: 'Paying a week before they leave', instalments: 'Paying in instalments' }[r.pay_plan] || r.pay_plan) + '</b></p><ul class="cplan">' + sch.map(function (i) { return '<li class="' + (/^[a-z_]{1,12}$/.test(i.status) ? i.status : '') + '"><span>' + esc(day(i.due, true)) + '</span><b>' + usd(i.amount) + '</b><i>' + esc({ paid: 'Paid', pending: 'Due', failed: 'Failed, retrying', gave_up: 'Not taken' }[i.status] || i.status) + '</i></li>'; }).join('') + '</ul>';
     return h + '</div>';
   }
 
@@ -170,8 +179,8 @@
       var sug = d.suggestedBalance || '';
       return '<div class="cpanel cpanel--yes"><h3>' + (r.status === 'ready' ? 'Update ' + esc(first) + '\'s price' : 'Send ' + esc(first) + ' the final price') + '</h3>' +
         '<p>The trip checks out. ' + esc(first) + ' gets an email to choose how to pay the rest: all now, a week before they leave, or in instalments if they leave 2+ months out. The ' + dep + ' deposit is already counted, and nothing is charged until they choose.</p>' +
-        '<div class="field"><label for="cbal">Balance to charge (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? r.balance_amount : (sug || '')) + '" inputmode="decimal">' +
-        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (sum.people > 1 ? ' for ' + sum.people : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ') less the ' + dep + ' deposit. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : 'Work out the balance after the deposit.') + '</p></div>' +
+        '<div class="field"><label for="cbal">Balance to charge (US dollars)</label><input class="input" id="cbal" type="number" min="1" step="0.01" value="' + (r.status === 'ready' && r.balance_amount ? num(r.balance_amount) : (num(sug) || '')) + '" inputmode="decimal">' +
+        '<p class="cdim">' + (sum ? 'Starting figure: the trip cost' + (num(sum.people) > 1 ? ' for ' + num(sum.people) : '') + ' (' + usd(sum.budget.tripCostAllPeople) + ') less the ' + dep + ' deposit. Spending money is never charged. Beds are "from" prices, so change it if the live rates differ.' : 'Work out the balance after the deposit.') + '</p></div>' +
         '<div class="field"><label for="cnote">Note to ' + esc(first) + ' (optional, goes in the email)</label><textarea class="input" id="cnote" placeholder="e.g. All checked. We swapped the night bus for a day minivan so you arrive in daylight.">' + esc(r.crew_note || '') + '</textarea></div>' +
         '<p class="cerr" id="cerr" role="alert" hidden></p><button class="btn btn--lg" id="cgo" type="button">' + (r.status === 'ready' ? 'Send ' + esc(first) + ' the new price' : 'Send ' + esc(first) + ' the final price') + '</button></div>';
     }
@@ -204,7 +213,7 @@
         if (!(amt >= 1 && amt <= 50000)) return fail(new Error('Enter the balance in US dollars, after the deposit.'));
         call({ action: 'balance', ref: q.ref, key: q.k, amount: amt, note: noteV, rev: d.rev }).then(function (res) {
           setSess(null);
-          load(root, q, '', 'Sent. ' + esc(first) + ' can now choose how to pay the <b>' + usd(amt) + '</b>' + (res.emailed ? ', by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(res.url || '') + '">choose how to pay</a>.'));
+          load(root, q, '', 'Sent. ' + esc(first) + ' can now choose how to pay the <b>' + usd(amt) + '</b>' + (res.emailed ? ', by email.' : '. There was no email address on file, so send them this link yourself: <a href="' + esc(u.url(res.url) || '#/') + '">choose how to pay</a>.'));
         }).catch(fail);
       } else {
         var refund = !!($('#cref', root) && $('#cref', root).checked);

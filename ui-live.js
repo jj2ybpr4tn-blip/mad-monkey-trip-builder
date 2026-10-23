@@ -4,10 +4,10 @@
    estimates. Fed by the crew console (/admin) when the bundled server is running.
    ============================================================ */
 (function () {
-  var A = window.MMApp, MM = window.MM, C = window.MM_CONFIG || {}, u = A.util;
+  var A = window.MMApp, MM = window.MM, C = window.MM_CONFIG || {};
   MM.LIVE = { spots: {}, notice: '' };
 
-  function get(url) { return fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
+  function get(url) { return A.util.timed(url, { cache: 'no-store' }, 8000).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
 
   // fares: patch the transport graph, then drop cached routes
   function applyLive(L) {
@@ -22,10 +22,26 @@
     Object.keys(L.acts || {}).forEach(function (id) { if (MM.ACTS[id]) { MM.ACTS[id].usd = L.acts[id]; MM.ACTS[id].est = false; MM.ACTS[id].live = true; n++; } });
     if (n && MM.resetRoutes) MM.resetRoutes();
   }
+  // exchange rates (optional). FX_ENDPOINT is any feed that answers { rates: { GBP: 0.75, ... } } per US dollar, for example
+  // https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP,EUR,AUD,CAD,THB,IDR,PHP. Asked at most once every 12 hours in a browser, and
+  // MM.setRates ignores any rate far from the built-in one. If the feed can't be reached the built-in rates stay, quietly.
+  function fx() {
+    var KEY = 'mm-fx', c = null;
+    try { c = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { /* no storage: ask every time */ }
+    if (c && c.r && typeof c.t === 'number' && Date.now() - c.t < 12 * 3600 * 1000) { MM.setRates(c.r); return Promise.resolve(); }
+    return get(C.FX_ENDPOINT).then(function (j) {
+      var rates = j && j.rates, want = {}, keep = {}; if (!rates || typeof rates !== 'object') return;
+      Object.keys(MM.CURRENCIES).forEach(function (k) { want[k] = 1; }); Object.keys(MM.LOCAL).forEach(function (k) { want[MM.LOCAL[k].code] = 1; });
+      Object.keys(rates).forEach(function (k) { if (want[k] && +rates[k] > 0) keep[k] = +rates[k]; });
+      MM.setRates(keep);
+      try { localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), r: keep })); } catch (e) { /* ignore */ }
+    }).catch(function () {});
+  }
   function applyReviews(R) { Object.keys(R || {}).forEach(function (h) { if (MM.PLACES[h]) MM.REVIEWS[h] = R[h]; }); }
 
   function boot() {
     var jobs = [];
+    if (C.FX_ENDPOINT) jobs.push(fx());
     if (C.LIVE_ENDPOINT) jobs.push(get(C.LIVE_ENDPOINT).then(applyLive).catch(function () {}));
     if (C.REVIEWS_ENDPOINT) jobs.push(get(C.REVIEWS_ENDPOINT).then(applyReviews).catch(function () {}));
     if (C.FLOW_ENDPOINT) jobs.push(get(C.FLOW_ENDPOINT).then(function (f) { if (MM.setFlow) MM.setFlow(f.rows || []); }).catch(function () {}));

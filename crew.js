@@ -101,10 +101,18 @@
     if (state.budget && T.budgetLeft < 0) flag('warn', 'Over their own budget by ' + usd(-T.budgetLeft) + ' (they said ' + usd(state.budget) + ' per person).');
     if (T.payOnDay) flag('info', T.payOnDay + (T.payOnDay === 1 ? ' tour is' : ' tours are') + ' paid on the day, so not in the total.');
     if (T.est) flag('info', 'Some tour prices are estimates. Check them before quoting.');
+    // A later stage of a journey: the crew sees where they are starting from and where they have already been, so nothing is checked twice.
+    var stage = null;
+    if (state.from || (state.been && state.been.length)) {
+      var ar = pl.arrival, nm = function (id) { return P()[id] ? P()[id].n : ''; };
+      stage = { n: Math.max(2, Math.min(20, Math.round(+(ctx.stage && ctx.stage.n)) || 2)), parent: /^MM-[A-Z0-9]{6}$/.test(String(ctx.stage && ctx.stage.parent || '')) ? ctx.stage.parent : '',
+        from: state.from ? { id: state.from, name: nm(state.from) } : null, been: (state.been || []).map(nm).filter(Boolean).slice(0, 40),
+        arrival: ar ? { to: nm(ar.to), mode: ar.chosen.modeLabel, hours: U.hoursLabel(ar.chosen.h), usd: Math.round(ar.u), overnight: !!ar.chosen.ovn, date: ar.date || '' } : null };
+      if (state.from) flag('info', 'Stage ' + stage.n + ': they are already in ' + nm(state.from) + (stage.been.length ? ' and have been to ' + stage.been.join(', ') : '') + '. Only the new stops need checking.');
+    }
     flags.sort(function (a, b) { return (a.level === 'warn' ? 0 : 1) - (b.level === 'warn' ? 0 : 1); });
-
     var lastDay = pl.days.length ? pl.days[pl.days.length - 1] : null;
-    return { v: 1, headline: MM.routeLine(pl), days: T.days, nights: T.nights, stopCount: T.stops, km: pl.km,
+    return { v: 1, headline: MM.routeLine(pl), stage: stage, days: T.days, nights: T.nights, stopCount: T.stops, km: pl.km,
       countries: pl.countries.map(function (c) { return MM.COUNTRIES[c] ? MM.COUNTRIES[c].n : c; }),
       start: state.start || '', end: lastDay && lastDay.date ? iso(lastDay.date) : '', dates: ctx.dates || '', datesLabel: DATES[ctx.dates] || '',
       people: people, pref: PREFS[state.pref] || '', crewMates: state.crew || 0, stops: stops, budget: budget, flags: flags.slice(0, 14), allInMatch: allInMatch };
@@ -123,6 +131,11 @@
     var who = [x.name, sum.people > 1 ? 'party of ' + sum.people : 'travelling solo', x.from ? 'from ' + x.from : ''].filter(Boolean).join(' · ');
     if (who) L.push(who);
     if (x.contact) L.push('Contact: ' + x.contact);
+    if (sum.stage) {
+      rule('STAGE ' + sum.stage.n + ' OF THEIR JOURNEY' + (sum.stage.parent ? ' (the earlier stage is ' + sum.stage.parent + ')' : ''));
+      if (sum.stage.from) L.push('Starting from ' + sum.stage.from.name + (sum.stage.arrival ? ': ' + sum.stage.arrival.mode + ' to ' + sum.stage.arrival.to + ' · ' + sum.stage.arrival.hours + ' · ' + usd(sum.stage.arrival.usd) + (sum.stage.arrival.overnight ? ' · overnight' : '') : ''));
+      if (sum.stage.been.length) L.push('Already been to: ' + sum.stage.been.join(', ') + ' (so none of these are suggested)');
+    }
     rule('THE TRIP');
     L.push(sum.headline);
     L.push(sum.days + ' days · ' + sum.nights + ' nights · ' + sum.stopCount + (sum.stopCount === 1 ? ' stop · ' : ' stops · ') + sum.countries.join(' + '));

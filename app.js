@@ -15,6 +15,14 @@
 
   /* ---------- utils ---------- */
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  // An address that came from outside (a server record, something a guest typed) is only used as a link or a redirect if it is http(s) (https for payments) or one of our own #/ pages. "javascript:" and the like become ''.
+  var safeUrl = function (u, httpsOnly) { var v = String(u == null ? '' : u).trim(); return !/[\s<>"'`\\]/.test(v) && (httpsOnly ? /^https:\/\//i : /^(https?:\/\/|#\/)/i).test(v) ? v : ''; };
+  // fetch() that gives up after `ms` (default 25 s), so a dead connection ends in a message people can act on, not a button stuck on "Sending…"
+  var timed = function (url, opts, ms) {
+    opts = opts || {}; if (typeof AbortController !== 'function') return fetch(url, opts);
+    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, ms || 25000); opts.signal = ctl.signal;
+    return fetch(url, opts).then(function (r) { clearTimeout(t); return r; }, function (e) { clearTimeout(t); throw e && e.name === 'AbortError' ? new Error('That took too long to answer.') : e; });
+  };
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var money = function (usd) { return MM.money(usd, app.cur); };
@@ -29,10 +37,48 @@
     cta: function () { return dep() ? 'A $' + dep() + ' deposit per person holds your beds, the crew reviews the routes, dates and prices, and you approve before you pay the rest.' : 'We hold your beds, the crew reviews the routes, dates and prices, and you approve before you pay anything.'; },
     before: function () { return dep() ? 'before you pay the rest' : 'before you pay anything'; }
   };
+  /* ---------- "Ask Ewan": a real person, one tap away, from every screen ---------- */
+  // Design it here, confirm it with a person. The bar under the header says so on every screen, and the Ask button opens WhatsApp (or email) with the trip in the message.
+  var HUMAN = { line: 'Plan it here. A real human checks it before anything is booked.', more: 'Ewan and the crew read every trip, fix what needs fixing, then say yes.' };
+  function askName() { return (C.ASK_NAME === undefined ? 'Ewan' : String(C.ASK_NAME || '')).trim(); }
+  function askLabel() { return 'Ask ' + (askName() || 'the crew'); }
+  function askText() {                                                         // what the message says: the trip they're looking at, if there is one
+    var who = askName() || 'Mad Monkey', v = app.view, ref = /#\/trip\/(MM-[A-Z0-9]{6})/.exec(location.hash);
+    if (ref) return 'Hi ' + who + ', a question about my trip ' + ref[1] + '.';
+    if (v === 'build' && app.state.items.length) { var pl = MM.plan(app.state); return 'Hi ' + who + ', a question about my trip: ' + MM.routeLine(pl) + ' (' + pl.totals.days + ' days). ' + shareLink(); }
+    return 'Hi ' + who + ', I have a question before I build my trip.';
+  }
+  function askHref() {
+    var msg = askText(), wa = String(C.WHATSAPP || '').replace(/\D/g, '');
+    if (wa) return 'https://wa.me/' + wa + '?text=' + encodeURIComponent(msg);
+    if (C.CREW_EMAIL) return 'mailto:' + C.CREW_EMAIL + '?subject=' + encodeURIComponent('A question about my trip') + '&body=' + encodeURIComponent(msg);
+    return '';
+  }
+  // A link (or, in demo with no contact set, a button that explains) in the house style. cls picks where it sits.
+  function askLink(cls) {
+    var h = askHref(), c = cls || 'btn btn--sm btn--pink';
+    return h ? '<a class="' + c + '" href="' + esc(h) + '" target="_blank" rel="noopener" data-act="askewan">' + esc(askLabel()) + '</a>' : '<button class="' + c + '" type="button" data-act="askdemo">' + esc(askLabel()) + '</button>';
+  }
+  function renderHumanBar() {
+    var el = document.getElementById('humanbar'); if (!el) return;
+    el.innerHTML = '<span class="humanbar__ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M7 12.5l3.4 3.4L17 8.6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+      '<p class="humanbar__t"><b>' + esc(HUMAN.line) + '</b> <span class="humanbar__more">' + esc(HUMAN.more) + '</span></p>' + askLink('humanbar__ask');
+  }
   var plural = function (n, w, ws) { return n + ' ' + (n === 1 ? w : (ws || w + 's')); };
   app.revise = null;      // set while a guest is changing a trip they already sent (ui-review.js): { ref, k, base, ... }
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
   app.revise = store('mm-revise');
+  // What this browser remembers about a journey is only ever used as plain numbers and trip references, whatever is stored there.
+  function cleanStage(x) {
+    if (!x || typeof x !== 'object') return null;
+    var ref = function (v) { return typeof v === 'string' && /^MM-[A-Z0-9]{6}$/.test(v) ? v : ''; };
+    var trips = (Array.isArray(x.trips) ? x.trips : []).filter(function (t) { return t && ref(t.ref); }).slice(-6).map(function (t) {
+      return { ref: t.ref, route: String(t.route == null ? '' : t.route).slice(0, 200), days: Math.round(+t.days) || 0, status: String(t.status == null ? '' : t.status).slice(0, 20), n: Math.max(1, Math.min(19, Math.round(+t.n) || 1)) };
+    });
+    return { n: Math.max(2, Math.min(20, Math.round(+x.n) || 2)), parent: ref(x.parent), trips: trips };
+  }
+  app.cleanStage = cleanStage;
+  app.stage = cleanStage(store('mm-stage'));          // set while a guest is planning the next stage of a journey (ui-stage.js): { n, parent, trips: [...] }
   var SID = (function () { try { var s = sessionStorage.getItem('mm-sid'); if (!s) { s = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('mm-sid', s); } return s; } catch (e) { return 'x'; } })();
   function track(name, props) {
     try { (window.dataLayer = window.dataLayer || []).push({ event: 'mm_' + name, props: props || {} }); } catch (e) { /* analytics is optional */ }
@@ -45,12 +91,18 @@
     while (toastRoot.children.length > 2) toastRoot.removeChild(toastRoot.firstChild);   // never more than three at once
     toastRoot.appendChild(t); setTimeout(function () { t.remove(); }, o && o.undo ? 6500 : 2400);
   }
+  function safeUri(x) { try { return decodeURIComponent(x); } catch (e) { return x; } }          // a stray % in a pasted link must not throw
   function copy(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function () { return true; }, fallback);
     return Promise.resolve(fallback());
     function fallback() { var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (e) { /* ignore */ } ta.remove(); return ok; }
   }
-  var photo = function (src, cls) { return src ? '<div class="photo ' + (cls || '') + '"><img src="' + src + '" alt="" loading="lazy" onerror="this.parentNode.classList.add(\'photo--none\');this.remove()"></div>' : '<div class="photo photo--none ' + (cls || '') + '"></div>'; };
+  // size 's' (thumbnails) or 'm' (big cards) asks for our small copy of the photo; data-full is what to try if that copy isn't there
+  var photo = function (src, cls, size) {
+    if (!src) return '<div class="photo photo--none ' + (cls || '') + '"></div>';
+    var use = size ? MM.thumb(src, size) : src;
+    return '<div class="photo ' + (cls || '') + '"><img src="' + use + '" alt="" loading="lazy" data-fb="photo"' + (use !== src ? ' data-full="' + src + '"' : '') + '></div>';
+  };
   var hours = U.hoursLabel;
   function tomorrow() { var d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1)); }
   function baseUrl() { return (C.SITE_URL || (location.origin + location.pathname)).replace(/#.*$/, ''); }
@@ -61,7 +113,7 @@
   /* ---------- state ---------- */
   /* ---------- undo / redo: every change to the trip keeps the version before it, so anything can be taken back (the AI's changes, "Start over", a surprise...) ---------- */
   var HIST_MAX = 60, H = app.hist = { past: [], future: [], cur: null, busy: false };
-  function snapState(st) { return JSON.stringify({ items: st.items, start: st.start, pref: st.pref, legPick: st.legPick, fund: st.fund, crew: st.crew, budget: st.budget, month: st.month }); }
+  function snapState(st) { return JSON.stringify({ items: st.items, start: st.start, pref: st.pref, legPick: st.legPick, fund: st.fund, crew: st.crew, budget: st.budget, month: st.month, from: st.from, been: st.been }); }
   function recordHist() {
     var sn = snapState(app.state); if (H.cur === null) { H.cur = sn; return; } if (sn === H.cur) return;
     if (!H.busy) { H.past.push(H.cur); if (H.past.length > HIST_MAX) H.past.shift(); H.future = []; }
@@ -92,22 +144,21 @@
   /* ---------- "Start building" is a blank sheet. The trip you had is kept, and the home page offers to pick it back up ---------- */
   function savedTrip() {
     var cand = [app.state, (store('mm-trip') || {}).state, (store('mm-trip-last') || {}).state];
-    for (var k = 0; k < cand.length; k++) if (cand[k] && cand[k].items && cand[k].items.length) return Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(cand[k])));
+    for (var k = 0; k < cand.length; k++) { var c = cand[k] && cand[k].items && cand[k].items.length ? MM.sanitizeState(cand[k]) : null; if (c && c.items.length) return c; }     // saved by an older version? anything that no longer exists is dropped
     return null;
   }
+  function stash() { if (app.state.items.length) store('mm-trip-last', { state: JSON.parse(JSON.stringify(app.state)), at: Date.now() }); }
+  app.stash = stash;
   function startFresh() {
-    if (app.state.items.length) store('mm-trip-last', { state: JSON.parse(JSON.stringify(app.state)), at: Date.now() });
+    stash();
     app.state = MM.defaultState(); app.auto = false; app.focus = []; app.open = {}; app.revise = null; store('mm-revise', null); app.tourPending = true;
+    app.stage = null; store('mm-stage', null);                                         // a blank sheet is a new journey, not the next stage of one
     store('mm-trip', { state: app.state, cur: app.cur });
   }
   function resumeStrip() {
     var sv = savedTrip(); if (!sv) return '';
     var pl = MM.plan(sv), names = pl.places.map(function (id) { return P[id].n; });
     return '<div class="resume"><div><span class="over">Pick up where you left off</span><b>' + esc(names.slice(0, 4).join(' → ') + (names.length > 4 ? ' → …' : '')) + '</b><span class="fine">' + pl.totals.days + ' days · about ' + money(pl.totals.total) + ' a person</span></div><button class="btn btn--sm btn--paper" data-act="resume" type="button">Continue this trip</button></div>';
-  }
-  function defaultActs(p, n) {
-    var list = MM.actsAt(p).filter(function (a) { return a.star && !(a.multi); });
-    return list.slice(0, n >= 3 ? 2 : 1).map(function (a) { return a.id; });
   }
   function stopFor(p, n) { return MM.edit.newStop(p, n); }
   function mutate(fn, opts) { app.auto = false; fn(app.state); persist(); refreshBuilder(opts); }
@@ -127,13 +178,58 @@
     if (sameAddress(location.hash, h)) { route(); return; }
     location.hash = h;
   }
+  /* ---------- when something breaks: say so, and offer a way out, instead of a blank page ---------- */
+  var errSent = 0;
+  function reportError(what, e) {
+    if (errSent++ < 5) track('js_error', { w: what, m: String(e && e.message || e).slice(0, 140), at: String((e && e.stack || '').split('\n')[1] || '').replace(/^.*\//, '').slice(0, 80), v: app.view });     // no trip or personal details, and never more than five a visit
+  }
+  function crashCard(what) {
+    return '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Something went wrong</span><h1 class="disp">That didn\'t load.</h1><p class="qhelp">Sorry about that. Try again, and if it keeps happening, start fresh (that clears the trip saved on this device).</p><div class="qnav"><button class="btn" data-act="reloadpage" type="button">Try again</button><button class="btn btn--pink" data-act="cleanslate" type="button">Start fresh</button></div></div></div></section>';
+  }
+  window.addEventListener('error', function (ev) {
+    var t = ev.target;
+    if (t && t.tagName === 'IMG') {                                                       // a photo that won't load: hide it, never show a broken-image icon
+      var fb = t.getAttribute('data-fb'), full = t.getAttribute('data-full');
+      if (full) { t.removeAttribute('data-full'); t.src = full; return; }                 // the small copy isn't there: try the full photo first
+      if (fb === 'gal') { if (t.parentNode) t.parentNode.remove(); } else if (fb === 'tip') { if (t.parentNode) t.parentNode.className += ' photo--none'; t.remove(); } else if (fb === 'photo') { if (t.parentNode) t.parentNode.classList.add('photo--none'); t.remove(); }
+      return;
+    }
+    if (t === window && ev.error) reportError('window', ev.error);
+  }, true);
+  window.addEventListener('unhandledrejection', function (ev) { reportError('promise', ev.reason); });
   function route() {
     if (app._unwatch) { app._unwatch(); app._unwatch = null; }
+    try { routeNow(); } catch (e) { reportError('route', e); root.innerHTML = crashCard(); }
+  }
+  // A page change should be noticed by someone who can't see it: set the title, say it out loud, and put the reader at the top of the new screen.
+  function announce(view) {
+    var t = TITLES[view] || 'Trip Builder', pl = view === 'build' && app.state.items.length ? MM.plan(app.state) : null;
+    if (pl) t = MM.routeLine(pl).slice(0, 60) + ' · ' + pl.totals.days + ' days';
+    document.title = t + ' · Mad Monkey'; renderHumanBar();
+    var a = document.getElementById('route-announcer'); if (a) a.textContent = t;
+    if (!app._booted) { app._booted = true; return; }                                  // the first screen of a visit is already where the reader is
+    var h = root.querySelector('h1, h2'); if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  // Headings must not jump a level (an h1 and then an h3): screen readers use them to move around the page. The markup uses whatever size looks right,
+  // so after every change to the page this tells assistive technology the level each one should have (aria-level). Nothing changes on screen.
+  function levelHeadings() {
+    var prev = 0;
+    [].forEach.call(root.querySelectorAll('h1, h2, h3, h4, h5, h6'), function (h) {
+      if (h.closest('.print-head')) return;                                              // only shown when printing
+      var n = +h.tagName.charAt(1), eff = prev && n > prev + 1 ? prev + 1 : n;
+      if (eff !== n) h.setAttribute('aria-level', eff); else h.removeAttribute('aria-level');
+      prev = eff;
+    });
+  }
+  var levelTimer = 0;
+  if (window.MutationObserver) new MutationObserver(function () { clearTimeout(levelTimer); levelTimer = setTimeout(levelHeadings, 60); }).observe(root, { childList: true, subtree: true });
+  var TITLES = { home: 'Trip Builder', quiz: 'Build it for me', results: 'Your routes', build: 'Your trip', group: 'Group trip', trip: 'Trip status', pack: 'Trip pack', crew: 'Crew review' };
+  function routeNow() {
     var r = parseHash(); closeModal();
     if (r.view === 'results' && !app.results) r.view = 'quiz';
     if (r.view === 'build') {
       if (r.rest) { var st = MM.decodeState(r.rest); if (st.items.length || r.rest.indexOf('i=') === 0) app.state = st; }
-      else { var saved = store('mm-trip'); if (saved && saved.state && !app.state.items.length) app.state = Object.assign(MM.defaultState(), saved.state); }
+      else { var saved = store('mm-trip'); if (saved && saved.state && !app.state.items.length) app.state = MM.sanitizeState(saved.state); }
     }
     if (r.view === 'build') syncHist();
     app.view = r.view; document.body.setAttribute('data-view', r.view);
@@ -142,6 +238,7 @@
     window.scrollTo(0, 0);
     if (app.views[r.view]) app.views[r.view](r.rest); else ({ home: renderHome, quiz: renderQuiz, results: renderResults, build: renderBuilder })[r.view]();
     track('view', { view: r.view });
+    announce(r.view);
     if (r.view === 'build' && app.tourPending) { app.tourPending = false; if (app.tour) setTimeout(function () { if (app.view === 'build' && !app.state.items.length) app.tour.start(); }, 500); }
   }
 
@@ -159,7 +256,7 @@
     return '<article class="tcard">' +
       '<div class="tcard__pill pill ' + (soon ? 'pill--pink' : 'pill--black') + ' pill--sm">' + (soon ? 'Launching soon' : 'Every ' + U.DOWN[t.dep]) + '</div>' + spotsPill(t) +
       '<div class="tcard__price"><div class="burst"><span>' + (soon ? 'rrp' : 'from') + '<b>' + money(t.usd) + '</b></span></div></div>' +
-      photo(img) +
+      photo(img, '', 'm') +
       '<div class="tcard__body"><div class="over dim">' + esc(t.kicker) + '</div><h3>' + esc(t.n) + '</h3><div class="tcard__route">' + esc(t.tag) + '</div>' +
       '<div class="tcard__meta"><span class="pill pill--paper pill--sm">' + t.days + ' days</span><span class="pill pill--paper pill--sm">Max ' + t.max + '</span><span class="pill pill--paper pill--sm">$' + MM.DEPOSIT + ' holds your spot</span></div>' +
       '<p style="font-size:13.5px;font-weight:500;margin-top:4px">' + esc(t.pitch) + '</p>' +
@@ -170,23 +267,25 @@
   function specialHTML(g) {
     if (!g) return '';
     var stats = [[g.days, 'days'], [g.stops.length, 'stops']].concat(g.stats || []).concat([[g.gbp ? 'from £' + g.gbp.toLocaleString('en-GB') : g.usd ? 'from ' + money(g.usd) : '', 'per person']]).filter(function (s) { return s[0] !== '' && s[0] != null; });
-    return '<div class="gap" style="margin-top:var(--s-7)">' + photo((g.img && MM.tourImg(g.img)) || MM.hostelImg(g.stops[0].p)) +
+    return '<div class="gap" style="margin-top:var(--s-7)">' + photo((g.img && MM.tourImg(g.img)) || MM.hostelImg(g.stops[0].p), '', 'm') +
       '<div class="gap__b"><span class="pill pill--pink pill--sm">Special' + (g.dates ? ' · ' + esc(g.dates) : '') + '</span><h3>' + esc(g.n) + '</h3><p style="font-weight:500">' + esc(g.pitch) + '</p>' +
       '<div class="stats">' + stats.map(function (s) { return '<div class="stat"><b>' + esc(s[0]) + '</b><span>' + esc(s[1]) + '</span></div>'; }).join('') + '</div>' +
       '<div class="tcard__foot" style="padding-top:0"><a class="btn btn--sm btn--pink" href="' + esc(g.url) + '" target="_blank" rel="noopener">Book + details ↗</a></div></div></div>';
   }
   function renderHome() {
-    var g = MM.special, ticker = '23 hostels · 6 countries · 150+ things to do · every bus, boat + flight in between · $99 holds an ALL IN spot · real prices · real people · ';
+    var g = MM.special, nHost = MM.PLACE_ORDER.filter(MM.isBeds).length, nCtry = Object.keys(MM.COUNTRIES).length, nTours = Math.floor(Object.keys(MM.ACTS).length / 10) * 10;
+    var ticker = nHost + ' hostels · ' + nCtry + ' countries · ' + nTours + '+ things to do · every bus, boat + flight in between · $' + MM.DEPOSIT + ' holds an ALL IN spot · real prices · real people · ';
     root.innerHTML = liveNotice() +
       '<section class="hero on-black"><div class="wrap hero__in"><div>' +
         '<div class="over lime" style="margin-bottom:var(--s-4)">Mad Monkey · Trip Builder</div>' +
         '<h1 class="disp">Build the trip you <span class="hl">actually</span> want.</h1>' +
-        '<p class="hero__lede"><b>23 hostels. 6 countries.</b> Every bus, boat and flight in between. Pick your stops, see what it really costs, then send it to the crew. Or jump on an ALL IN and let us sort the lot.</p>' +
-        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" data-new="1" type="button">Start building</button><button class="btn btn--lg btn--pink" data-go="quiz" type="button">Build it for me <span class="pill pill--sm pill--paper">60 sec</span></button><button class="btn btn--lg btn--paper" data-act="surprise" type="button">Surprise me</button></div>' + resumeStrip() +
+        '<p class="hero__lede"><b>' + nHost + ' hostels. ' + nCtry + ' countries.</b> Every bus, boat and flight in between. Pick your stops, see what it really costs, then send it to the crew. Or jump on an ALL IN and let us sort the lot.</p>' +
+        (app.search ? '<div class="hero__search">' + app.search.html({ mode: 'start', label: 'Where to?', placeholder: 'Hanoi, Vietnam, kayaking, party trail…', cls: 'srch--hero' }) + '</div>' : '') +
+        '<div class="hero__cta"><button class="btn btn--lg" data-go="build" data-new="1" type="button">Start on the map</button><button class="btn btn--lg btn--pink" data-go="quiz" type="button">Build it for me <span class="pill pill--sm pill--paper">60 sec</span></button><button class="btn btn--lg btn--paper" data-act="surprise" type="button">Surprise me</button></div>' + resumeStrip() + (window.MMStage ? window.MMStage.homeStrip() : '') +
       '</div><div class="hero__map" aria-hidden="true">' +
         '<div class="hm hm--d">' + MM.staticMap({ region: 'all', aspect: 0.85, pad: 0, dots: true, countryLabels: true, routes: HERO_ROUTES, animate: true, px: 560, slice: true, other: false }) + '</div>' +
         '<div class="hm hm--m">' + MM.staticMap({ region: 'mainland', aspect: 1.25, pad: 0.0, dots: true, countryLabels: true, routes: [HERO_ROUTES[0]], animate: true, px: 700, slice: true, other: false }) + '</div>' +
-        '<div class="burst hero__burst"><span>23<br>hostels</span></div><span class="sticker hero__sticker">All in.</span>' +
+        '<div class="burst hero__burst"><span>' + nHost + '<br>hostels</span></div><span class="sticker hero__sticker">All in.</span>' +
       '</div></div></section>' +
       '<div class="ticker" aria-hidden="true"><span>' + (ticker + ticker + ticker + ticker) + '</span></div>' +
 
@@ -204,19 +303,29 @@
       '</div></section>' +
 
       '<section class="sec sec--pink" id="humans"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">The human bit</div><h2 class="disp">Humans check<br>everything.</h2></div><p style="max-width:32em;font-weight:600">No robot books your trip. Every plan you send is read by a real Mad Monkey crew member who checks the routes, the beds, the dates and the prices. ' + TERMS.hold() + '</p></div>' +
-        '<div class="how how--4">' + [['1', 'You build it', 'Pick stops on the map, or let us build it from your budget.'], ['2', 'We hold your beds', TERMS.step2()], ['3', 'A human checks it', 'Routes, beds, dates, prices: read by someone who has done the trip.'], ['4', 'You say yes', TERMS.step4()]].map(function (s) { return '<div class="hs"><b>' + s[0] + '</b><h4>' + s[1] + '</h4><p>' + s[2] + '</p></div>'; }).join('') + '</div>' +
+        '<div class="how how--4">' + [['1', 'You build it', 'Pick stops on the map, or let us build it from your budget.'], ['2', 'We hold your beds', TERMS.step2()], ['3', 'A human checks it', 'Routes, beds, dates, prices: read by someone who has done the trip.'], ['4', 'You say yes', TERMS.step4()]].map(function (s) { return '<div class="hs"><b>' + s[0] + '</b><h3>' + s[1] + '</h3><p>' + s[2] + '</p></div>'; }).join('') + '</div>' +
         '<div class="rate"><b>' + MM.TRUST.rating + '</b><span>from ' + MM.TRUST.raters + ' Mad Monkey travellers</span></div>' +
         '<div class="quotes">' + MM.TRUST.quotes.map(function (q) { return '<blockquote class="quote">“' + esc(q.q) + '”<cite>' + esc(q.by) + ' · ' + esc(q.from) + '</cite></blockquote>'; }).join('') + '</div></div></section>' +
 
       '<section class="sec"><div class="wrap"><div class="sec__head"><h2 class="disp">How it works.</h2></div><div class="how">' +
-        '<div><b class="lime">1</b><h4>Pick your stops</h4><p class="dim">Tap hostels, or take the quiz. Every bus, boat and flight between them is already in.</p></div>' +
-        '<div><b class="lime">2</b><h4>See the real cost</h4><p class="dim">Beds, transport and activities add up live. Switch between cheapest, smart and fastest on any leg.</p></div>' +
-        '<div><b class="lime">3</b><h4>Send it to the crew</h4><p class="dim">' + TERMS.send() + ' Or spot an ALL IN that already covers it.</p></div>' +
+        '<div><b class="lime">1</b><h3>Pick your stops</h3><p class="dim">Tap hostels, or take the quiz. Every bus, boat and flight between them is already in.</p></div>' +
+        '<div><b class="lime">2</b><h3>See the real cost</h3><p class="dim">Beds, transport and activities add up live. Switch between cheapest, smart and fastest on any leg.</p></div>' +
+        '<div><b class="lime">3</b><h3>Send it to the crew</h3><p class="dim">' + TERMS.send() + ' Or spot an ALL IN that already covers it.</p></div>' +
       '</div></div></section>' +
       footer();
   }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[data-act="askewan"]'); if (a) { var h = askHref(); if (h) a.setAttribute('href', h); track('ask_ewan', { where: app.view }); }
+  }, true);
+  // Anything this browser remembers about a person: the trip, their name and contact, and the trips they have sent (with the key that lets them change them).
+  function remembers() { return !!(savedTrip() || store('mm-lead') || (store('mm-subs') || []).length || store('mm-revise')); }
+  function forgetMe() {
+    if (!window.confirm('Remove your trip, your details and the trips you have sent from this device? Your emails still have the links to them.')) return;
+    [localStorage, sessionStorage].forEach(function (st) { try { Object.keys(st).filter(function (k) { return k.indexOf('mm-') === 0; }).forEach(function (k) { st.removeItem(k); }); } catch (e) { /* storage is off: nothing to remove */ } });
+    location.hash = '#/'; location.reload();
+  }
   function footer() {
-    return '<footer class="foot"><div class="wrap"><p>Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (or marked est.). The crew confirms live rates ' + TERMS.before() + '. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
+    return '<footer class="foot"><div class="wrap"><p><b class="foot__human">' + esc(HUMAN.line) + '</b> ' + askLink('foot__ask') + '<br>' + (remembers() ? '<span class="forget">On a shared computer? <button class="linkbtn" data-act="forgetme" type="button">Forget my trip and details on this device</button></span><br>' : '') + 'Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (or marked est.). The crew confirms live rates ' + TERMS.before() + '. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
   }
 
   /* ============================================================
@@ -253,11 +362,11 @@
       body = '<div class="qopts">' + list.map(function (o) { return '<button class="qopt" data-act="qmulti" data-v="' + o.v + '" aria-pressed="' + (a[s.k].indexOf(o.v) > -1) + '" type="button"><b>' + esc(o.t) + '</b>' + (o.s ? '<span>' + esc(o.s) + '</span>' : '') + '</button>'; }).join('') + '</div>';
     }
     var canNext = s.type === 'multi' ? (s.optional || a[s.k].length > 0) : s.type === 'single' ? !!a[s.k] : true;
-    root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qprog" aria-label="Progress">' + prog + '</div><div class="qbox">' +
-      '<span class="over">' + s.over + '</span><h2 class="disp">' + s.h + '</h2><p class="qhelp">' + s.help + '</p>' + body +
+    root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qprog" role="group" aria-label="Progress">' + prog + '</div><div class="qbox">' +
+      '<span class="over">' + s.over + '</span><h1 class="disp">' + s.h + '</h1><p class="qhelp">' + s.help + '</p>' + body +
       '<div class="qnav">' + (q.step ? '<button class="btn btn--paper" data-act="qback" type="button">← Back</button>' : '<button class="btn btn--paper" data-go="home" type="button">← Home</button>') +
       (s.type === 'single' ? '' : '<button class="btn btn--pink" data-act="qnext" type="button"' + (canNext ? '' : ' disabled') + '>' + (q.step === QSTEPS.length - 1 ? 'Show my routes' : s.optional && !a[s.k].length ? 'Skip' : 'Next →') + '</button>') +
-      '</div></div></div></section>';
+      '</div>' + (q.step > 0 && q.step < QSTEPS.length - 1 && a.start ? '<p class="qskip">In a hurry? <button class="linkbtn" data-act="qfinish" type="button">Skip the rest and show my routes</button></p>' : '') + '</div></div></section>';
     var rng = $('#qdays'); if (rng) rng.addEventListener('input', function () { a.days = +rng.value; $('.qbig').firstChild.nodeValue = a.days; $$('[data-act="qdays"]').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-v') === a.days)); }); });
   }
   function quizAdvance() {
@@ -267,7 +376,7 @@
   function finishQuiz() {
     var a = app.quiz.a, g = MM.GATEWAYS.filter(function (x) { return x.id === a.start; })[0] || MM.GATEWAYS[MM.GATEWAYS.length - 1];
     app.profile = { start: g.place, startId: g.id, days: a.days, month: a.month == null ? null : a.month, year: a.year, vibes: a.vibes.slice(), must: a.must.slice(), budget: a.budget || 'mid', crew: a.crew || 'mates' };
-    root.innerHTML = '<section class="quiz"><div class="wrap qwait"><div><div class="burst" style="width:120px;margin:0 auto var(--s-4);background:var(--pink)"><span>…</span></div><h2 class="disp">Building your routes.</h2><p class="dim" style="margin-top:var(--s-3)">Checking buses, boats, flights and wet seasons.</p></div></div></section>';
+    root.innerHTML = '<section class="quiz"><div class="wrap qwait"><div><div class="burst" style="width:120px;margin:0 auto var(--s-4);background:var(--pink)"><span>…</span></div><h1 class="disp">Building your routes.</h1><p class="dim" style="margin-top:var(--s-3)">Checking buses, boats, flights and wet seasons.</p></div></div></section>';
     track('quiz_done', app.profile);
     setTimeout(function () { app.results = MM.suggest(app.profile); store('mm-quiz', app.quiz.a); go('results'); }, 900);
   }
@@ -283,7 +392,7 @@
   function renderResults() {
     var pr = app.profile, g = MM.GATEWAYS.filter(function (x) { return x.id === pr.startId; })[0];
     var chips = ['Landing: ' + (g ? g.n : 'anywhere'), pr.days + ' days', pr.month != null ? U.MONTHN[pr.month] : 'Any month'].concat(pr.vibes.map(function (v) { return MM.VIBES.filter(function (x) { return x.k === v; })[0].n; }), pr.must.map(function (v) { return MM.MUSTS.filter(function (x) { return x.k === v; })[0].n; }), [({ cheap: 'Every dollar counts', mid: 'Comfortable', splash: 'Happy to spend' })[pr.budget]]);
-    root.innerHTML = '<section class="res"><div class="wrap"><div class="res__head"><div class="over">Your routes</div><h2 class="disp">' + ({ 1: 'One trip', 2: 'Two trips', 3: 'Three trips' }[Math.min(3, Math.max(1, app.results.length))]) + '<br>built for <span class="hl">you</span>.</h2></div>' +
+    root.innerHTML = '<section class="res"><div class="wrap"><div class="res__head"><div class="over">Your routes</div><h1 class="disp">' + ({ 1: 'One trip', 2: 'Two trips', 3: 'Three trips' }[Math.min(3, Math.max(1, app.results.length))]) + '<br>built for <span class="hl">you</span>.</h1></div>' +
       '<div class="res__prof">' + chips.map(function (c) { return '<span class="chip">' + esc(c) + '</span>'; }).join('') + '<button class="chip" data-act="qedit" type="button" style="background:var(--lime)">Edit answers</button></div>' +
       '<div class="rcards">' + app.results.map(function (r, i) { return resultCard(r, i); }).join('') + '</div>' +
       '<div style="margin-top:var(--s-7);display:flex;gap:var(--s-3);flex-wrap:wrap"><button class="btn btn--pink" data-go="build" data-new="1" type="button">Start from a blank map</button></div></div></section>' + footer();
@@ -330,12 +439,12 @@
     if (app.view !== 'build') return;
     var y = window.scrollY; plan = MM.plan(app.state); if (app.fareHook) app.fareHook(plan);
     var panel = $('#bpanel'); if (!panel) return;
-    panel.innerHTML = panelHTML(plan);
+    try { panel.innerHTML = panelHTML(plan); } catch (e) { reportError('panel', e); panel.innerHTML = crashCard(); return; }
     missToast();
     $('#regions').innerHTML = '<button type="button" data-focus="" aria-pressed="' + !app.focus.length + '">Everywhere</button>' + Object.keys(MM.COUNTRIES).map(function (c) { return '<button type="button" data-focus="' + c + '" aria-pressed="' + (app.focus.indexOf(c) > -1) + '">' + MM.COUNTRIES[c].n + '</button>'; }).join('');
     var t = plan.totals;
     $('#mstats').innerHTML = t.days ? '<span class="chip"><b>' + t.days + '</b> days</span><span class="chip"><b>' + t.stops + '</b> stops</span><span class="chip"><b>' + plan.countries.length + '</b> ' + (plan.countries.length === 1 ? 'country' : 'countries') + '</span><span class="chip"><b>' + plan.km.toLocaleString('en-GB') + '</b> km</span>' : '';
-    $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes' : 'Hold my beds') + '</button>' : '<div><b>Tap the map</b><span>to add your first stop</span></div>';
+    $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes' : 'Hold my beds') + '</button>' : '<div><b>' + (app.state.from ? 'Where next?' : 'Where to?') + '</b><span>type a place, or tap the map</span></div><button class="btn btn--sm btn--pink" data-act="focussearch" type="button">Search</button>';
     MM.BuilderMap.update(plan, app.state, app.focus);
     if (!(opts && opts.instant)) window.scrollTo(0, y);
   }
@@ -350,22 +459,24 @@
   function panelHTML(pl) {
     var s = app.state, t = pl.totals, items = s.items, h = app.revise && app.reviseBar ? app.reviseBar() : '';
     if (items.length) h += '<div class="print-head"><img src="assets/logo/mad-monkey-black.png" alt="Mad Monkey"><h1>' + esc(MM.routeLine(pl)) + '</h1><p>' + t.days + ' days · ' + plural(pl.countries.length, 'country', 'countries') + ' · about ' + money(t.total) + ' per person (estimate)' + (s.start ? ' · starting ' + U.fmtDate(U.parseDate(s.start)) : '') + '</p><p class="print-link">Open this trip: ' + esc(shareLink()) + '</p></div>';
+    if (window.MMStage && (s.from || (s.been && s.been.length))) h += window.MMStage.banner(s, pl);
     var backG = store('mm-back-group');
     if (backG && items.length) h += '<div class="backg"><span>Building your own route for the group?</span><a class="btn btn--sm btn--pink" href="#/group/' + esc(backG) + '" data-act="backg">Back to the group</a><button class="ideas__x" data-act="backgx" type="button">Dismiss</button></div>';
     /* summary */
-    h += '<div class="bsum"><div class="bsum__top"><div><div class="over lime">Your trip</div><h2 class="disp" style="margin-top:6px">' + (items.length ? plural(t.days, 'day') + ' · ' + plural(pl.countries.length, 'country', 'countries') : 'Start anywhere') + '</h2>' +
-      '<div class="bsum__route">' + (items.length ? esc(MM.routeLine(pl)) : 'Tap a hostel on the map, or pick a starter below. <button class="linkbtn" data-act="tour" type="button">Show me around</button>') + '</div></div>' +
+    h += '<div class="bsum"><div class="bsum__top"><div><div class="over lime">Your trip</div><h1 class="disp" style="margin-top:6px">' + (items.length ? plural(t.days, 'day') + ' · ' + plural(pl.countries.length, 'country', 'countries') : (s.from ? 'Where next?' : 'Where to?')) + '</h1>' +
+      '<div class="bsum__route">' + (items.length ? esc(MM.routeLine(pl)) : (app.search ? app.search.html({ mode: 'add', label: s.from ? 'Where next from ' + P[s.from].n + '?' : 'Where does your trip start?', placeholder: 'Type a city, a country or something to do', cls: 'srch--sheet' }) : '') + '<span class="bsum__hint">Or tap a hostel on the map, or pick a starter below. <button class="linkbtn" data-act="tour" type="button">Show me around</button></span>') + '</div></div>' +
       (items.length ? '<div class="bsum__total"><b>~' + money(t.total) + '</b><span>est. total · ' + (t.est ? 'incl. estimates' : 'per person') + '</span></div>' : '') + '</div>' +
       (items.length ? '<div class="stats"><div class="stat"><b>' + t.nights + '</b><span>nights</span></div><div class="stat"><b>' + t.stops + '</b><span>stops</span></div><div class="stat"><b>' + pl.km.toLocaleString('en-GB') + '</b><span>km</span></div><div class="stat"><b>' + pl.legs.length + '</b><span>transfers</span></div></div>' : '') +
-      '<div class="bsum__ctl"><div class="field"><label for="startd">Start date</label><input class="input" id="startd" type="date" value="' + esc(s.start) + '" min="' + U.isoDate(new Date()) + '"></div>' +
+      (items.length ? '<div class="bsum__ctl"><div class="field"><label for="startd">Start date</label><input class="input" id="startd" type="date" value="' + esc(s.start) + '" min="' + U.isoDate(new Date()) + '"></div>' +
       '<div class="field"><label>Travel style</label><div class="seg" role="group" aria-label="Travel style"><button type="button" data-act="pref" data-v="cheap" aria-pressed="' + (s.pref === 'cheap') + '">Cheapest</button><button type="button" data-act="pref" data-v="balanced" aria-pressed="' + (s.pref === 'balanced') + '">Smart</button><button type="button" data-act="pref" data-v="fast" aria-pressed="' + (s.pref === 'fast') + '">Fastest</button></div></div>' +
       '<div class="field full"><label for="fund">Food + fun fund: ' + money(s.fund) + ' a day</label><input class="range" id="fund" type="range" min="5" max="60" step="1" value="' + s.fund + '" aria-label="Daily spending money"></div>' +
-      '<div class="field full"><label for="budget">Budget target: ' + (s.budget ? money(s.budget) : 'not set') + '</label><input class="range" id="budget" type="range" min="0" max="6000" step="50" value="' + (s.budget || 0) + '" aria-label="Total budget target"></div></div>' +
+      '<div class="field full"><label for="budget">Budget target: ' + (s.budget ? money(s.budget) : 'not set') + '</label><input class="range" id="budget" type="range" min="0" max="6000" step="50" value="' + (s.budget || 0) + '" aria-label="Total budget target"></div></div>' : '') +
       (items.length && s.budget ? budgetBar(t) : '') + (items.length ? seasonStrip(pl) : '') +
-      '<div class="humans"><b>Checked by a real person.</b> ' + (app.revise ? 'Send my changes replaces the trip the crew is checking, so they only ever look at your latest plan.' : TERMS.box()) + '</div></div>';
+      '<div class="humans humans--ask"><span><b>Checked by a real person.</b> ' + (app.revise ? 'Send my changes replaces the trip the crew is checking, so they only ever look at your latest plan.' : TERMS.box()) + '</span>' + askLink('btn btn--sm btn--pink') + '</div></div>';
 
     if (plannerOn()) h += recoHTML();
 
+    if (!items.length && s.from && window.MMStage) { h += window.MMStage.empty(s); return h; }
     if (!items.length) {
       h += '<div class="empty"><h3>Tap the map.<br>Start anywhere.</h3><p>Every Mad Monkey is a pin. Add a few and we\'ll work out the buses, boats and flights between them, the cost, and the days.</p><div class="row">' +
         (app.meta.from && P[app.meta.from] ? '<button class="btn btn--sm btn--pink" data-act="addplace" data-p="' + app.meta.from + '" type="button">I\'m at ' + esc(P[app.meta.from].n) + '</button>' : '') +
@@ -382,13 +493,14 @@
     h += missHTML();
     /* add bar */
     var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
-    h += '<div class="addbar"><button class="btn btn--pink addbar__btn" data-act="insertat" data-i="' + app.state.items.length + '" data-where="1" type="button">+ Add a stop</button>' +
+    h += '<div class="addbar">' + (app.search ? app.search.html({ mode: 'add', label: 'Add a place or a tour', placeholder: 'Add a place or a tour: Hoi An, kayaking…', cls: 'srch--add' }) : '') + '<button class="btn btn--pink addbar__btn" data-act="insertat" data-i="' + app.state.items.length + '" data-where="1" type="button">+ Add a stop</button>' +
       nextBar(pl.segs[pl.segs.length - 1].last, 'Mad Monkey guests go next') + tweakRow() + '</div>';
 
     /* edit bar + itinerary */
     h += '<div class="editbar" role="toolbar" aria-label="Edit your trip"><button class="btn btn--sm btn--paper" data-act="undo" type="button"' + (H.past.length ? '' : ' disabled') + '>↶ Undo</button><button class="btn btn--sm btn--paper" data-act="redo" type="button"' + (H.future.length ? '' : ' disabled') + '>↷ Redo</button>' +
       '<button class="btn btn--sm btn--paper" data-act="insertat" data-i="' + app.state.items.length + '" data-where="1" type="button">+ Add a stop</button><button class="btn btn--sm btn--ghost" data-act="tour" type="button">Show me around</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>';
     h += '<div class="itin">';
+    if (pl.arrival) h += legCard(pl.arrival);
     pl.segs.forEach(function (sg, i) {
       h += sg.kind === 'allin' ? blockCard(sg, i, pl) : stopCard(sg, i, pl);
       var leg = pl.legs.filter(function (l) { return l.index === i; })[0];
@@ -410,7 +522,7 @@
     h += X('calendar', pl) + X('guide', pl);
     h += entryHTML(pl);
     /* CTA */
-    h += '<div class="humans humans--cta"><b>A real person checks every trip.</b> ' + TERMS.cta() + '</div>' +
+    h += '<div class="humans humans--cta humans--ask"><span><b>A real person checks every trip.</b> ' + TERMS.cta() + '</span>' + askLink('btn btn--sm btn--pink') + '</div>' +
       '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes to the crew' : 'Hold my beds + get it checked') + '</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="openpack" type="button">Trip pack</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
       '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability ' + TERMS.before() + '.</p></div>';
     return h;
@@ -424,12 +536,14 @@
     if (!plannerOn()) return [];
     var sd = U.parseDate(app.state.start), month = sd ? sd.getUTCMonth() : (app.state.month != null ? app.state.month : null);
     var key = [app.focus.slice().sort().join(','), app.recoDays, pbudget(), month, app.pv.join(','), app.pm.join(',')].join('|');
-    if (recoCache.key !== key) recoCache = { key: key, list: MM.generate({ countries: app.focus.length ? app.focus.slice() : null, days: app.recoDays, budget: pbudget(), month: month, vibes: app.pv.slice(), must: app.pm.slice() }) };
+    key += '|' + (app.state.from || '') + '|' + (app.state.been || []).join(',');
+    if (recoCache.key !== key) recoCache = { key: key, list: MM.generate({ countries: app.focus.length ? app.focus.slice() : null, days: app.recoDays, budget: pbudget(), month: month, vibes: app.pv.slice(), must: app.pm.slice(), from: app.state.from, been: app.state.been }) };
     return recoCache.list;
   }
   function applyReco(r) {
     var st = Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(r.state)));
     st.start = app.state.start; st.budget = app.state.budget; st.crew = app.state.crew; st.fund = app.state.fund; st.pref = app.state.pref; st.legPick = {};
+    if (app.state.from) st.from = app.state.from; if (app.state.been) st.been = app.state.been.slice();
     app.state = st; app.auto = true; persist(); track('reco_apply', { countries: app.focus.join(',') });
   }
   // Picking countries re-plans for you, as long as you haven't started editing by hand.
@@ -464,7 +578,7 @@
       show.map(function (x) {
         var isP = x.kind === 'place', a = isP ? null : MM.ACTS[x.act], img = isP ? MM.hostelImg(x.p) : (MM.actImg(a) || MM.hostelImg(x.p));
         var title = isP ? P[x.p].n : a.n, cost = (x.dDays > 0 ? '+' + x.dDays + (x.dDays === 1 ? ' day' : ' days') + ' · ' : '') + (x.dCost > 0 ? '+' + money(x.dCost) : a && a.usd == null ? 'Pay on the day' : 'No extra cost');
-        return '<div class="miss__row" data-c="' + P[x.p].c + '">' + photo(img) + '<div class="miss__bd"><b>' + esc(title) + '</b><p class="miss__why">' + esc(x.why) + '</p><p class="miss__pitch">' + esc(x.pitch) + '</p>' +
+        return '<div class="miss__row" data-c="' + P[x.p].c + '">' + photo(img, '', 's') + '<div class="miss__bd"><b>' + esc(title) + '</b><p class="miss__why">' + esc(x.why) + '</p><p class="miss__pitch">' + esc(x.pitch) + '</p>' +
           '<div class="miss__ft"><span class="miss__cost">' + cost + '</span><button class="btn btn--sm btn--pink" type="button" data-act="' + (isP ? 'nmadd' : 'nmact') + '" data-k="' + esc(x.k) + '">' + (isP ? 'Add ' + esc(P[x.p].n) : 'Add it') + '</button>' +
           '<button class="miss__no" type="button" data-act="nmoff" data-k="' + esc(x.k) + '">Not for me</button></div></div></div>';
       }).join('') +
@@ -482,7 +596,7 @@
   function X(fn) { try { return window.MMX && window.MMX[fn] ? window.MMX[fn].apply(null, [].slice.call(arguments, 1)) : ''; } catch (e) { return ''; } }
   function nextBar(fromId, title) {
     var p = P[fromId]; if (!p) return '';
-    var ranked = MM.nextRanked(fromId).filter(function (x) { return x.id !== fromId; }).slice(0, 5);
+    var ranked = MM.nextRanked(fromId, app.state.been).filter(function (x) { return x.id !== fromId; }).slice(0, 5);
     if (!ranked.length) return '';
     return '<div class="nextbar"><span class="over">' + esc(title) + '</span>' + ranked.map(function (x) {
       var r = MM.route(fromId, x.id, app.state.pref || 'balanced');
@@ -490,7 +604,7 @@
     }).join('') + '</div>';
   }
   function tweakRow() {
-    var h = '<div class="tweaks"><button class="btn btn--sm btn--paper" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--paper" data-act="surprise" type="button">Surprise me</button><button class="btn btn--sm btn--paper" data-act="suggest" type="button">Suggest my next stop</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="cheaper" type="button">Make it cheaper</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="faster" type="button">Make it faster</button></div>';
+    var h = '<div class="tweaks"><button class="btn btn--sm btn--paper" data-act="plantoggle" type="button">Plan it for me</button><button class="btn btn--sm btn--paper" data-act="surprise" type="button">Surprise me</button><button class="btn btn--sm btn--paper" data-act="suggest" type="button">Suggest my next stop</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="cheaper" type="button">Make it cheaper</button><button class="btn btn--sm btn--paper" data-act="tweak" data-v="faster" type="button">Make it faster</button>' + (app.state.items.length >= 3 ? '<button class="btn btn--sm btn--paper" data-act="bestorder" type="button">Best order</button>' : '') + '</div>';
     if (app.open.suggest) {
       var sg = MM.suggestNext(app.state);
       h += '<div class="nextbar"><span class="over">Picked for your route</span>' + (sg.length ? sg.map(function (x) { return '<button class="nextchip" data-act="addplace" data-p="' + x.id + '" type="button"><b>' + esc(P[x.id].n) + '</b> <small>' + hours(x.leg.h) + ' · ~' + money(x.leg.u) + '</small><em class="whytag">' + esc(x.why.slice(0, 2).join(' · ')) + '</em></button>'; }).join('') : '<small>Nothing else fits within a day\'s travel.</small>') + '</div>';
@@ -533,10 +647,15 @@
   }
   function galleryStrip(id) {
     var g = MM.gallery(id); if (g.length < 2) return '';
-    return '<div class="gal">' + g.slice(0, 4).map(function (u, k) { return '<button type="button" class="gal__i" data-act="gal" data-p="' + id + '" data-k="' + k + '" aria-label="Open photo ' + (k + 1) + ' of ' + g.length + '"><img src="' + u + '" alt="" loading="lazy" onerror="this.parentNode.remove()"></button>'; }).join('') + '<button type="button" class="gal__more" data-act="gal" data-p="' + id + '" data-k="0">' + g.length + ' photos</button></div>';
+    return '<div class="gal">' + g.slice(0, 4).map(function (u, k) { return '<button type="button" class="gal__i" data-act="gal" data-p="' + id + '" data-k="' + k + '" aria-label="Open photo ' + (k + 1) + ' of ' + g.length + '"><img src="' + MM.thumb(u, 's') + '" alt="" loading="lazy" data-fb="gal"' + (MM.thumb(u, 's') !== u ? ' data-full="' + u + '"' : '') + '></button>'; }).join('') + '<button type="button" class="gal__more" data-act="gal" data-p="' + id + '" data-k="0">' + g.length + ' photos</button></div>';
   }
   function icsEscape(t) { return String(t).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;'); }
   function icsDate(d) { return U.isoDate(d).replace(/-/g, ''); }
+  function icsFold(line) {                                  // RFC 5545: at most 75 bytes a line, a longer one continues on the next line after a space
+    var enc = typeof TextEncoder === 'function' ? new TextEncoder() : null, out = [], cur = '', bytes = 0;
+    Array.from(line).forEach(function (ch) { var b = enc ? enc.encode(ch).length : 1, lim = out.length ? 74 : 75; if (bytes + b > lim) { out.push(cur); cur = ''; bytes = 0; } cur += ch; bytes += b; });
+    out.push(cur); return out.join('\r\n ');
+  }
   function downloadICS(pl, state) {
     var ics = buildICS(pl, state); if (!ics) { toast('Pick a start date first so the days land in your calendar'); return; }
     var bl = new Blob([ics], { type: 'text/calendar' }), al = document.createElement('a'); al.href = URL.createObjectURL(bl); al.download = 'my-mad-monkey-trip.ics'; al.click(); setTimeout(function () { URL.revokeObjectURL(al.href); }, 2000); track('ics');
@@ -547,7 +666,7 @@
     function push(title, from, to, desc) { ev.push({ t: title, a: from, b: U.addDays(to, 1), d: desc || '' }); }
     pl.days.forEach(function (d) {
       if (!d.date || d.kind === 'depart') return;
-      var seg = pl.segs[d.si], name = d.kind === 'move' ? 'Overnight travel' : d.kind === 'epic' ? d.epic.n : d.kind === 'block' ? 'ALL IN ' + d.blockTrip.n : 'Mad Monkey ' + P[d.loc].n;
+      var name = d.kind === 'move' ? 'Overnight travel' : d.kind === 'epic' ? d.epic.n : d.kind === 'block' ? 'ALL IN ' + d.blockTrip.n : 'Mad Monkey ' + P[d.loc].n;
       var key = d.kind + ':' + d.si + ':' + name;
       if (cur && cur.key === key && U.isoDate(U.addDays(cur.last, 1)) === U.isoDate(d.date)) cur.last = d.date; else { cur = { key: key, name: name, first: d.date, last: d.date, kind: d.kind }; ev.push(cur); cur.__raw = true; }
       if (d.travel && d.kind === 'stay') push('Travel: ' + P[d.travel.from].n + ' → ' + P[d.travel.to].n, d.date, d.date, d.travel.chosen.modeLabel + ' · about ' + hours(d.travel.chosen.h) + ' · arrives about ' + d.travel.chosen.arrive);
@@ -559,7 +678,7 @@
       else { a1 = e.a; b1 = e.b; title = e.t; desc = e.d; }
       out.push('BEGIN:VEVENT', 'UID:mm-' + i + '-' + stamp + '@madmonkeyhostels.com', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + icsDate(a1), 'DTEND;VALUE=DATE:' + icsDate(b1), 'SUMMARY:' + icsEscape(title), 'DESCRIPTION:' + icsEscape((desc ? desc + '\n' : '') + 'Estimates only. Your trip: ' + shareLink()), 'END:VEVENT');
     });
-    out.push('END:VCALENDAR'); return out.join('\r\n');
+    out.push('END:VCALENDAR'); return out.map(icsFold).join('\r\n') + '\r\n';
   }
   function openGallery(id, k) {
     var g = MM.gallery(id); if (!g.length) return; k = Math.max(0, Math.min(g.length - 1, k));
@@ -571,10 +690,9 @@
 
   function stopCard(sg, i, pl) {
     var p = P[sg.p], it = app.state.items[i], open = !!app.open['acts' + i], chosen = sg.acts;
-    var travelDays = pl.days.filter(function (d) { return d.si === i && d.loc === sg.p; });
     var sub = [MM.COUNTRIES[p.c].n, 'dorm from ' + money(p.bed) + '/night', plural(sg.n, 'night')];
     var epicNights = sg.epics.reduce(function (a, e) { return a + e.multi.n; }, 0); if (epicNights) sub.push('+ ' + plural(epicNights, 'night') + ' away');
-    var h = '<div class="stopc" id="stop' + i + '" data-seg="' + i + '" data-c="' + p.c + '"><div class="stopc__head"><div class="stopc__thumb photo">' + photo(MM.hostelImg(p.id)).replace('class="photo ', 'class="photo ').replace('<div', '<div style="width:100%;height:100%"') + '<span class="stopc__num">' + (i + 1) + '</span></div>' +
+    var h = '<div class="stopc" id="stop' + i + '" data-seg="' + i + '" data-c="' + p.c + '"><div class="stopc__head"><div class="stopc__thumb photo">' + photo(MM.hostelImg(p.id), '', 's').replace('<div', '<div style="width:100%;height:100%"') + '<span class="stopc__num">' + (i + 1) + '</span></div>' +
       '<div><h3><span class="dotc" data-c="' + p.c + '"></span>' + esc(p.n) + (p.partner ? ' ' + chip('Partner', 'pill--yellow') : '') + '</h3><div class="stopc__sub">' + sub.join(' · ') + '</div></div>' +
       '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
 '</div></div>' +
@@ -592,8 +710,9 @@
     var price = a.usd == null ? 'Pay on the day' : (a.est ? '~' : '') + money(a.usd), small = a.usd == null ? '' : a.live ? 'live' : a.est ? 'est.' : 'from';
     var length = a.multi ? (a.multi.d > 1 ? a.multi.d + ' days' + (a.multi.n ? ' · ' + a.multi.n + (a.multi.n === 1 ? ' night' : ' nights') + ' away' : '') : SLOT[a.slot]) : SLOT[a.slot];
     var url = MM.actUrl(a);
-    return '<div class="act" role="button" tabindex="0" data-act="act" data-i="' + i + '" data-a="' + a.id + '" aria-pressed="' + on + '">' + photo(MM.actImg(a)) +
-      '<div><b>' + esc(a.n) + '</b><div class="sub">' + (a.star ? '<span class="star">★ Top pick</span>' : '') + '<span>' + length + '</span><span>' + (a.dows ? a.when : 'Every day') + '</span>' + (url ? '<a class="link" href="' + url + '" target="_blank" rel="noopener" data-stop="1">Details ↗</a>' : '') + '</div>' + (a.note ? '<div class="sub" style="margin-top:2px">' + esc(a.note) + '</div>' : '') + '</div>' +
+    // The name is the real button (its ::after stretches over the whole card); the Details link sits above that, so neither is nested inside the other.
+    return '<div class="act" data-on="' + on + '">' + photo(MM.actImg(a), '', 's') +
+      '<div><button type="button" class="act__t" data-act="act" data-i="' + i + '" data-a="' + a.id + '" aria-pressed="' + on + '"><b>' + esc(a.n) + '<span class="sr">' + (on ? ', in your trip. Press to remove.' : ', not in your trip. Press to add.') + '</span></b></button><div class="sub">' + (a.star ? '<span class="star">★ Top pick</span>' : '') + '<span>' + length + '</span><span>' + (a.dows ? a.when : 'Every day') + '</span>' + (url ? '<a class="link" href="' + url + '" target="_blank" rel="noopener">Details ↗</a>' : '') + '</div>' + (a.note ? '<div class="sub" style="margin-top:2px">' + esc(a.note) + '</div>' : '') + '</div>' +
       '<div class="px">' + price + (small ? '<small>' + small + '</small>' : '') + '</div></div>';
   }
   function actsPanel(sg, i) {
@@ -607,9 +726,9 @@
 
   function legCard(leg) {
     var from = P[leg.from].n, to = P[leg.to].n, ex = MM.explainLeg(leg), whyOpen = !!app.open['why' + leg.index];
-    var h = '<div class="legc" id="leg' + leg.index + '"><button class="legc__add" data-act="insertat" data-i="' + (leg.index + 1) + '" type="button">+ Add a stop in between</button><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
+    var h = '<div class="legc' + (leg.origin ? ' legc--origin' : '') + '" id="leg' + (leg.origin ? 'o' : leg.index) + '">' + (leg.origin ? '<div class="over legc__kick">Getting there from where you are</div>' : '') + '<button class="legc__add" data-act="insertat" data-i="' + (leg.index + 1) + '" type="button">' + (leg.origin ? '+ Add a stop on the way' : '+ Add a stop in between') + '</button><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
     leg.options.forEach(function (o) {
-      h += '<button class="legopt" type="button" data-act="leg" data-i="' + leg.index + '" data-k="' + o.key + '" aria-pressed="' + (o.key === leg.key) + '">' + legIcon(leg, o) +
+      h += '<button class="legopt" type="button" data-act="leg" data-i="' + (leg.origin ? 'o' : leg.index) + '" data-k="' + o.key + '" aria-pressed="' + (o.key === leg.key) + '">' + legIcon(leg, o) +
         '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.fare ? '<i class="live-pill">fare for your date</i>' : o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span>' + (o.fare && o.fare.max > o.fare.min ? '<span class="nt">Fares that day: ' + money(o.fare.min) + ' to ' + money(o.fare.max) + '. We have used the lowest.</span>' : '') + '</div><div class="tm">' + (o.fare ? '' : '~') + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
     });
     h += '</div><button class="why" data-act="toggle" data-k="why' + leg.index + '" aria-expanded="' + whyOpen + '" type="button">Why this leg? <b>' + (whyOpen ? '−' : '+') + '</b></button>';
@@ -632,7 +751,7 @@
   }
 
   function matchCard(m, pl) {
-    var t = m.trip, pct = Math.round(m.cover * 100), cheaper = pl.totals.diy > t.usd;
+    var t = m.trip, cheaper = pl.totals.diy > t.usd;
     var nd = U.fmtDate(m.next);
     var names = m.hit.map(function (p) { return P[p].n; }).join(' + ');
     return '<div class="match"><span class="pill pill--sm pill--black">ALL IN match</span><h3>This looks a lot like ALL IN ' + esc(t.n) + '.</h3>' +
@@ -655,7 +774,7 @@
     return null;
   }
   function daysHTML(pl) {
-    var start = pl.days.length ? 0 : 0, h = '<div class="days">';
+    var h = '<div class="days">';
     var blockNo = {}; pl.days.forEach(function (d, i) { if (d.kind === 'block') { blockNo[d.blockTrip.id + d.si] = (blockNo[d.blockTrip.id + d.si] || 0) + 1; d._bk = blockNo[d.blockTrip.id + d.si]; } });
     pl.days.forEach(function (d) {
       var title = d.title, extra = '';
@@ -706,6 +825,48 @@
     if ((a && !ra) || (b && !rb)) return null;
     return { h: Math.max(0, (ra ? ra.h : 0) + (rb ? rb.h : 0) - (rab ? rab.h : 0)), u: Math.round((ra ? ra.u : 0) + (rb ? rb.u : 0) - (rab ? rab.u : 0)) };
   }
+  /* ---------- the search box (ui-search.js): what happens when someone picks a result ----------
+     mode 'start' is the home page (it begins a new trip); 'add' is the builder (it adds to this one, or begins one if the sheet is blank). */
+  // Where a new place fits the journey best: the gap where it adds the least travel (1 = before the first stop).
+  function bestPosition(id) {
+    plan = MM.plan(app.state); var n = app.state.items.length, best = n + 1, bh = Infinity;
+    for (var i = 0; i <= n; i++) { var d = detour(nearFor(i), id); if (d && d.h < bh - 0.01) { bh = d.h; best = i + 1; } }
+    return best;
+  }
+  function searchPick(res, mode) {
+    track('search_pick', { kind: res.kind, mode: mode });
+    var fresh = mode === 'start' || !app.state.items.length, later = function (m) { setTimeout(function () { toast(m); }, 150); };
+    function beginWith(fn, msg) { startFresh(); app.tourPending = false; fn(app.state); persist(); go('build', MM.encodeState(app.state)); if (msg) later(msg); }
+    function seeStop(i) { var el = document.getElementById('stop' + i); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    if (res.kind === 'place' && P[res.id]) {
+      if (fresh) return beginWith(function (st) { st.items.push(stopFor(res.id)); }, 'Added ' + P[res.id].n + '. Search for the next place, or press Plan it for me.');
+      var at = app.state.items.map(function (it) { return it.p; }).indexOf(res.id);
+      if (at > -1) { toast(P[res.id].n + ' is already in your trip'); return seeStop(at); }
+      var pos = bestPosition(res.id); if (applyEdit([{ op: 'add_stop', place: res.id, position: pos }])) setTimeout(function () { seeStop(pos - 1); }, 80);
+    } else if (res.kind === 'tour' && MM.ACTS[res.act] && P[res.p]) {
+      var here = app.state.items.map(function (it) { return it.p; }).indexOf(res.p);
+      if (fresh) return beginWith(function (st) { var it = stopFor(res.p); if (it.acts.indexOf(res.act) < 0) it.acts.push(res.act); st.items.push(it); }, 'Added ' + MM.ACTS[res.act].n + ' at ' + P[res.p].n + '.');
+      if (here > -1) { if (applyEdit([{ op: 'add_tour', stop: here + 1, tour: res.act }])) setTimeout(function () { seeStop(here); }, 80); return; }
+      var p2 = bestPosition(res.p), ops = [{ op: 'add_stop', place: res.p, position: p2 }];
+      if (MM.edit.newStop(res.p).acts.indexOf(res.act) < 0) ops.push({ op: 'add_tour', stop: p2, tour: res.act });                // (a new stop comes with its star tours: it may be one of them already)
+      if (applyEdit(ops)) setTimeout(function () { seeStop(p2 - 1); }, 80);
+    } else if (res.kind === 'country' && MM.COUNTRIES[res.id]) {
+      var c = res.id, cn = MM.COUNTRIES[c].n;
+      if (fresh) {                                                       // a first draft for the country, ready to change: the same planner as "Plan it for me"
+        startFresh(); app.tourPending = false; app.focus = [c]; app.open.planner = true; app.pv = []; app.pm = []; autoReco(); persist();
+        go('build', MM.encodeState(app.state)); return later(app.state.items.length ? 'Here\'s a first draft for ' + cn + '. Change anything, or tune it with the Plan it for me panel.' : 'Pick a place in ' + cn + ' to start.');
+      }
+      plan = MM.plan(app.state); openPicker({ title: 'Add a stop in ' + cn, position: app.state.items.length + 1, near: nearFor(app.state.items.length), where: true, query: cn });
+    } else if (res.kind === 'allin') {
+      if (fresh) return beginWith(function (st) { st.items.push({ kind: 'allin', trip: res.trip }); }, 'ALL IN ' + (MM.tripById(res.trip) || {}).n + ' is in your trip. Add anything before or after it.');
+      mutate(function (st) { st.items.push({ kind: 'allin', trip: res.trip }); }); toast('Added ALL IN ' + (MM.tripById(res.trip) || {}).n, { undo: true });
+    } else if (res.kind === 'route' || res.kind === 'theme') {
+      var tpl = res.kind === 'route' ? MM.tripById(res.route) : null, th = res.kind === 'theme' ? MM.themeTrip(res.theme) : null;
+      if (tpl) { stash(); app.state = MM.defaultState(); tpl.stops.forEach(function (st) { app.state.items.push({ kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }); }); app.state.pref = tpl.pref || 'cheap'; app.focus = []; app.open = {}; app.tourPending = false; persist(); go('build', MM.encodeState(app.state)); later(tpl.n + ' is ready. Change anything you like.' + (mode === 'add' ? ' Your last trip is on the home page.' : '')); }
+      else if (th && window.MMX) window.MMX.openState(th.state, th.theme.n + ': ' + th.days + ' days. Change anything you like.' + (mode === 'add' ? ' Your last trip is on the home page.' : ''));
+    }
+  }
+  app.searchPick = searchPick;
   function openPicker(o) {
     var n = app.state.items.length, pl0 = plan;
     function stopName(k) { var sg = pl0 && pl0.segs[k]; return sg ? (sg.kind === 'allin' ? 'ALL IN ' + sg.trip.n : P[sg.p].n) : 'the last stop'; }
@@ -731,9 +892,9 @@
     openModal('<div class="modal__hd"><div><div class="over">Your trip</div><h2 class="disp">' + esc(o.title) + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' + where + '<p class="qhelp pkhint" style="margin-bottom:var(--s-3)">' + hintText() + '</p>' +
       '<div class="field"><label for="pksearch">Search</label><input class="input" id="pksearch" type="search" placeholder="a place or a country" autocomplete="off"></div>' +
       '<ul class="picker">' + rowsHTML() + '</ul></div>', function (m) {
-        var q = $('#pksearch', m);
+        var q = $('#pksearch', m); if (o.query) q.value = o.query;
         function filter() { var v = q.value.trim().toLowerCase(); $$('.picker li', m).forEach(function (li) { li.hidden = !!v && li.getAttribute('data-q').indexOf(v) < 0; }); }
-        q.addEventListener('input', filter);
+        q.addEventListener('input', filter); if (o.query) filter();
         var w = $('#pkwhere', m);
         if (w) w.addEventListener('change', function () { o.position = +w.value; o.near = nearFor(o.position - 1); $('.picker', m).innerHTML = rowsHTML(); $('.pkhint', m).textContent = hintText(); filter(); });
       });
@@ -742,19 +903,37 @@
   /* ============================================================
      MODALS
      ============================================================ */
+  var modalFrom = null, modalKey = null, FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function setBackdrop(on) { ['hdr', 'app'].forEach(function (id) { var el = document.getElementById(id); if (!el) return; if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert'); }); }
   function openModal(html, onMount) {
+    var reopen = !!modalRoot.firstChild; if (!reopen) modalFrom = document.activeElement;
     modalRoot.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><div class="modal__box">' + html + '</div></div>';
-    var m = $('.modal', modalRoot); m.addEventListener('mousedown', function (e) { if (e.target === m) closeModal(); });
+    var m = $('.modal', modalRoot), hd = $('h2', m); if (hd) { hd.id = 'modal-title'; m.setAttribute('aria-labelledby', 'modal-title'); }
+    m.addEventListener('mousedown', function (e) { if (e.target === m) closeModal(); });
+    setBackdrop(true);
+    if (modalKey) document.removeEventListener('keydown', modalKey);
+    modalKey = function (e) {                                                           // Tab stays inside the dialog
+      if (e.key !== 'Tab') return; var f = $$(FOCUSABLE, m).filter(function (x) { return x.offsetParent !== null; }); if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !m.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !m.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', modalKey);
     var f = $('input,select,textarea,button', m); if (f) f.focus();
     if (onMount) onMount(m);
   }
-  function closeModal() { modalRoot.innerHTML = ''; }
+  function closeModal() {
+    var was = !!modalRoot.firstChild; modalRoot.innerHTML = ''; setBackdrop(false);
+    if (modalKey) { document.removeEventListener('keydown', modalKey); modalKey = null; }
+    if (was && modalFrom && document.contains(modalFrom) && typeof modalFrom.focus === 'function') { try { modalFrom.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }     // back to the button that opened it
+    modalFrom = null;
+  }
 
   /* ---------- contact: guest picks ONE way for the crew to reach them ---------- */
   function contactPick(q) {
     var via = q.via === 'email' || (!q.via && q.email && !q.whatsapp) ? 'email' : 'whatsapp';
     return '<div class="field full cpick" data-via="' + via + '"><span class="lbl">How should the crew reach you?</span>' +
-      '<div class="seg" role="radiogroup" aria-label="Contact method"><button type="button" role="radio" data-via="whatsapp" aria-checked="' + (via === 'whatsapp') + '" aria-pressed="' + (via === 'whatsapp') + '">WhatsApp</button><button type="button" role="radio" data-via="email" aria-checked="' + (via === 'email') + '" aria-pressed="' + (via === 'email') + '">Email</button></div>' +
+      '<div class="seg" role="radiogroup" aria-label="Contact method"><button type="button" role="radio" data-via="whatsapp" aria-checked="' + (via === 'whatsapp') + '">WhatsApp</button><button type="button" role="radio" data-via="email" aria-checked="' + (via === 'email') + '">Email</button></div>' +
       '<input type="hidden" name="via" value="' + via + '">' +
       '<input class="input cpick__wa" name="whatsapp" type="tel" autocomplete="tel" placeholder="WhatsApp number with country code, e.g. +44 7700 900123" aria-label="WhatsApp number" value="' + esc(q.whatsapp || '') + '">' +
       '<input class="input cpick__em" name="email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email" value="' + esc(q.email || '') + '"></div>';
@@ -768,7 +947,7 @@
   document.addEventListener('click', function (e) {
     var b = e.target.closest('.cpick [data-via]'); if (!b) return;
     var box = b.closest('.cpick'), via = b.getAttribute('data-via'); box.setAttribute('data-via', via); box.querySelector('[name=via]').value = via;
-    box.querySelectorAll('.seg [data-via]').forEach(function (x) { var on = x === b; x.setAttribute('aria-pressed', on); x.setAttribute('aria-checked', on); });
+    box.querySelectorAll('.seg [data-via]').forEach(function (x) { var on = x === b; x.setAttribute('aria-checked', on); });
     var inp = box.querySelector(via === 'email' ? '.cpick__em' : '.cpick__wa'); if (inp) inp.focus();
   });
 
@@ -797,7 +976,7 @@
     var raw = ($('#meetin') || {}).value || '', out = $('#meetout'); if (!out) return;
     var say = function (h) { out.innerHTML = h; };
     var mBuild = raw.match(/#\/build\/([^\s]+)/), mShort = raw.match(/\/t\/([a-z0-9]{7})/);
-    var got = mBuild ? Promise.resolve(decodeURIComponent(mBuild[1])) : mShort && C.SHARE_ENDPOINT ? fetch(C.SHARE_ENDPOINT + '/' + mShort[1]).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (d) { return d.state; }) : Promise.reject(0);
+    var got = mBuild ? Promise.resolve(safeUri(mBuild[1])) : mShort && C.SHARE_ENDPOINT ? fetch(C.SHARE_ENDPOINT + '/' + mShort[1]).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (d) { return d.state; }) : Promise.reject(0);
     got.then(function (enc) {
       var theirs = MM.decodeState(enc); if (!theirs.items || !theirs.items.length) throw 0;
       var o = MM.overlap(app.state, theirs), tp = MM.plan(theirs);
@@ -819,7 +998,6 @@
      EVENTS
      ============================================================ */
   document.addEventListener('click', function (e) {
-    if (e.target.closest('a[data-stop]')) { e.stopPropagation(); return; }
     var door = e.target.closest('.door'); if (door) track('door', { door: door.getAttribute('data-go') || door.getAttribute('data-to') || 'x' });
     var go_ = e.target.closest('[data-go]'); if (go_) { e.preventDefault(); var v = go_.getAttribute('data-go'); if (v === 'quiz') { app.quiz.step = 0; } if (go_.hasAttribute('data-new')) { track('start_fresh', { had: app.state.items.length ? 1 : 0 }); startFresh(); go('build', ''); return; } go(v === 'build' && app.state.items.length ? 'build' : v, v === 'build' && app.state.items.length ? MM.encodeState(app.state) : ''); return; }
     var rg = e.target.closest('[data-focus]'); if (rg) { var fc = rg.getAttribute('data-focus'); if (!fc) app.focus = []; else { var fi = app.focus.indexOf(fc); if (fi > -1) app.focus.splice(fi, 1); else app.focus.push(fc); } autoReco(); if (app.auto) persist(); refreshBuilder(); return; }
@@ -844,18 +1022,30 @@
       case 'mapfit': MM.BuilderMap.reset(); break;
       case 'scroll': { var t = document.getElementById(el.getAttribute('data-to')); if (t) t.scrollIntoView({ behavior: 'smooth' }); break; }
       case 'close': closeModal(); break;
+      case 'reloadpage': location.reload(); break;
+      case 'bestorder': {                                  // the stops in the order that costs the least travel (edit.js bestOrder); one tap, and Undo takes it back
+        var bo = MM.edit.bestOrder(app.state);
+        if (!bo) { toast('Your stops are already in the quickest order'); break; }
+        track('best_order', { saved_h: bo.savedH });
+        app.commit(bo.state, 'Quickest order: ' + MM.routeLine(MM.plan(bo.state)) + '. Saves about ' + hours(bo.savedH) + ' of travel' + (bo.savedUsd >= 5 ? ' and ' + money(bo.savedUsd) : '') + '.');
+        break; }
+      case 'focussearch': { var si = document.querySelector('#app .srch__in'); if (si) { si.scrollIntoView({ block: 'center' }); si.focus(); } break; }
+      case 'askdemo': toast('Demo: on the live site this opens a message to ' + (askName() || 'the crew') + ', with your trip already in it.'); break;
+      case 'forgetme': forgetMe(); break;
+      case 'cleanslate': ['mm-trip', 'mm-trip-last', 'mm-revise', 'mm-quiz', 'mm-nmoff'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }); location.hash = '#/'; location.reload(); break;
       /* quiz */
       case 'qpick': { var s = QSTEPS[app.quiz.step]; app.quiz.a[s.k] = el.getAttribute('data-v'); renderQuiz(); setTimeout(quizAdvance, 220); break; }
       case 'qdays': app.quiz.a.days = +el.getAttribute('data-v'); renderQuiz(); break;
       case 'qmonth': { var mm = el.getAttribute('data-m'); app.quiz.a.month = mm === '' ? null : +mm; app.quiz.a.year = mm === '' ? null : +el.getAttribute('data-y'); renderQuiz(); setTimeout(quizAdvance, 220); break; }
       case 'qmulti': { var k = QSTEPS[app.quiz.step].k, list = app.quiz.a[k], v2 = el.getAttribute('data-v'), ix = list.indexOf(v2); if (ix > -1) list.splice(ix, 1); else list.push(v2); renderQuiz(); break; }
       case 'qnext': quizAdvance(); break;
+      case 'qfinish': finishQuiz(); break;
       case 'qback': app.quiz.step = Math.max(0, app.quiz.step - 1); renderQuiz(); break;
       case 'qedit': app.quiz.step = 0; go('quiz'); break;
-      case 'openres': { var r = app.results[i]; app.state = Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(r.state))); app.focus = []; persist(); track('open_result', { id: r.cand.tpl.id }); go('build', MM.encodeState(app.state)); break; }
+      case 'openres': { var r = app.results[i]; stash(); app.state = Object.assign(MM.defaultState(), JSON.parse(JSON.stringify(r.state))); app.focus = []; persist(); track('open_result', { id: r.cand.tpl.id }); go('build', MM.encodeState(app.state)); break; }
       /* home / starters */
-      case 'addblock': { app.state = MM.defaultState(); app.state.items.push({ kind: 'allin', trip: el.getAttribute('data-id') }); app.focus = []; persist(); track('addblock', { id: el.getAttribute('data-id') }); go('build', MM.encodeState(app.state)); break; }
-      case 'customise': { var tpl = MM.tripById(el.getAttribute('data-id')); app.state = MM.defaultState(); tpl.stops.forEach(function (st) { app.state.items.push({ kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }); }); app.state.pref = tpl.pref || 'cheap'; app.focus = []; persist(); track('customise', { id: tpl.id }); go('build', MM.encodeState(app.state)); break; }
+      case 'addblock': { stash(); app.state = MM.defaultState(); app.state.items.push({ kind: 'allin', trip: el.getAttribute('data-id') }); app.focus = []; persist(); track('addblock', { id: el.getAttribute('data-id') }); go('build', MM.encodeState(app.state)); break; }
+      case 'customise': { var tpl = MM.tripById(el.getAttribute('data-id')); stash(); app.state = MM.defaultState(); tpl.stops.forEach(function (st) { app.state.items.push({ kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }); }); app.state.pref = tpl.pref || 'cheap'; app.focus = []; persist(); track('customise', { id: tpl.id }); go('build', MM.encodeState(app.state)); break; }
       case 'customiseblock': { var blk = S.items[i], tp = MM.ALL_IN.filter(function (x) { return x.id === blk.trip; })[0]; var ns = tp.stops.map(function (st) { return { kind: 'stop', p: st.p, n: st.n, acts: st.acts.slice() }; }); mutate(function (s2) { s2.items.splice.apply(s2.items, [i, 1].concat(ns)); }); toast('Now it\'s yours: edit anything'); break; }
       case 'swapallin': { var id2 = el.getAttribute('data-id'), tr = MM.ALL_IN.filter(function (x) { return x.id === id2; })[0], inTrip = {}; tr.stops.forEach(function (st) { inTrip[st.p] = 1; }); mutate(function (s2) { var extras = s2.items.filter(function (it) { return it.kind === 'stop' && !inTrip[it.p]; }); s2.items = [{ kind: 'allin', trip: id2 }].concat(extras); }); track('swap_allin', { id: id2 }); break; }
       /* builder */
@@ -881,11 +1071,11 @@
       case 'pickplace': { var pid = el.getAttribute('data-p'), sw = el.getAttribute('data-swap'), pos = +el.getAttribute('data-pos'); closeModal(); if (sw !== null && sw !== '') applyEdit([{ op: 'swap_stop', stop: +sw + 1, place: pid }]); else if (applyEdit([{ op: 'add_stop', place: pid, position: pos }])) { var nc = document.getElementById('stop' + (pos - 1)); if (nc) nc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } break; }
       case 'dayrm': applyEdit([{ op: 'remove_tour', stop: i + 1, tour: el.getAttribute('data-a') }]); break;
       case 'toggle': { var key = el.getAttribute('data-k'); app.open[key] = !app.open[key]; refreshBuilder(); break; }
-      case 'act': { var aid = el.getAttribute('data-a'); mutate(function (s2) { var arr = s2.items[i].acts, ix2 = arr.indexOf(aid); if (ix2 > -1) arr.splice(ix2, 1); else arr.push(aid); }); break; }
-      case 'leg': mutate(function (s2) { s2.legPick = s2.legPick || {}; s2.legPick[i] = el.getAttribute('data-k'); }); break;
+      case 'act': { var aid = el.getAttribute('data-a'); mutate(function (s2) { var it2 = s2.items[i], arr = it2.acts, ix2 = arr.indexOf(aid); if (ix2 > -1) { arr.splice(ix2, 1); if (it2.pins) { delete it2.pins[aid]; if (!Object.keys(it2.pins).length) delete it2.pins; } } else arr.push(aid); }); break; }
+      case 'leg': { var lk = el.getAttribute('data-i') === 'o' ? 'o' : i; mutate(function (s2) { s2.legPick = s2.legPick || {}; s2.legPick[lk] = el.getAttribute('data-k'); }); break; }
       case 'pref': mutate(function (s2) { s2.pref = el.getAttribute('data-v'); s2.legPick = {}; }); break;
       case 'crew': mutate(function (s2) { s2.crew = Math.max(0, Math.min(8, (s2.crew || 0) + (+el.getAttribute('data-d')))); }); break;
-      case 'reset': { app.state = MM.defaultState(); app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); toast('Cleared your trip', { undo: true }); break; }
+      case 'reset': { stash(); var keepF = app.state.from, keepB = app.state.been; app.state = MM.defaultState(); if (keepF) app.state.from = keepF; if (keepB) app.state.been = keepB; app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); toast('Cleared your trip', { undo: true }); break; }
       case 'lead': if (app.review) app.review.open(); break;
       case 'share': openShare(); break;
       case 'story': openStory(); break;
@@ -899,7 +1089,6 @@
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && modalRoot.firstChild) closeModal();
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.act[role=button]')) { e.preventDefault(); e.target.click(); }
   });
   document.addEventListener('change', function (e) {
     var t = e.target;
@@ -938,14 +1127,13 @@
     }
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modalRoot.firstChild) closeModal(); });
   document.addEventListener('keydown', function (e) {
     var k = (e.key || '').toLowerCase(); if (!(e.metaKey || e.ctrlKey) || (k !== 'z' && k !== 'y') || app.view !== 'build') return;
     var tg = e.target; if (tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.tagName === 'SELECT' || tg.isContentEditable)) return;   // typing keeps its own undo
     e.preventDefault(); if (k === 'y' || e.shiftKey) app.redo(); else app.undo();
   });
 
-  app.util = { addStop: function (id) { addStop(id); }, ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
+  app.util = { ask: askLink, askLabel: askLabel, humanLine: HUMAN.line, url: safeUrl, dec: safeUri, timed: timed, addStop: function (id) { addStop(id); }, ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
   var navAllIn = $('#nav-allin'); if (navAllIn && MM.allInBase) navAllIn.href = MM.allInBase();   // the ALL IN site, wherever this copy lives
   window.addEventListener('hashchange', route);
 

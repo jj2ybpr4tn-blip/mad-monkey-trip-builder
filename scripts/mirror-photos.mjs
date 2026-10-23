@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copy every photo the builder uses onto your own hosting, resized, so the page no longer depends on madmonkeyhostels.com.
 //   node scripts/mirror-photos.mjs            → writes assets/photos/{hostel,tour,gallery}/…
-// Then set  PHOTO_BASE: '/assets/photos'  (or your CDN URL) in config.js.
+// Then set  PHOTO_BASE: '/assets/photos'  (or your CDN URL) in config.js, and run  node scripts/make-thumbs.mjs  for the small copies the page loads first.
 // Resizing uses `sips` (macOS) or ImageMagick `magick`/`convert` if present; otherwise originals are copied as-is.
 // The main site sits behind Cloudflare, which can refuse scripted downloads. Anything that fails is listed at the end;
 // for those, fetch the files from a browser session (or ask web ops for an export) and drop them in the same folders.
@@ -33,4 +33,4 @@ for (const j of jobs) {
 }
 console.log(`\n${ok}/${jobs.length} photos in ${path.relative(process.cwd(), OUT)}${resizer ? ' (resized with ' + resizer + ')' : ' (not resized: install ImageMagick)'}`);
 if (failed.length) { console.log(`\n${failed.length} failed:\n  ` + failed.slice(0, 25).join('\n  ') + (failed.length > 25 ? '\n  …' : '')); }
-console.log('\nNext: set PHOTO_BASE: \'/assets/photos\' in config.js');
+console.log('\nNext: set PHOTO_BASE: \'/assets/photos\' in config.js, then run: node scripts/make-thumbs.mjs');

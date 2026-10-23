@@ -12,7 +12,7 @@ const iso = (d = new Date()) => d.toISOString().slice(0, 10);
 
 const H: Record<string, (r: Request) => Promise<Response>> = {};
 async function load(name: string) { let h; Deno.serve = (x) => { h = x; return {}; }; await import(`./functions/${name}/index.ts`); H[name] = h; }
-for (const n of ["trip-builder-request", "trip-builder-admin", "trip-builder-status", "trip-builder-pay", "charge-trip-builder-payments", "trip-builder-revise"]) await load(n);
+for (const n of ["trip-builder-request", "trip-builder-admin", "trip-builder-status", "trip-builder-pay", "charge-trip-builder-payments", "trip-builder-revise", "trip-builder-login"]) await load(n);
 
 let pass = 0, fail = 0;
 const ok = (name: string, c: unknown, extra = "") => { if (c) { pass++; console.log("PASS  " + name); } else { fail++; console.log("FAIL  " + name + (extra ? "  -> " + extra : "")); } };
@@ -181,7 +181,7 @@ async function approve(ref: string, amount: number) {
   const v = await send("trip-builder-admin", { action: "view", ref, key: k });
   ok("the crew key can view its own trip: the summary, the suggested balance, no card ids", v.s === 200 && v.b.summary.stops.length === 3 && v.b.suggestedBalance === 602 && !("stripe_payment_method_id" in v.b.request) && !("deposit_payment_intent" in v.b.request));
   ok("a crew key can't list every request or mint links", (await send("trip-builder-admin", { action: "list", ref, key: k })).s === 401 && (await send("trip-builder-admin", { action: "link", ref, key: k })).s === 401);
-  const rev = await send("trip-builder-admin", { action: "revise", ref, key: k, note: "Added a night in Hoi An.", trip: { link: "https://x.test/#/build/i=s.hanoi.4~s.hoi-an.5~s.saigon.3", route: "Hanoi → Hoi An → Ho Chi Minh City", days: 13, nights: 12, stops: ["hanoi", "hoi-an", "saigon"], countries: ["VN"], start: iso(new Date(Date.now() + 120 * 86400000)), estTotalUsd: 596 }, summary: { stops: [], budget: { tripCostAllPeople: 712 }, days: 13 }, crewText: "EDITED" });
+  const rev = await send("trip-builder-admin", { action: "revise", ref, key: k, note: "Added a night in Hoi An.", trip: { link: "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.hanoi.4~s.hoi-an.5~s.saigon.3", route: "Hanoi → Hoi An → Ho Chi Minh City", days: 13, nights: 12, stops: ["hanoi", "hoi-an", "saigon"], countries: ["VN"], start: iso(new Date(Date.now() + 120 * 86400000)), estTotalUsd: 596 }, summary: { stops: [], budget: { tripCostAllPeople: 712 }, days: 13 }, crewText: "EDITED" });
   ok("Edit it saves the crew's version, moves it to 'checking' and keeps the guest's own", rev.s === 200 && row(ref).status === "checking" && row(ref).days === 13 && row(ref).payload.original.trip.days === 12 && row(ref).payload.revision.note === "Added a night in Hoi An.");
   ok("a revise with a broken link is refused", (await send("trip-builder-admin", { action: "revise", ref, key: k, trip: { link: "javascript:alert(1)", route: "x", days: 3 }, summary: {} })).s === 400);
   const dec = await send("trip-builder-admin", { action: "decline", ref, key: k, note: "Sorry, full that week.", refund: true });
@@ -248,7 +248,7 @@ async function approve(ref: string, amount: number) {
 
   // a crew edit is replaced by the guest's new version
   const ck = ak;
-  await send("trip-builder-admin", { action: "revise", ref, key: ck, note: "We tweaked it.", trip: { link: "https://x.test/#/build/i=s.hanoi.5", route: "Hanoi", days: 6 }, summary: base.summary });
+  await send("trip-builder-admin", { action: "revise", ref, key: ck, note: "We tweaked it.", trip: { link: "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.hanoi.5", route: "Hanoi", days: 6 }, summary: base.summary });
   ok("(a crew edit exists)", !!row(ref).payload.revision);
   await change(ref, key, 3);
   ok("and the guest's next version replaces the crew's edit", !row(ref).payload.revision && !row(ref).payload.original && row(ref).payload.rev === 3 && row(ref).trip_link === LINK(3));
@@ -270,6 +270,122 @@ async function approve(ref: string, amount: number) {
   ok("before the deposit is paid the trip is replaced quietly: nobody is emailed", uc.s === 200 && row(uref).status === "pending_payment" && row(uref).route === "Hanoi → Hoi An" && outbox().length === n3);
   await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_deposit", ref: uref, origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_dep_" + uref, customer: "cus_test_1", customer_details: { email: "unpaid@example.com" } });
   ok("when the deposit lands the crew's first email is the changed version, not the old one", /Hanoi → Hoi An/.test(ewan().subject + text(ewan())) && !/^UPDATED/.test(ewan().subject));
+}
+
+/* ---- 9. links in our emails only ever lead to our own sites ---- */
+{
+  setDay(0);
+  const EVIL = "https://evil.example";
+  const sendAs = (origin: string, email: string, link: string, headers: Record<string, string> = {}) => {
+    const p = JSON.parse(JSON.stringify(base)); p.trip.start = iso(new Date(Date.now() + 120 * 86400000)); p.contact.email = email; p.trip.link = link;
+    return send("trip-builder-request", p, "POST", { Origin: origin, ...headers });
+  };
+  const OWN = "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.hanoi.4";
+
+  // someone who makes up the Origin header, to get our emails to point at their site (the crew's buttons carry a key)
+  const before = outbox().length;
+  const forged = await sendAs(EVIL, "forged@example.com", EVIL + "/#/build/i=s.hanoi.4");
+  const fref = forged.b.ref;
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_deposit", ref: fref, origin: EVIL }, payment_intent: "pi_dep_" + fref, customer: "cus_test_1", customer_details: { email: "forged@example.com" } });
+  const mails = outbox().slice(before), everything = JSON.stringify(mails);
+  ok("a request that claims to come from another site still gets emails with our own links", mails.length >= 2 && !/evil\.example/.test(everything) && /madmonkeyhostels\.com\/all-in-trips\/trip-builder\/#\/(crew|trip)\//.test(everything), everything.match(/https?:\/\/[^"\s\\<]*evil[^"\s\\<]*/)?.[0] ?? "");
+  ok("the link they sent to a site of their own is not kept", row(fref).trip_link === null);
+  const co = globalThis.__checkouts.find((c) => c.meta?.ref === fref);
+  ok("the guest's return from Stripe goes to our site too", !!co && /^https:\/\/madmonkeyhostels\.com\/all-in-trips\/trip-builder\/#\/trip\/MM-/.test(co.success), String(co?.success));
+
+  // links that aren't a trip on our own site
+  for (const [what, link] of [["a javascript: link", "javascript:alert(document.cookie)"], ["another site's link", "https://madmonkeyhostels.com.evil.example/#/build/i=s.hanoi.4"], ["a link with no trip in it", "https://madmonkeyhostels.com/all-in-trips/"], ["a data: link", "data:text/html,<script>alert(1)</script>"]]) {
+    const r = await sendAs("https://madmonkeyhostels.com", "links@example.com", link, { "cf-connecting-ip": "203.0.113." + (10 + Math.floor(Math.random() * 200)) });
+    ok("not kept: " + what, r.s === 200 && row(r.b.ref).trip_link === null, String(row(r.b.ref)?.trip_link));
+  }
+  const good = await sendAs("https://madmonkeyhostels.com", "good@example.com", OWN);
+  ok("a link to a trip on our own site is kept", good.s === 200 && row(good.b.ref).trip_link === OWN);
+
+  // an old request whose link was saved before this check existed: it is left out of the email, not printed
+  const oldRef = await newTrip(120, "old@example.com"), editRef = await newTrip(120, "edit@example.com");
+  row(oldRef).trip_link = "javascript:alert(1)";
+  const ready = await approve(oldRef, 500);
+  ok("an unsafe link already saved on a request never reaches an email", !!ready.mail && !/javascript:/i.test(ready.mail.html) && /Choose how to pay/.test(text(ready.mail)));
+  const crewKey = (await send("trip-builder-admin", { action: "link", ref: editRef, password: "test-admin-pw" })).b.url.match(/k=([^&]+)/)[1];
+  const edit = (link: string) => send("trip-builder-admin", { action: "revise", ref: editRef, key: crewKey, note: "x", trip: { link, route: "Hanoi", days: 6 }, summary: base.summary });
+  ok("the crew's edited version has to link to one of our own sites too", (await edit(EVIL + "/#/build/i=s.hanoi.5")).s === 400 && (await edit(OWN)).s === 200);
+
+  // a runaway script: a few trips an hour from one contact, and from one address
+  let last429 = 0, sent = 0;
+  for (let i = 0; i < 8; i++) { const r = await sendAs("https://madmonkeyhostels.com", "spam@example.com", OWN); if (r.s === 200) sent++; else last429 = r.s; }
+  ok("one contact can send 5 trips an hour, then it says so (429)", sent === 5 && last429 === 429, sent + " sent, last status " + last429);
+  ok("the refusal tells them what to do", /few trips|check your email/i.test(JSON.stringify((await sendAs("https://madmonkeyhostels.com", "spam@example.com", OWN)).b)));
+  const countBefore = __db.trip_builder_requests.length;
+  await sendAs("https://madmonkeyhostels.com", "spam@example.com", OWN);
+  ok("a refused request saves nothing", __db.trip_builder_requests.length === countBefore);
+  ok("someone else is not held up by it", (await sendAs("https://madmonkeyhostels.com", "fresh@example.com", OWN)).s === 200);
+  ok("after an hour they can try again", (setDay(1), (await sendAs("https://madmonkeyhostels.com", "spam@example.com", OWN)).s === 200));
+  setDay(0);
+  const ipHeaders = { "cf-connecting-ip": "198.51.100.7" }; let ipSent = 0, ipLast = 0;
+  for (let i = 0; i < 13; i++) { const r = await sendAs("https://madmonkeyhostels.com", `ip${i}@example.com`, OWN, ipHeaders); if (r.s === 200) ipSent++; else ipLast = r.s; }
+  ok("one address can send 10 trips an hour, whoever they say they are", ipSent === 10 && ipLast === 429, ipSent + " sent, last status " + ipLast);
+  ok("a different address is fine", (await sendAs("https://madmonkeyhostels.com", "ip-other@example.com", OWN, { "cf-connecting-ip": "198.51.100.8" })).s === 200);
+  ok("the address itself is never saved, only a keyed hash of it", !JSON.stringify(__db.trip_builder_requests).includes("198.51.100.7") && /^[0-9a-f]{24}$/.test(String(__db.trip_builder_requests.find((r) => r.email === "ip0@example.com")?.payload?.ipHash ?? "")));
+  ok("a made-up X-Forwarded-For can't dodge it: only the last entry counts", await (async () => { const r = await sendAs("https://madmonkeyhostels.com", "xff@example.com", OWN, { "x-forwarded-for": "9.9.9.9, 198.51.100.7" }); return r.s === 429; })());
+}
+
+/* ---- 10. logging in by email, and a later stage of a journey ---- */
+{
+  setDay(0);
+  const toGuest = (email: string) => outbox().filter((m) => m.to.includes(email));
+  const login = (email: unknown, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) => send("trip-builder-login", { email, ...extra }, "POST", headers);
+  const keyIn = (m: { html: string }, ref: string) => { const x = new RegExp("#/trip/" + ref + "\\?k=([^\"&\\s<]+)").exec(m.html.replace(/&amp;/g, "&")); return x ? decodeURIComponent(x[1]) : ""; };
+
+  const ref = await newTrip(120, "login.guest@example.com");            // paid, with the crew
+  const before = toGuest("login.guest@example.com").length;
+  const r1 = await login("Login.Guest@Example.com ");
+  const mail = toGuest("login.guest@example.com").slice(before).pop();
+  ok("logging in with the email they used sends them a link to the trip", r1.s === 200 && r1.b.ok === true && !!mail && mail.html.includes(ref) && /Open this trip/.test(mail.html) && /plan your next stage/i.test(text(mail)), JSON.stringify(r1));
+  const k = mail ? keyIn(mail, ref) : "";
+  ok("the link carries a real guest key: it opens their trip and lets them change it", !!k && (await send("trip-builder-status", { ref, k }, "GET")).b.keyed === true && (await send("trip-builder-status", { ref, k }, "GET")).b.canEdit === true);
+  ok("the answer for an email with no trip is the same, and nothing is sent", await (async () => { const n = outbox().length; const r = await login("nobody.at.all@example.com"); return r.s === 200 && JSON.stringify(r.b) === JSON.stringify(r1.b) && outbox().length === n; })());
+  ok("a trip whose deposit is unpaid, or that was declined, isn't sent", await (async () => {
+    const p = JSON.parse(JSON.stringify(base)); p.trip.start = iso(new Date(Date.now() + 120 * 86400000)); p.contact.email = "unpaid.login@example.com"; const un = await send("trip-builder-request", p);   // never paid
+    const dref = await newTrip(120, "declined.login@example.com"); row(dref).status = "declined";
+    const n = outbox().length; await login("unpaid.login@example.com"); await login("declined.login@example.com"); return un.s === 200 && outbox().length === n; })());
+  ok("a booked trip is included, newest first, with each trip's own link", await (async () => {
+    const a = await newTrip(120, "two.trips@example.com"), b = await newTrip(90, "two.trips@example.com"); row(a).status = "approved"; row(a).created_at = new Date(Date.now() - 86400000).toISOString();
+    const n = toGuest("two.trips@example.com").length; await login("two.trips@example.com"); const m = toGuest("two.trips@example.com").slice(n).pop();
+    return !!m && m.html.indexOf(b) > -1 && m.html.indexOf(a) > m.html.indexOf(b) && !!keyIn(m, a) && !!keyIn(m, b) && keyIn(m, a) !== keyIn(m, b) && /Your Mad Monkey trips/.test(m.subject); })());
+  ok("a key from the log-in email is for that trip only", await (async () => { const o = await newTrip(120, "other.guest@example.com"); return (await send("trip-builder-status", { ref: o, k }, "GET")).b.keyed === false; })());
+
+  // the same answer, whatever they type: junk is refused, a bot's hidden field is ignored, and an address with a wildcard in it matches only itself
+  ok("an email that isn't one is refused", (await login("not an email")).s === 400 && (await login("")).s === 400 && (await login(null)).s === 400 && (await login({ x: 1 })).s === 400);
+  ok("a filled hidden field is a bot: it gets the same answer and nothing is sent", await (async () => { const n = outbox().length; const r = await login("login.guest@example.com", { website: "http://spam.example" }); return r.s === 200 && r.b.ok === true && outbox().length === n; })());
+  ok("an address with a _ or % in it doesn't match someone else's trips", await (async () => {
+    const v = await newTrip(120, "aXb.victim@example.com"); __db.trip_builder_requests.find((r) => r.ref === v).guest_email = "aXb@example.com"; __db.trip_builder_requests.find((r) => r.ref === v).email = "other@example.org";
+    const n = outbox().length; await login("a_b@example.com"); await login("a%b@example.com"); await login("%@example.com"); await login("a*b@example.com"); await login("*@example.com"); return outbox().length === n; })());
+  ok("the receipts address counts too, however it was capitalised", await (async () => {
+    const g = await newTrip(120, "contact.addr@example.com"); __db.trip_builder_requests.find((r) => r.ref === g).guest_email = "Pay.Er@Example.com";
+    const n = toGuest("pay.er@example.com").length; await login("pay.er@example.com"); return toGuest("pay.er@example.com").length === n + 1; })());
+  ok("three a hour per address, and the fourth gets the same answer without another email", await (async () => {
+    const e = "throttle@example.com"; await newTrip(120, e); const n = toGuest(e).length; const rs = [] as number[];
+    for (let i = 0; i < 5; i++) rs.push((await login(e)).s);
+    return rs.every((x) => x === 200) && toGuest(e).length === n + 3; })());
+  ok("after an hour it works again", await (async () => { const e = "throttle@example.com", n = toGuest(e).length; setDay(1); await login(e); setDay(0); return toGuest(e).length === n + 1; })());
+  ok("a link in that email is never on a site that isn't ours, whatever the Origin says", await (async () => {
+    const e = "origin.check@example.com"; await newTrip(120, e); const n = toGuest(e).length; await login(e, {}, { Origin: "https://evil.example" }); const m = toGuest(e).slice(n).pop();
+    return !!m && !/evil\.example/.test(m.html) && /madmonkeyhostels\.com\/all-in-trips\/trip-builder\/#\/trip\//.test(m.html); })());
+
+  // a later stage reaches the crew with where they start, where they have been, and which trip came first
+  const sp = JSON.parse(JSON.stringify(base)); sp.trip.start = iso(new Date(Date.now() + 120 * 86400000)); sp.contact.email = "stage.two@example.com";
+  sp.summary.stage = { n: 2, parent: ref, from: { id: "saigon", name: "Ho Chi Minh City" }, been: ["Hanoi", "Hoi An", "Ho Chi Minh City"], arrival: { to: "Phnom Penh", mode: "Bus", hours: "7h", usd: 13, overnight: false, date: sp.trip.start } };
+  sp.stage = { n: 2, parent: ref, from: "saigon", been: ["hanoi", "hoi-an", "saigon"] };
+  const st = await send("trip-builder-request", sp), sref = st.b.ref;
+  await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_deposit", ref: sref, origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_dep_" + sref, customer: "cus_test_1", customer_details: { email: "stage.two@example.com" } });
+  const crew = outbox().filter((m) => m.to.includes("ewan@madmonkeyhostels.com")).pop();
+  ok("the crew's email for a later stage says so, with where they start, where they have been and the earlier trip", !!crew && /^Stage 2 · /.test(crew.subject) && /Stage 2 of their journey/.test(text(crew)) && /Ho Chi Minh City/.test(text(crew)) && /Already been to Hanoi, Hoi An, Ho Chi Minh City/.test(text(crew)) && text(crew).includes(ref), crew && crew.subject);
+  const view = await send("trip-builder-admin", { action: "view", ref: sref, password: "test-admin-pw" });
+  ok("the crew's review page is given the stage too", view.b.summary?.stage?.n === 2 && view.b.summary.stage.parent === ref && view.b.summary.stage.been.length === 3);
+  const junk = JSON.parse(JSON.stringify(sp)); junk.contact.email = "stage.junk@example.com"; junk.summary.stage = { n: "<b>", parent: "<img>", from: { id: 1, name: "<script>x</script>" }, been: ["<img src=x>"] };
+  const jr = await send("trip-builder-request", junk); await handleTripBuilderPaid(sb, { metadata: { kind: "trip_builder_deposit", ref: jr.b.ref, origin: "https://madmonkeyhostels.com" }, payment_intent: "pi_dep_" + jr.b.ref, customer: "cus_test_1", customer_details: { email: "stage.junk@example.com" } });
+  const jc = outbox().filter((m) => m.to.includes("ewan@madmonkeyhostels.com")).pop();
+  ok("a made-up stage is printed as text, never as markup", !!jc && !/<script>x|<img src=x/.test(jc.html));
 }
 
 console.log(`\n${pass}/${pass + fail} checks passed`);

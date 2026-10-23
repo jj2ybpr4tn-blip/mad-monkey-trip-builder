@@ -3,7 +3,7 @@
    Same brand rules as the rest of the builder: 3px outlines, hard-offset shadows, poster colours.
    ============================================================ */
 .crew .wrap{max-width:1120px}
-.crew__top h2{font-size:clamp(34px,6vw,68px);margin:var(--s-3) 0 var(--s-2)}
+.crew__top h1,.crew__top h2{font-size:clamp(34px,6vw,68px);margin:var(--s-3) 0 var(--s-2)}
 .crew__sub{font-weight:600;font-size:16px;color:var(--ink-dim);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .cpill{display:inline-block;border:var(--bw) solid var(--black);background:var(--paper);padding:1px 10px;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--black)}
 .cpill--new{background:var(--pink)} .cpill--chk{background:var(--orange)} .cpill--rdy{background:var(--yellow)} .cpill--ok{background:var(--lime)} .cpill--off{background:var(--black);color:var(--paper)} .cpill--edit{background:var(--cyan)}
@@ -93,3 +93,4 @@ body[data-view="crew"] .foot{display:none}
 .cplan li:first-child{border-top:0} .cplan li i{font-style:normal;font-size:10.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase} .cplan li.paid{background:#f3ffd0} .cplan li.failed,.cplan li.gave_up{background:var(--yellow)}
 .cbanner--upd{background:var(--pink)} .cbanner--upd ul{margin:6px 0 6px 18px;padding:0;font-weight:700} .cbanner--upd p{margin:6px 0 0;font-weight:500} .cbanner--upd .cdim{color:var(--black)}
 .cpill--upd{background:var(--pink)}
+.cbox--stage{background:var(--cyan);color:var(--black);border-width:3px} .cbox--stage h3{color:var(--black)} .cbox--stage p{margin:0 0 6px;font-size:14px;line-height:1.45} .cbox--stage .cdim{color:#1a1a1a;font-size:12.5px}

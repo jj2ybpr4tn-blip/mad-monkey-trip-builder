@@ -7,15 +7,21 @@ Plain static site. No build step, no framework, no server.
 
 ```bash
 npm start        # static preview only (demo mode: nothing is sent anywhere)
-npm test         # logic, server and page checks (routing, costs, dates, Trip Doctor, visas, festivals, crew server, 104 Google pages)
+npm test         # logic, fuzz, server and page checks (routing, costs, dates, Trip Doctor, visas, festivals, editing, thousands of made-up trips and broken links, crew server, 104 Google pages)
+npm run check    # everything before you ship: lint (scripts parse, no inline handlers, CSP matches), data audit, thumbnails up to date, then npm test
 npm run server   # the crew server: review + bed holds, waitlist, groups, short links, crew console at /admin
 npm run build-pages   # the pages for Google (see docs/SEO.md)
+npm run thumbs   # small WebP copies of every photo (about 10 KB instead of 190 KB): run after adding or changing a photo
+npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and wording checked against each other
 ```
 
 ## What's in it
 
 | | |
 |---|---|
+| **Type where you're going** | The home page opens with one question, **"Where to?"**: type a city, a country or something to do (`hanoi`, `viet`, `kayak`, `bali`, `angkor`) and pick. It starts a trip, drafts a country, or adds a place or a tour in the spot on the journey where it adds the least travel. **Best order** re-sequences the stops to cut the travel. See [docs/PLANNING.md](docs/PLANNING.md). |
+| **Plan in stages** | Plan Vietnam now, decide the rest once you're there. **Plan my next stage** starts from where you are, adds the journey from there and never suggests a place you've been; **log in with your email** (a link, no password) on any device. Each stage is its own trip for the crew, marked Stage 2. |
+| **Ask Ewan** | "Plan it here. A real human checks it before anything is booked." on every screen, with an **Ask Ewan** button that opens WhatsApp with the trip in the message. |
 | **Map builder** | All 23 Mad Monkey hostels (+ Ho Chi Minh City as a partner stop) as pins. Tap to add. Animated route, mode + time on every leg, zoom by country. |
 | **Transport engine** | ~60 ground / sea links + ~35 flights, shortest-path routed. Every leg offers *Smart pick / Cheapest / Fastest*; overnight buses replace a bed night; slow boats add nights. |
 | **152 activities** | Real Mad Monkey tours with live prices, photos and deep links to the booking page. Scheduled onto the right weekday when a start date is set. |
@@ -37,7 +43,7 @@ npm run build-pages   # the pages for Google (see docs/SEO.md)
 | **Edit it your way** | **Start building** is always a blank sheet (with a short walk-around, and "Pick up where you left off" if you had a trip). Every stop has worded **Remove stop** / **Swap place** buttons, **+ Add a stop** asks where it goes, the day-by-day plan is editable, and Undo/Redo covers everything. A guest can also **change a trip after sending it**: it replaces the one the crew is checking, so they never review an outdated plan. See [docs/EDITING.md](docs/EDITING.md). |
 | **Crew review** | What the team receives when a trip is sent: the whole trip as the guest built it (stops, tours, travel, money, heads-up) in the email, with **Approve / Not approved / Edit it** buttons that open a review page. See [docs/CREW-REVIEW.md](docs/CREW-REVIEW.md). |
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
-| **USD / GBP** | Fixed indicative rate (1.27). Real conversion belongs to the booking engine. |
+| **Currencies** | USD, GBP, EUR, AUD and CAD at indicative rates (set 22 Oct 2026; `FX_ENDPOINT` in `config.js` refreshes them from a free feed). Real conversion belongs to the booking engine. |
 | **Trip Doctor** | Scores the pace of a trip and fixes it in one tap: back-to-back night buses, 14-hour journeys, one-night stops, too many stops, odd arrival times, visa length, festival clashes. |
 | **Visa length check** | Compares days in each country with what the guest's passport allows. Limits in `data/rules.js`, official links in `data/entry.js`. |
 | **Festivals + closures** | Tet, Songkran, Nyepi, Ramadan, Holy Week, Loy Krathong, Christmas peak and more, checked against the trip's dates with a suggested better week. |
@@ -82,7 +88,7 @@ The brief was to build it from what Mad Monkey already publishes, so **every num
 | "Guests go next" | Ranked from Mad Monkey's own trips and packages (see above), **not** from booking data. Real check-out → check-in flows would be better. |
 | **Entry rules** (`data/entry.js`) | **Checked against current web sources in Oct 2026** ([docs/ENTRY-SOURCES.md](docs/ENTRY-SOURCES.md)), including Thailand's cut to 30 days on 15 Sep 2026. Laos fees conflict between sources, so the app says to check. These change often: re-check every few months. |
 | **Bed hold** | The server records and counts down the hold and gives the crew the sheet; **the crew has to actually block the beds** in your booking system. `HOLD_HOURS` (48) is a placeholder: set a number ops can honour. |
-| Photos | All 260 (hostels, tours, galleries) are **mirrored into `assets/photos`** at 1100px (`npm run mirror-photos`; re-run to refresh). The crew server uses them automatically; for a static host set `PHOTO_BASE: '/assets/photos'`. They're Mad Monkey's own published photography. |
+| Photos | All 260 (hostels, tours, galleries) are **mirrored into `assets/photos`** at 1100px (`npm run mirror-photos`; re-run to refresh). The crew server uses them automatically; for a static host set `PHOTO_BASE: '/assets/photos'`. They're Mad Monkey's own published photography. `npm run thumbs` makes two small WebP copies of each (`s/` 320px, `m/` 720px, 12 MB for all 260) which thumbnails, cards and the Google pages load instead: a three-stop trip page went from 3.3 MB of photos to 170 KB. A missing small copy falls back to the full photo (`PHOTO_THUMBS: false` turns it off). |
 | Photos | Hot-linked from madmonkeyhostels.com share images. They fall back to a flat block if one 404s. Copy into `/assets` or your CDN before launch so the page doesn't depend on the main site. |
 
 **Thailand ↔ Cambodia border:** reports from Feb–Jul 2026 say the land crossings are closed, so Bangkok ↔ Siem Reap / Phnom Penh is flights-only in the graph and every such leg shows a warning. When it reopens, flip `open` in `MM.BORDERS` and add bus edges.
@@ -114,7 +120,10 @@ docs/LEADS.md       lead payload for whoever builds the endpoint
 docs/CREW-REVIEW.md the crew email + review page, and the endpoint it talks to
 docs/PAYMENTS.md    deposit, approval, then the rest your way (now / a week before / instalments)
 docs/EDITING.md     editing your trip, the blank start + walk-around, changing a trip after sending it
-test/               logic tests (node, no dependencies)
+docs/PLANNING.md    search ("Where to?"), best order, plan in stages + log in, Ask Ewan
+docs/REVIEW.md      the big review (Oct 2026): what was found, what was fixed, what is still open
+scripts/            lint, audit-data, make-thumbs, mirror-photos, build-pages, sync-allin, deploy-demo
+test/               logic + fuzz tests (node, no dependencies); ui-smoke.js and ui-lint.js run in a browser tab
 ```
 
 ## Brand notes

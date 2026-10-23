@@ -33,6 +33,10 @@ window.MM_CONFIG = {
   // only ever checks the latest plan. With the ALL IN backend it is the trip-builder-revise function. Blank = derived from STATUS_ENDPOINT. See docs/EDITING.md.
   REVISE_ENDPOINT: '',
 
+  // Optional. "Log in with your email" (continue your travels): POST { email } emails the guest a link to the trips they have sent. With the ALL IN backend it is the
+  // trip-builder-login function. Blank = derived from STATUS_ENDPOINT, or the log-in explains it is a demo.
+  LOGIN_ENDPOINT: '',
+
   // Optional. Once the crew has approved a trip, the guest chooses how to pay the rest here: POST { ref, k, plan }. Blank = derived from STATUS_ENDPOINT. See docs/PAYMENTS.md.
   PAY_ENDPOINT: '',
 
@@ -49,11 +53,23 @@ window.MM_CONFIG = {
   // Optional. Enables group mode across devices. Contract in docs/GROUP.md. Blank = demo mode (votes sync between tabs of one browser only).
   GROUP_ENDPOINT: '',
 
+  // Optional. Keeps the pound / euro / dollar / baht conversions fresh: a feed that answers { rates: { GBP: 0.75, ... } } per US dollar, e.g.
+  // 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP,EUR,AUD,CAD,THB,IDR,PHP'. Each visitor's browser asks at most once every 12 hours (so that
+  // service sees their address). Blank = the built-in rates (22 Oct 2026), which is what the live site uses. Prices are always charged in US dollars.
+  FX_ENDPOINT: '',
+
   // Serve photos from your own copies (run scripts/mirror-photos.mjs first). e.g. '/assets/photos' or a CDN URL. Blank = hot-link madmonkeyhostels.com.
   PHOTO_BASE: 'assets/photos',
 
+  // On by default. Thumbnails and cards load the small copies of PHOTO_BASE's photos that scripts/make-thumbs.mjs makes (about 10 KB instead of 190 KB each), and fall back to the full photo if a small one is missing. false = always the full photo.
+  PHOTO_THUMBS: true,
+
   // Optional. Where "Tell me when it launches" signups go (ALL IN trips that aren't live yet). API_BASE fills it in. Blank = demo mode.
   WAITLIST_ENDPOINT: '',
+
+  // Who the "Ask ..." button on every screen says a real person is. Blank = "Ask the crew". It opens WhatsApp (WHATSAPP above) with the trip already in the message,
+  // or an email to CREW_EMAIL if there is no WhatsApp number. With neither, it shows what it would do (demo).
+  ASK_NAME: 'Ewan',
 
   // Optional. The Mad Monkey app: App Store / Google Play / smart link. When set, trip packs and the crew-checked page show a "Get the app" card.
   APP_URL: '',

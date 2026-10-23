@@ -27,6 +27,7 @@
      AMADEUS_ENV     'production' for real fares (default 'test' returns sample data)
      PUBLIC_URL      optional, e.g. https://trips.madmonkeyhostels.com (used for absolute preview-image links)
      ALLOWED_ORIGIN  optional, only if the site is hosted somewhere other than this server (adds CORS)
+     TRUST_PROXY     how many reverse proxies sit in front of this server (default 0 = none). Needed for per-guest rate limits behind nginx / Cloudflare
      DATA_DIR        default server/data
 
    Data lives in plain JSON files in DATA_DIR. Back that folder up. To scale past a few thousand
@@ -87,6 +88,8 @@ const authed = (req) => {
 const now = () => new Date().toISOString();
 const rid = (n, alpha) => { const a = alpha || 'abcdefghjkmnpqrstuvwxyz23456789'; let o = ''; const b = crypto.randomBytes(n); for (let i = 0; i < n; i++) o += a[b[i] % a.length]; return o; };
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
+// A web address we are willing to store and show the crew as a link: http(s) only, no spaces or markup. Anything else (javascript:, data:, a pasted sentence) becomes ''.
+const safeUrl = (u, n = 1500) => { const v = String(u == null ? '' : u).trim().slice(0, n); return /^https?:\/\/[^\s<>"'`\\]+$/i.test(v) ? v : ''; };
 function json(res, code, obj, extra) { const body = JSON.stringify(obj); res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...(extra || {}) }); res.end(body); }
 function readBody(req, limit = 262144) {
   return new Promise((resolve, reject) => {
@@ -101,7 +104,14 @@ function limited(key, max, windowMs) {
   const t = Date.now(); const arr = (hits.get(key) || []).filter((x) => t - x < windowMs); arr.push(t); hits.set(key, arr); return arr.length > max;
 }
 setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some((x) => t - x < 3600000)) hits.delete(k); }, 600000).unref();
-const ipOf = (req) => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+// Who is asking. X-Forwarded-For is only the client's own claim unless a proxy YOU run appended to it, so it is ignored unless TRUST_PROXY says how many
+// proxies sit in front (1 = one, e.g. nginx or Cloudflare alone). We then take the entry that many places from the right, which is the one your own proxy wrote.
+const TRUST_PROXY = Math.max(0, Math.min(5, Math.round(+process.env.TRUST_PROXY || 0)));
+const ipOf = (req) => {
+  const sock = req.socket.remoteAddress || '?'; if (!TRUST_PROXY) return sock;
+  const hops = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return hops[hops.length - TRUST_PROXY] || sock;
+};
 async function notify(text) { if (!NOTIFY) return; try { await fetch(NOTIFY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text }) }); } catch { /* notifications are best-effort */ } }
 
 
@@ -186,7 +196,7 @@ async function api(req, res, url) {
     const rec = {
       ref, createdAt: now(), status: 'submitted', type: b.type || 'lead',
       contact: { name: clip(c.name, 80), via, email: okEmail ? clip(c.email, 120) : '', whatsapp: okWa ? clip(c.whatsapp, 40) : '', from: clip(c.from, 80), partySize: Math.max(1, Math.min(30, +c.partySize || 1)), dates: clip(c.dates, 10), notes: clip(c.notes, 1500) },
-      trip: { link: clip(t.link, 1500), state: t.state, route: clip(t.route, 400), days: +t.days || 0, nights: +t.nights || 0, countries: (t.countries || []).slice(0, 8), stops: (t.stops || []).slice(0, 40).map((x) => clip(x, 40)), start: clip(t.start, 10),
+      trip: { link: safeUrl(t.link), state: t.state, route: clip(t.route, 400), days: +t.days || 0, nights: +t.nights || 0, countries: (t.countries || []).slice(0, 8), stops: (t.stops || []).slice(0, 40).map((x) => clip(x, 40)), start: clip(t.start, 10),
         estTotalUsd: +t.estTotalUsd || 0, breakdownUsd: t.breakdownUsd || {}, allInBlocks: (t.allInBlocks || []).slice(0, 5), allInMatch: clip(t.allInMatch, 40), crewMates: +t.crewMates || 0, urgency: clip(t.urgency, 12) },
       attribution: { ref: clip(b.ref, 40), fromHostel: clip(b.fromHostel, 40), source: clip(b.source, 40) },
       itinerary: clip(b.itinerary, 20000),
@@ -310,7 +320,7 @@ async function api(req, res, url) {
       }
       if (typeof b.assignee === 'string') { const a = clip(b.assignee, 40).trim(); if (a !== (l.assignee || '')) { l.history.push({ at: now(), event: a ? 'assigned to ' + a : 'unassigned' }); l.assignee = a; } }
       if (typeof b.publicNote === 'string') l.publicNote = clip(b.publicNote, 1500);
-      if (typeof b.payLink === 'string') l.payLink = /^https:\/\//.test(b.payLink) ? clip(b.payLink, 600) : '';
+      if (typeof b.payLink === 'string') l.payLink = /^https:\/\//.test(b.payLink) ? safeUrl(b.payLink, 600) : '';
       if (typeof b.note === 'string' && b.note.trim()) l.notes.push({ at: now(), text: clip(b.note, 1500) });
       if (b.releaseHold && l.hold && l.hold.status === 'active') { l.hold.status = 'released'; l.history.push({ at: now(), event: 'hold released' }); }
       if (b.extendHoldHours && l.hold && l.hold.requested) { const h = Math.max(1, Math.min(168, +b.extendHoldHours)); l.hold.until = new Date(Math.max(Date.now(), Date.parse(l.hold.until)) + h * 3600000).toISOString(); l.hold.status = 'active'; l.history.push({ at: now(), event: `hold extended ${h}h` }); }
@@ -357,11 +367,16 @@ async function api(req, res, url) {
 
 /* ============================================================ static ============================================================ */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'crew.js', 'edit.js', 'ui-tour.js', 'ui-crew.js', 'crew.css', 'sitemap.xml', 'robots.txt']);
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'crew.js', 'edit.js', 'search.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'ui-crew.js', 'crew.css', 'sitemap.xml', 'robots.txt']);
+const PUBLIC_DIRS = ['data', 'assets', 'trips', 'routes', 'hostels', 'guides'];
+const notFound = (res) => { res.writeHead(404, { 'Content-Type': 'text/plain', 'X-Content-Type-Options': 'nosniff' }); return res.end('Not found'); };
 function serveStatic(req, res, url) {
   const tm = url.pathname.match(/^\/t\/([a-z0-9]{7})(\.(jpg|png))?$/);
   if (tm) return sharePage(req, res, tm[1], tm[3]);
-  let rel = decodeURIComponent(url.pathname); if (rel === '/') rel = '/index.html';
+  let rel; try { rel = decodeURIComponent(url.pathname); } catch { return notFound(res); }          // a stray % in the address is a 404, not an error
+  // Only plain paths: no backslashes, NUL bytes or ".." segments (a browser tidies "../" away but a raw request can send "..%2f", which decodes to one).
+  if (rel.includes('\0') || rel.includes('\\') || rel.split('/').includes('..')) return notFound(res);
+  if (rel === '/') rel = '/index.html';
   // pages written by scripts/build-pages.mjs: /trips/…, /routes/…, /hostels/…, /guides/… (each a folder with an index.html)
   if (/^\/(trips|routes|hostels|guides)(\/|$)/.test(rel)) {
     if (!rel.endsWith('/') && !path.extname(rel)) { res.writeHead(301, { Location: rel + '/' }); return res.end(); }
@@ -369,9 +384,10 @@ function serveStatic(req, res, url) {
   }
   if (rel === '/admin' || rel === '/admin/') { res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); return fs.createReadStream(path.join(__dirname, 'admin.html')).pipe(res); }
   rel = rel.replace(/^\/+/, ''); const top = rel.split('/')[0];
-  const ok = (rel.indexOf('/') === -1 && PUBLIC_ROOT_FILES.has(rel)) || top === 'data' || top === 'assets' || ['trips', 'routes', 'hostels', 'guides'].includes(top);
   const file = path.resolve(ROOT, rel);
-  if (!ok || !file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+  // a root file on the list, or something inside one of the public folders (checked on the resolved path, so nothing can climb out of it)
+  const ok = rel.indexOf('/') === -1 ? PUBLIC_ROOT_FILES.has(rel) : PUBLIC_DIRS.includes(top) && file.startsWith(path.join(ROOT, top) + path.sep);
+  if (!ok || !fs.existsSync(file) || !fs.statSync(file).isFile()) return notFound(res);
   if (rel === 'index.html') {                                                  // absolute preview-image + canonical for the homepage link
     const base = publicBase(req), tags = `<meta property="og:type" content="website"><meta property="og:url" content="${escH(base + '/')}"><meta property="og:image" content="${escH(base + '/assets/og/home.jpg')}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${escH(base + '/assets/og/home.jpg')}"><link rel="canonical" href="${escH(base + '/')}">`;
     const html = fs.readFileSync(file, 'utf8').replace(/<!--og:start-->[\s\S]*?<!--og:end-->/, '<!--og:start-->' + tags + '<!--og:end-->');
@@ -387,6 +403,8 @@ function serveStatic(req, res, url) {
   }
   res.writeHead(200, headers); fs.createReadStream(file).pipe(res);
 }
+// Sent with every page and file: nobody can frame the console, referrers stay short, and the browser keeps to the declared type.
+const SECURITY = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Frame-Options': 'SAMEORIGIN', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()' };
 
 /* ---------- /t/<code>: the page link-preview bots read (title, description, map image), then on to the trip ---------- */
 const escH = (x) => String(x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -423,7 +441,9 @@ function sharePage(req, res, code, ext) {
 }
 
 http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
+  let url; try { url = new URL(req.url, 'http://x'); } catch { res.writeHead(400); return res.end(); }
+  for (const [k, v] of Object.entries(SECURITY)) res.setHeader(k, v);
+  if (url.pathname.startsWith('/admin')) res.setHeader('X-Frame-Options', 'DENY');           // the crew console is never shown inside another page
   try {
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
