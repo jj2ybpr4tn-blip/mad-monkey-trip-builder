@@ -64,7 +64,7 @@
   var KIND = { closure: 'Closures', festival: 'Festival', peak: 'Busy + dear', info: 'Good to know' };
   X.calendar = function (pl) {
     if (!pl || !pl.totals.days) return '';
-    var dated = !!(pl.days[0] && pl.days[0].date), rows = [];
+    var dated = !!(pl.days[0] && pl.days[0].date), rows;
     if (dated) {
       var evs = MM.eventsFor(pl);
       if (!evs.length) return '<section class="cal"><div class="cal__hd"><span class="doc__tag">What\'s on</span><h3 class="disp">Clear dates.</h3></div><p class="fine">Nothing on our festival and closure calendar lands on your trip. Last checked ' + esc(MM.ENTRY_CHECKED) + '.</p></section>';
@@ -103,7 +103,7 @@
       h += '<div class="kb__ride"><b>' + esc(G.scooterHead) + '</b><ul>' + G.scooterCore.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' +
         cs.map(function (c) { var s = G.countries[c].scooters; return s ? '<details class="kb__rc"' + (cs.length === 1 ? ' open' : '') + '><summary>' + esc(MM.COUNTRIES[c].n) + ': the rules</summary><ul>' + s.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul></details>' : ''; }).join('') + '</div>';
     }
-    if (cs.length > 1) h += '<div class="kb__tabs" role="tablist" aria-label="Country">' + cs.map(function (c) { return '<button type="button" role="tab" aria-selected="' + (c === cur) + '" data-act="gtab" data-c="' + c + '"><i data-c="' + c + '"></i>' + esc(MM.COUNTRIES[c].n) + '</button>'; }).join('') + '</div>';
+    if (cs.length > 1) h += '<div class="kb__tabs" role="group" aria-label="Country">' + cs.map(function (c) { return '<button type="button" aria-pressed="' + (c === cur) + '" data-act="gtab" data-c="' + c + '"><i data-c="' + c + '"></i>' + esc(MM.COUNTRIES[c].n) + '</button>'; }).join('') + '</div>';
     else h += '<div class="kb__tabs"><span class="kb__one"><i data-c="' + cs[0] + '"></i>' + esc(MM.COUNTRIES[cs[0]].n) + '</span></div>';
     h += '<div class="kb__topics">' + G.topics.filter(function (t) { return t.k !== 'scooters' || !riding; }).map(function (t) {
       var items = guideItems(cur, t.k), key = 'kb-' + cur + '-' + t.k, on = A.open[key] != null ? !!A.open[key] : t.k === 'money';
@@ -132,7 +132,8 @@
       '<div class="tgrid theme-grid">' + cards + '</div></div></section>';
   };
   function openState(st, msg) {
-    A.state = Object.assign(MM.defaultState(), st); A.auto = false; A.focus = []; A.open = {}; u.persist();
+    if (A.stash) A.stash();                                                  // the trip you had stays on "Pick up where you left off"
+    A.state = MM.sanitizeState(st); A.auto = false; A.focus = []; A.open = {}; u.persist();
     u.go('build', MM.encodeState(A.state)); if (msg) setTimeout(function () { u.toast(msg); }, 150);
   }
   X.openState = openState;
@@ -148,7 +149,7 @@
       var ids = MM.PLACE_ORDER.filter(function (id) { return P[id].c === c; }); if (!ids.length) return '';
       return '<section class="hlist__c"><h3><i data-c="' + c + '"></i>' + esc(MM.COUNTRIES[c].n) + '</h3><ul>' + ids.map(function (id) {
         var p = P[id], n = inTrip[id];
-        return '<li><span class="photo hlist__ph">' + u.photo(MM.hostelImg(id)) + '</span><div class="hlist__b"><b>' + esc(p.n) + (p.partner ? ' <em>partner</em>' : '') + '</b><span>' + esc(p.hook) + '</span><span class="hlist__m">Dorm from ' + money(p.bed) + ' · most stay ' + p.sug + ' nights</span></div>' +
+        return '<li><span class="photo hlist__ph">' + u.photo(MM.hostelImg(id), '', 's') + '</span><div class="hlist__b"><b>' + esc(p.n) + (p.partner ? ' <em>partner</em>' : '') + '</b><span>' + esc(p.hook) + '</span><span class="hlist__m">Dorm from ' + money(p.bed) + ' · most stay ' + p.sug + ' nights</span></div>' +
           '<button class="btn btn--sm ' + (n ? '' : 'btn--pink') + '" type="button" data-act="listadd" data-p="' + id + '" ' + (n ? 'disabled' : '') + ' aria-label="' + (n ? esc(p.n) + ' is stop ' + n + ' in your trip' : 'Add ' + esc(p.n) + ' to your trip') + '">' + (n ? 'In your trip · ' + n : 'Add') + '</button></li>';
       }).join('') + '</ul></section>';
     }).join('');

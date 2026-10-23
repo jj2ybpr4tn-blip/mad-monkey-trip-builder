@@ -50,8 +50,8 @@
     },
     // ideas from the crew: [{ k:'p:pai'|'a:<actId>', who:[names] }], most wanted first
     ideas: function (g) {
-      var by = {};
-      g.members.forEach(function (m) { (m.wants || []).forEach(function (k) { (by[k] = by[k] || []).push(m.name); }); });
+      var by = Object.create(null);
+      g.members.forEach(function (m) { (Array.isArray(m.wants) ? m.wants : []).forEach(function (k) { (by[k] = by[k] || []).push(m.name); }); });
       return Object.keys(by).map(function (k) { return { k: k, who: by[k] }; }).sort(function (a, b) { return b.who.length - a.who.length; });
     },
     routeVotes: function (g) { var t = { a: 0, b: 0 }; g.members.forEach(function (m) { var v = m.votes.route; if (v === 'a' || v === 'b') t[v]++; }); return t; },

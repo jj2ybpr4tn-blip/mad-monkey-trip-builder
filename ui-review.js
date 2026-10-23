@@ -39,7 +39,7 @@
     var S = steps(), at = S.map(function (s) { return s.k; }).indexOf(status === 'pending_payment' ? 'submitted' : status);
     return '<ol class="steps">' + S.map(function (s, i) { return '<li class="' + (i < at ? 'done' : i === at ? 'now' : '') + '"><i>' + (i < at ? '✓' : i + 1) + '</i><div><b>' + s.t + '</b><span>' + s.d + '</span></div></li>'; }).join('') + '</ol>';
   }
-  function parseRef(rest) { var p = decodeURIComponent(rest || '').split('?'), q = {}; (p[1] || '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); }); return { ref: (p[0] || '').toUpperCase(), k: q.k || '' }; }
+  function parseRef(rest) { var p = u.dec(rest || '').split('?'), q = {}; (p[1] || '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = u.dec(kv.slice(i + 1)); }); return { ref: (p[0] || '').toUpperCase(), k: q.k || '' }; }
 
   /* ---------- the modal ---------- */
   function open() {
@@ -51,7 +51,7 @@
     u.openModal('<div class="modal__hd"><div><div class="over">Checked by a human</div><h2 class="disp">Hold my beds.<br>Get it checked.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
       '<p style="font-weight:500">Nobody books this for you by robot. A <b>real Mad Monkey crew member</b> checks your whole trip. ' + (dep
         ? 'A <b>' + usd(per()) + ' deposit per person</b> holds your beds while they do, and it comes off your trip total. If the crew can\'t make it work, you get it back.'
-        : 'You pay nothing until you\'ve seen the checked plan and said yes.') + '</p>' + stepsHTML('submitted') +
+        : 'You pay nothing until you\'ve seen the checked plan and said yes.') + ' <span class="nowrap">Not sure about something? ' + u.ask('btn btn--sm btn--paper') + ' first.</span></p>' + stepsHTML('submitted') +
       '<form id="leadf" novalidate><div class="form2"><div class="field"><label for="lf-name">First name</label><input class="input" id="lf-name" name="name" autocomplete="given-name" required value="' + esc(q.name || '') + '"></div>' +
       u.contactPick(q) +
       '<div class="field"><label for="lf-from">Where are you now?</label><input class="input" id="lf-from" name="from" placeholder="city or country" value="' + esc(q.from || '') + '"></div>' +
@@ -85,7 +85,7 @@
     u.store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
     var plan = u.getPlan(), wantHold = !!A.state.start, people = Math.min(8, Math.max(1, +v.size || 1)), dep = deposit();
     var payload = MM.leadPayload(A.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: people, dates: v.flex, notes: v.notes || '', consent: true },
-      { ref: A.meta.ref, fromHostel: A.meta.from, link: u.shareLink() });
+      { ref: A.meta.ref, fromHostel: A.meta.from, link: u.shareLink(), stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null });
     payload.type = 'review_request'; payload.status = 'submitted'; payload.hold = { requested: wantHold, hours: hold() };
     if (dep) payload.deposit = { perPersonUsd: per(), people: people };
     u.track('review_request', { stops: plan.places.length, days: plan.totals.days, hold: wantHold });
@@ -93,15 +93,15 @@
     function record(data, demo) {
       var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
         hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: !!demo, name: v.name, email: ct.email, whatsapp: ct.whatsapp, via: ct.via,
-        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || '', people: people, datesFlex: v.flex || '' };
+        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || '', people: people, datesFlex: v.flex || '', stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null };
       saveRec(rec); return rec;
     }
     if (!C.LEAD_ENDPOINT) return setTimeout(function () { A._lastLead = payload; success(record(null, true), payload); }, 400);
-    fetch(C.LEAD_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || (dep && !d.checkoutUrl)) throw new Error(d.error || ('HTTP ' + res.status)); return d; }); })
+    u.timed(C.LEAD_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 30000)
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || (dep && !u.url(d.checkoutUrl, true))) throw new Error(d.error || ('HTTP ' + res.status)); return d; }); })
       .then(function (data) {
         var rec = record(data, false); A._lastLead = payload;
-        if (dep) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = data.checkoutUrl; }
+        if (dep) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = u.url(data.checkoutUrl, true); }
         else success(rec, payload);
       })
       .catch(function (x) { btn.disabled = false; btn.textContent = label; show((x && x.message && x.message.indexOf('HTTP') !== 0 ? x.message + ' ' : '') + (dep ? 'Nothing has been charged. ' : '') + 'Try again, or copy your plan and message the crew' + (C.CREW_EMAIL ? ' at ' + C.CREW_EMAIL : '') + '.'); });
@@ -115,7 +115,7 @@
       (rec.demo ? '<div class="demo">DEMO MODE: nothing was sent, nothing was charged and no beds were held. Set <code>LEAD_ENDPOINT</code> in config.js and this goes straight to the crew.</div>' : '') +
       '<div class="refbox"><span class="over">Your reference</span><b>' + esc(rec.ref) + '</b></div>' +
       (rec.hold ? '<p style="font-weight:600">' + (rec.demo ? 'In live mode we\'d hold your beds until ' : 'We\'re holding your beds until ') + '<b>' + fmtDT(rec.hold.until) + '</b> while a real person checks the trip.</p>' : '') + stepsHTML(rec.status) +
-      '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><a class="btn btn--sm" href="#/trip/' + esc(rec.ref) + '" data-act="close">Track my trip</a>' + (wa ? '<a class="btn btn--sm btn--pink" href="' + wa + '" target="_blank" rel="noopener">Message the crew on WhatsApp</a>' : '') +
+      '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><a class="btn btn--sm" href="#/trip/' + esc(rec.ref) + '" data-act="close">Track my trip</a>' + (wa ? '<a class="btn btn--sm btn--pink" href="' + wa + '" target="_blank" rel="noopener">' + esc(u.askLabel()) + ' on WhatsApp</a>' : '') +
       '<button class="btn btn--sm btn--paper" data-act="copylead" type="button">Copy review card</button><button class="btn btn--sm btn--ghost" data-act="close" type="button">Done</button></div><input type="hidden" id="statusurl" value="' + esc(statusUrl) + '"></div>');
   }
 
@@ -127,7 +127,7 @@
     var enc = stateOf(x.link), st = enc ? MM.decodeState(enc) : null;
     if (!st || !st.items.length) { u.toast('That trip has no plan to open.'); return; }
     A.state = st; A.auto = false; A.focus = []; A.open = {}; A.tourPending = false;
-    A.revise = { ref: x.ref, k: key || x.key || '', base: MM.encodeState(st), route: x.route || '', days: x.days || 0, status: x.status, people: x.people || 1, datesFlex: x.datesFlex || '', name: x.name || '', via: x.via || 'email', email: x.email || '', whatsapp: x.whatsapp || '' };
+    A.revise = { ref: x.ref, k: key || x.key || '', base: MM.encodeState(st), route: x.route || '', days: x.days || 0, status: x.status, people: x.people || 1, datesFlex: x.datesFlex || '', name: x.name || '', via: x.via || 'email', email: x.email || '', whatsapp: x.whatsapp || '', stage: x.stage || null };
     u.store('mm-revise', A.revise); u.persist(); u.track('revise_start', { status: x.status }); u.go('build', MM.encodeState(st));
   }
   function endRevise() { A.revise = null; u.store('mm-revise', null); }
@@ -157,7 +157,7 @@
     var R = A.revise, plan = u.getPlan(), btn = $('#rv-go', m), err = $('#reverr', m), label = btn.textContent;
     function show(msg) { err.style.display = 'grid'; $('span', err).textContent = msg; btn.disabled = false; btn.textContent = label; }
     btn.disabled = true; btn.textContent = 'Sending…'; err.style.display = 'none';
-    var payload = MM.leadPayload(A.state, plan, { name: R.name, via: R.via, email: R.email, whatsapp: R.whatsapp, from: '', partySize: R.people || 1, dates: R.datesFlex, notes: note }, { link: u.shareLink() });
+    var payload = MM.leadPayload(A.state, plan, { name: R.name, via: R.via, email: R.email, whatsapp: R.whatsapp, from: '', partySize: R.people || 1, dates: R.datesFlex, notes: note }, { link: u.shareLink(), stage: R.stage || null });
     var body = { ref: R.ref, k: R.k, note: note, changes: ch.slice(0, 8), trip: payload.trip, summary: payload.summary, crewText: payload.crewText, itinerary: payload.itinerary };
     function done(d) {
       var rec = subs().filter(function (x) { return x.ref === R.ref; })[0];
@@ -167,7 +167,7 @@
       u.toast(withdrawn ? 'Changes sent. The crew will check it again.' : d && d.unchanged ? 'That\'s the trip the crew already has.' : 'Changes sent. The crew will check this version.');
     }
     if (!reviseEndpoint()) return setTimeout(function () { done({}); }, 400);
-    fetch(reviseEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    u.timed(reviseEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 30000)
       .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || d.ok === false) { var e = new Error(d.error || ('Something went wrong (' + res.status + ')')); e.locked = !!d.locked; throw e; } return d; }); })
       .then(done)
       .catch(function (e) { show(e.message + (e.locked ? '' : ' Nothing was sent. Try again, or message the crew' + (C.CREW_EMAIL ? ' at ' + C.CREW_EMAIL : '') + '.')); });
@@ -181,7 +181,7 @@
   /* ---------- how to pay the rest ---------- */
   // options: [{ plan: 'now'|'later'|'instalments', count, amount, items: [{ amount, due }] }] from the status endpoint (the rules live on the server).
   function optionCopy(o, startDays) {
-    var first = o.items[0], last = o.items[o.items.length - 1];
+    var first = o.items[0];
     if (o.plan === 'now') return { t: 'Pay it all now', big: usd(o.amount), d: 'One payment today, and you\'re fully paid up.', go: 'Pay ' + usd(o.amount) + ' now' };
     if (o.plan === 'later') return { t: 'Pay on ' + fmtDay(first.due), big: usd(o.amount), d: 'You\'re booked today. We charge the card you paid your deposit with, a week before you leave, and email you a reminder first.', go: 'Book my trip' };
     return { t: 'Pay in ' + o.count + ' instalments', big: usd(first.amount) + ' today', d: 'Then ' + o.items.slice(1).map(function (i) { return usd(i.amount) + ' on ' + fmtDay(i.due); }).join(', ') + '. Charged to the card you paid your deposit with, and the last one lands before the final week.', go: 'Pay ' + usd(first.amount) + ' and book' };
@@ -191,7 +191,7 @@
     if (!opts.length) return '';
     var sel = x._sel || opts[0].plan;
     return '<fieldset class="paypick" role="radiogroup" aria-label="How would you like to pay the rest?"><legend class="over">How would you like to pay the rest?</legend>' + opts.map(function (o) {
-      var c = optionCopy(o); return '<label class="payopt' + (sel === o.plan ? ' payopt--on' : '') + '"><input type="radio" name="payplan" value="' + o.plan + '"' + (sel === o.plan ? ' checked' : '') + '><span class="payopt__b"><b>' + esc(c.t) + '</b><em>' + esc(c.big) + '</em><small>' + esc(c.d) + '</small></span></label>';
+      var c = optionCopy(o); return '<label class="payopt' + (sel === o.plan ? ' payopt--on' : '') + '"><input type="radio" name="payplan" value="' + esc(o.plan) + '"' + (sel === o.plan ? ' checked' : '') + '><span class="payopt__b"><b>' + esc(c.t) + '</b><em>' + esc(c.big) + '</em><small>' + esc(c.d) + '</small></span></label>';
     }).join('') + '</fieldset>' +
       '<p class="fine">Your ' + usd(x.deposit && x.deposit.amount) + ' deposit is already counted. Every payment is a secure Stripe payment, and you can pay any of them sooner.</p>' +
       '<div class="qnav" style="margin-top:var(--s-3)"><button class="btn btn--pink btn--lg" data-act="paygo" type="button">' + esc(optionCopy(opts.filter(function (o) { return o.plan === sel; })[0] || opts[0]).go) + '</button></div>';
@@ -213,12 +213,12 @@
     try { var pg = (sessionStorage.getItem('mm-paying') || '').split(':'); if (pg[0] === r) wait = pg[1] || 'pending_payment'; } catch (x) { /* private mode */ }
     var sel = null;
     function paint(x, note) {
-      if (!x) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip status</span><h2 class="disp">' + (C.STATUS_ENDPOINT ? 'Looking up your trip…' : 'Can\'t find that trip.') + '</h2><p class="qhelp">' + (C.STATUS_ENDPOINT ? '' : 'We can only look up trips sent from this device. If you sent one, check your confirmation email for the reference.') + '</p><div class="qnav"><button class="btn" data-go="build" type="button">Open the builder</button></div></div></div></section>' + u.footer(); return; }
+      if (!x) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip status</span><h1 class="disp">' + (C.STATUS_ENDPOINT ? 'Looking up your trip…' : 'Can\'t find that trip.') + '</h1><p class="qhelp">' + (C.STATUS_ENDPOINT ? '' : 'We can only look up trips sent from this device. If you sent one, check your confirmation email for the reference.') + '</p><div class="qnav"><button class="btn" data-go="build" type="button">Open the builder</button></div></div></div></section>' + u.footer(); return; }
       var waiting = wait && x.status === wait;
       var titles = { pending_payment: waiting ? 'Confirming your payment…' : 'Deposit not paid yet.', submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: waiting ? 'Confirming your payment…' : 'Ready for your OK.', approved: deposit() || (x.deposit && x.deposit.amount) ? 'You\'re booked.' : 'You\'re all set.', declined: 'We need to tweak it.' };
       var demo = !C.LEAD_ENDPOINT || x.demo, dep = x.deposit || {}, bal = x.balance || {}, depMode = !!(dep.amount);
       x._sel = sel; var ready = x.status === 'ready' && !waiting;
-      root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip ' + esc(x.ref) + '</span><h2 class="disp">' + (titles[x.status] || titles.submitted) + '</h2><p class="qhelp">' + esc(x.route) + ' · ' + x.days + ' days' + (x.start ? ' · from ' + esc(fmtDay(x.start)) : '') + '. Every trip is checked by a real person before you pay the rest.</p>' +
+      root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip ' + esc(x.ref) + '</span><h1 class="disp">' + (titles[x.status] || titles.submitted) + '</h1><p class="qhelp">' + esc(x.route) + ' · ' + (Math.round(+x.days) || 0) + ' days' + (x.start ? ' · from ' + esc(fmtDay(x.start)) : '') + '. Every trip is checked by a real person before you pay the rest.</p>' +
         (x.status === 'declined' || x.status === 'approved' ? '' : stepsHTML(x.status)) +
         (x.status === 'pending_payment' && !waiting ? '<div class="humans" style="margin-top:0"><b>Your trip is saved.</b> Pay the ' + usd(dep.amount) + ' deposit to send it to the crew and hold your beds.</div>' : '') +
         (dep.paid && x.status !== 'declined' && x.status !== 'approved' ? '<div class="humans" style="margin-top:0"><b>Deposit paid: ' + usd(dep.amount) + '.</b> It comes off your trip total.</div>' : '') +
@@ -232,9 +232,10 @@
         (x.status === 'approved' ? scheduleHTML(x) : '') +
         (x.hold && (x.status === 'submitted' || x.status === 'checking') ? '<div class="humans" style="background:var(--yellow)"><b>Beds held</b> until ' + fmtDT(x.hold.until) + ' while we check it.</div>' : '') +
         changeHTML(x, demo) +
-        '<div class="qnav"><a class="btn" href="' + esc(x.link) + '">Open my trip</a>' + (x.status === 'declined' ? '' : '<a class="btn btn--paper" href="' + esc(String(x.link).replace('#/build/', '#/pack/')) + '">Open my trip pack</a>') +
-        (x.status === 'pending_payment' && x.payLink && !waiting ? '<a class="btn btn--pink" href="' + esc(x.payLink) + '">Pay ' + usd(dep.amount) + ' deposit</a>' : '') +
-        (C.WHATSAPP && x.status !== 'pending_payment' ? '<a class="btn btn--paper" href="https://wa.me/' + C.WHATSAPP + '?text=' + encodeURIComponent('Hi Mad Monkey, it\'s about my trip ' + x.ref + ': ' + x.route + '. ' + u.baseUrl() + '#/trip/' + x.ref) + '" target="_blank" rel="noopener">Message the crew on WhatsApp</a>' : '') +
+        (['submitted', 'checking', 'ready', 'approved'].indexOf(x.status) > -1 ? '<div class="humans humans--ask" style="margin-top:0"><span><b>Not sure where you\'re heading after this?</b> Decide once you\'re there. Come back, log in with your email, and we\'ll remember where you\'ve been, so we never suggest it twice.</span><button class="btn btn--sm btn--pink" type="button" data-act="nextstage" data-ref="' + esc(x.ref) + '">Plan my next stage</button></div>' : '') +
+        '<div class="qnav"><a class="btn" href="' + esc(u.url(x.link) || '#/build') + '">Open my trip</a>' + (x.status === 'declined' ? '' : '<a class="btn btn--paper" href="' + esc(String(u.url(x.link) || '#/build').replace('#/build/', '#/pack/')) + '">Open my trip pack</a>') +
+        (x.status === 'pending_payment' && x.payLink && !waiting ? '<a class="btn btn--pink" href="' + esc(u.url(x.payLink, true)) + '">Pay ' + usd(dep.amount) + ' deposit</a>' : '') +
+        (C.WHATSAPP && x.status !== 'pending_payment' ? '<a class="btn btn--paper" href="https://wa.me/' + C.WHATSAPP + '?text=' + encodeURIComponent('Hi Mad Monkey, it\'s about my trip ' + x.ref + ': ' + x.route + '. ' + u.baseUrl() + '#/trip/' + x.ref) + '" target="_blank" rel="noopener">' + esc(u.askLabel()) + ' on WhatsApp</a>' : '') +
         (ready && demo && !x.pay ? '<button class="btn btn--pink" data-act="approve" type="button">Approve plan</button>' : '') + '</div>' +
         '<p class="qerr warn" id="payerr" style="display:none;margin-top:var(--s-3)" role="alert"><i>!</i><span></span></p>' +
         (demo ? '<div class="demo" style="margin-top:var(--s-5)">DEMO: move it along to see each state. <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' + steps().map(function (s) { return '<button class="chip" data-act="demostatus" data-s="' + s.k + '" type="button">' + s.t + '</button>'; }).join('') + '</div></div>' : '') +
@@ -264,10 +265,10 @@
     function perr(msg) { var e = $('#payerr', root); if (e) { e.style.display = msg ? 'grid' : 'none'; if (msg) $('span', e).textContent = msg; } }
     function choose(plan, label) {
       if (busy) return; busy = true; perr(''); var b = root.querySelector('[data-act="paygo"],[data-act="payowing"]'), txt = b && b.textContent; if (b) { b.disabled = true; b.textContent = 'One moment…'; }
-      fetch(payEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: r, k: key, plan: plan }) })
+      u.timed(payEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: r, k: key, plan: plan }) }, 30000)
         .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || d.ok === false) throw new Error(d.error || 'Something went wrong. Try again.'); return d; }); })
         .then(function (d) {
-          if (d.checkoutUrl) { try { sessionStorage.setItem('mm-paying', r + ':' + (rec.status || 'ready')); } catch (x) { /* ignore */ } window.location.href = d.checkoutUrl; return; }
+          if (d.checkoutUrl) { try { sessionStorage.setItem('mm-paying', r + ':' + (rec.status || 'ready')); } catch (x) { /* ignore */ } if (u.url(d.checkoutUrl, true)) { window.location.href = u.url(d.checkoutUrl, true); return; } throw new Error('Something went wrong. Try again.'); }
           busy = false; wait = null; fetchStatus(); u.toast(d.booked ? 'You\'re booked' : 'Done');
         }).catch(function (e) { busy = false; if (b) { b.disabled = false; b.textContent = txt; } perr(e.message); });
     }

@@ -275,7 +275,7 @@
   };
 
   /* ---------------- helpers ---------------- */
-  MM.actsAt = function (placeId) { return (MM.ACT_BY_PLACE[placeId] || []).map(function (i) { return MM.ACTS[i]; }); };
+  MM.actsAt = function (placeId) { var l = typeof placeId === 'string' && Object.prototype.hasOwnProperty.call(MM.ACT_BY_PLACE, placeId) ? MM.ACT_BY_PLACE[placeId] : []; return l.map(function (i) { return MM.ACTS[i]; }); };
   MM.actUrl = function (a) { return a.slug ? 'https://madmonkeyhostels.com/tours-events/' + a.slug : null; };
 
   if (typeof module !== 'undefined') module.exports = { ACTS: MM.ACTS };

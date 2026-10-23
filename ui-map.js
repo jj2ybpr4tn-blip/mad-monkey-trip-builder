@@ -199,7 +199,7 @@
     function showTip(id, g) {
       if (!tip || Object.keys(ptrs).length) return; var p = MM.PLACES[id], img = MM.hostelImg(id), c = g.querySelector('.dot').getBoundingClientRect(), b = box.getBoundingClientRect();
       var nr = MM.nextRanked(id).slice(0, 3).map(function (n) { return MM.PLACES[n.id].n; });
-      tip.innerHTML = (img ? '<div class="photo"><img src="' + img + '" alt="" loading="lazy" onerror="this.parentNode.className+=\' photo--none\';this.remove()"></div>' : '') +
+      tip.innerHTML = (img ? '<div class="photo"><img src="' + MM.thumb(img, 's') + '" alt="" loading="lazy" data-fb="tip"' + (MM.thumb(img, 's') !== img ? ' data-full="' + img + '"' : '') + '></div>' : '') +
         '<div class="tx"><b>' + p.n + '</b><p>' + p.hook + '</p><small>' + MM.COUNTRIES[p.c].n + ' · dorm from ' + MM.money(p.bed, (window.MMApp && MMApp.cur) || 'USD') + '/night' + (p.opens ? ' · opens ' + p.opens.slice(8) + '/' + p.opens.slice(5, 7) : '') + (p.partner ? ' · partner hostel' : '') + '</small>' +
         (nr.length ? '<small style="color:#5b574d;margin-top:3px;text-transform:none;letter-spacing:0;font-weight:600">Mad Monkey guests go next: ' + nr.join(' · ') + '</small>' : '') + '</div>';
       var x = c.left + c.width / 2 - b.left, y = c.top - b.top, below = y < 270;
@@ -278,16 +278,18 @@
       Object.keys(st).forEach(function (id) {
         var g = st[id].el, n = selMap[id], inF = inFocus(MM.PLACES[id].c);
         st[id].sel = !!n; st[id].vis = inF || !!n;
-        g.setAttribute('class', 'm-pin' + (MM.PLACES[id].partner ? ' partner' : '') + (n ? ' sel' : '') + (!inF && n ? ' off' : ''));
-        g.querySelector('.n').textContent = n || '';
-        g.querySelector('.nm').style.display = (n || (labelsAll && inF)) ? '' : 'none';
-        g.setAttribute('aria-label', (n ? 'Stop ' + n + ': ' : 'Add ') + MM.PLACES[id].n + (n ? '' : ' to your trip'));
+        var been = !n && state.been && state.been.indexOf(id) > -1, here = !n && state.from === id;
+        g.setAttribute('class', 'm-pin' + (MM.PLACES[id].partner ? ' partner' : '') + (n ? ' sel' : '') + (!inF && n ? ' off' : '') + (been ? ' been' : '') + (here ? ' here' : ''));
+        g.querySelector('.n').textContent = n || (here ? '●' : been ? '✓' : '');
+        g.querySelector('.nm').style.display = (n || here || (labelsAll && inF)) ? '' : 'none';
+        g.setAttribute('aria-label', n ? 'Stop ' + n + ': ' + MM.PLACES[id].n : here ? 'You are here: ' + MM.PLACES[id].n + '. Add it again to stay.' : been ? 'You have been to ' + MM.PLACES[id].n + '. Add it again to go back.' : 'Add ' + MM.PLACES[id].n + ' to your trip');
       });
       Array.prototype.forEach.call(svg.querySelectorAll('.m-land'), function (p) { p.classList.toggle('dim', !inFocus(p.getAttribute('data-c'))); });
       Array.prototype.forEach.call(svg.querySelectorAll('.m-lbl'), function (t) { t.style.display = inFocus(t.getAttribute('data-c')) ? '' : 'none'; });
       // route
       var now = {}; gRoute.innerHTML = '';
-      var path = []; plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (x) { path.push({ p: x.p, block: true }); }); else path.push({ p: s.p, block: false }); });
+      var path = []; if (plan.arrival) path.push({ p: plan.arrival.from, block: false });      // a later stage starts from where they are
+      plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (x) { path.push({ p: x.p, block: true }); }); else path.push({ p: s.p, block: false }); });
       var legByFrom = {}; plan.legs.forEach(function (l) { legByFrom[l.from + '>' + l.to] = l; });
       for (var i = 1; i < path.length; i++) {
         var a = path[i - 1].p, b = path[i].p; if (a === b) continue;

@@ -33,7 +33,7 @@
     });
 
     // contrast: walk up to the first solid background (skip anything sitting on an image or gradient, where we can't know)
-    function rgba(c) { var m = /rgba?\(([^)]+)\)/.exec(c); if (!m) return null; var p = m[1].split(/[ ,\/]+/).filter(Boolean).map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
+    function rgba(c) { var m = /rgba?\(([^)]+)\)/.exec(c); if (!m) return null; var p = m[1].split(/[ ,/]+/).filter(Boolean).map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
     function lum(c) { var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); }
     function bgOf(el) { for (var e = el; e; e = e.parentElement) { var cs = getComputedStyle(e); if (cs.backgroundImage !== 'none') return null; var c = rgba(cs.backgroundColor); if (c && c.a > 0.95) return c; } return { r: 245, g: 239, b: 226, a: 1 }; }
     all.forEach(function (el) {

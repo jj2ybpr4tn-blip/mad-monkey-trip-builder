@@ -1,0 +1,707 @@
+From 61dee09df20faa4063d91fc4c3a0dd6af6dda4be Mon Sep 17 00:00:00 2001
+From: Ewan McIntyre <ewan3568@me.com>
+Date: Fri, 23 Oct 2026 15:42:32 +0800
+Subject: [PATCH 5/6] Trip builder backend: links can't be pointed elsewhere,
+ log in by email, later stages
+
+Security (found in a review of the trip builder):
+- A forged Origin header could make our emails point at someone else's site, handing over the crew's
+  review key and the guest's key. Links the trip builder builds now only ever use our own sites
+  (new trustedBase(); optional TRIP_BUILDER_ALLOWED_ORIGINS for a staging site). appBase() unchanged.
+- A trip's link is only stored if it leads to our own trip builder, and the crew's edited version has to
+  as well; emails drop any link that isn't plain http(s) (safeHref), so a javascript: link can't be printed.
+- trip-builder-request: 5 trips an hour per contact and 10 per address (address kept only as a keyed hash).
+- Admin password compared in constant time; a warning while TRIP_BUILDER_LINK_SECRET is unset (set it to
+  something long and random: links signed with the admin password could be guessed offline).
+- The admin page only makes a trip link a link if it is http(s).
+
+New: trip-builder-login. A guest logs in with the email they used and is emailed a link to each trip they
+have sent (signed guest key, no password). The answer never says whether an address has trips; only
+paid, live trips; 3 emails an hour per address; an address matches as plain text (no wildcards).
+
+New: later stages of a journey. The builder's "Plan my next stage" sends a new request marked as stage 2+
+(payload.stage, summary.stage). The crew email and review page say where they start, where they have
+been and which trip came first. Nothing is stored beyond payload: no migration.
+
+Tests: _shared/app-base.test.ts, links.test.ts, trip-builder-stage.test.ts (48 Deno tests in all) and the
+end-to-end run (98 -> 114 checks: forged origins, bad links, rate limits, logging in, stages).
+See docs/trip-builder-journeys.md.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ docs/trip-builder-journeys.md                 | 31 ++++++++++
+ src/components/admin/TripBuilderAdmin.tsx     |  2 +-
+ supabase/config.toml                          |  4 ++
+ supabase/functions/_shared/admin-auth.ts      |  8 +++
+ supabase/functions/_shared/app-base.test.ts   | 31 +++++++++-
+ supabase/functions/_shared/app-base.ts        | 27 +++++++++
+ supabase/functions/_shared/email.ts           | 48 +++++++++++++--
+ supabase/functions/_shared/links.test.ts      | 20 +++++++
+ .../functions/_shared/trip-builder-crew.ts    | 30 ++++++++--
+ .../_shared/trip-builder-stage.test.ts        | 58 +++++++++++++++++++
+ supabase/functions/_shared/trip-builder.ts    |  4 +-
+ .../functions/trip-builder-admin/index.ts     | 11 ++--
+ .../functions/trip-builder-login/index.ts     | 57 ++++++++++++++++++
+ .../functions/trip-builder-request/index.ts   | 34 ++++++++++-
+ .../functions/trip-builder-revise/index.ts    |  4 +-
+ 15 files changed, 346 insertions(+), 23 deletions(-)
+ create mode 100644 docs/trip-builder-journeys.md
+ create mode 100644 supabase/functions/_shared/links.test.ts
+ create mode 100644 supabase/functions/_shared/trip-builder-stage.test.ts
+ create mode 100644 supabase/functions/trip-builder-login/index.ts
+
+diff --git a/docs/trip-builder-journeys.md b/docs/trip-builder-journeys.md
+new file mode 100644
+index 0000000..7064607
+--- /dev/null
++++ b/docs/trip-builder-journeys.md
+@@ -0,0 +1,31 @@
++# Trip builder: logging in, later stages, and links that can't be pointed elsewhere
++
++## Log in by email (`trip-builder-login`)
++
++A guest who has sent a trip can "log in" from any device: the builder asks for the email they used and POSTs `{ email }` here. We email them a link to each trip they have sent (newest first, up to five), each with its own signed guest key (the same key as in the "your trip is checked" emails, valid 90 days). Opening the link gives them their trip page, where they can change the trip or plan the next stage. There is no password and no account.
++
++- The answer is always `{ ok: true }`, whether or not the address has a trip, and a throttled address gets the same answer. It can't be used to find out who has booked.
++- Only trips whose deposit was paid and that are still live (submitted, checking, ready, approved) are included.
++- Three emails an hour per address, counted from `email_send_log` (template `trip_builder_login`). No new table, no migration.
++- A hidden `website` field that is filled in is treated as a bot (same answer, nothing sent).
++- An address is matched as plain text only: `_`, `%`, `\` and `*` in it can't act as wildcards, so `a_b@x.com` never matches `aXb@x.com`'s trips.
++- Links are built on one of our own sites whatever the `Origin` header says (see below).
++
++## Later stages
++
++The builder's "Plan my next stage" sends a new request (its own deposit, its own review) marked as stage 2, 3...: `payload.stage = { n, parent, from, been }` and `payload.summary.stage` (where they start, the first journey, where they have already been, the earlier trip's reference). `readSummary` reads it defensively (`readStage`): the number is clamped, the parent has to look like a trip reference, everything else is length-limited text. The crew's new-trip email gets a "Stage 2 of their journey" box and a `Stage 2 ·` subject, and the review page shows the same box. No migration: it all lives in `payload`.
++
++## Links in our emails only point at our own sites
++
++A browser's `Origin` header is just text, so anyone could send a request that says `Origin: https://evil.example` and, before this change, get the crew's Approve / Not approved / Edit it buttons (which carry a key) and the guest's links built on that address. Now:
++
++- `trustedBase()` (`_shared/app-base.ts`) only ever returns madmonkeyhostels.com and its subdomains (https), `mm-squad-trips.lovable.app`, local development, and anything in the optional secret `TRIP_BUILDER_ALLOWED_ORIGINS` (hostnames, comma separated, `*.example.com` for subdomains). Everything else becomes the live site. `appBase()` is unchanged, so the older ALL IN checkout keeps working as before; you may want the same allow-list there.
++- A trip's `link` is only stored if it leads to a trip in our own builder; the crew's edited version has to as well. Email templates drop any link that isn't plain http(s) (`safeHref`), so rows saved before this change can't print a `javascript:` link.
++- `trip-builder-request`: at most 5 trips an hour per contact and 10 per address (the address is kept only as a keyed hash in `payload.ipHash`), a refusal saves nothing.
++- The admin password is compared in constant time.
++
++**One thing to do:** set the secret `TRIP_BUILDER_LINK_SECRET` to a long random value (`openssl rand -hex 32`). Without it the links are signed with `ADMIN_PASSWORD`, and anyone holding one link (every guest does) could guess admin passwords offline against its signature. The functions log a warning while it is unset.
++
++## Tests
++
++`deno test supabase/functions/_shared/` (48: `app-base`, `links`, `trip-builder-stage`, and the earlier ones), and the end-to-end run in the builder repo, `handoff/all-in-backend/e2e/run.sh <this repo>` (114 checks, including forged origins, bad links, the rate limits, logging in, and a later stage reaching the crew).
+diff --git a/src/components/admin/TripBuilderAdmin.tsx b/src/components/admin/TripBuilderAdmin.tsx
+index e1eac0b..2ff2fd1 100644
+--- a/src/components/admin/TripBuilderAdmin.tsx
++++ b/src/components/admin/TripBuilderAdmin.tsx
+@@ -180,7 +180,7 @@ export default function TripBuilderAdmin({ refreshKey }: { refreshKey?: number }
+                                     REVIEW PAGE: APPROVE / DECLINE / EDIT <ExternalLink className="h-3 w-3" />
+                                   </button>
+                                 )}
+-                                {r.trip_link && <a href={r.trip_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 border-[2px] border-mm-black bg-mm-bone px-2 py-1 font-sticker text-[10px] tracking-[0.15em]">OPEN THEIR TRIP <ExternalLink className="h-3 w-3" /></a>}
++                                {r.trip_link && /^https?:\/\//i.test(r.trip_link) && <a href={r.trip_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 border-[2px] border-mm-black bg-mm-bone px-2 py-1 font-sticker text-[10px] tracking-[0.15em]">OPEN THEIR TRIP <ExternalLink className="h-3 w-3" /></a>}
+                                 <span className="text-xs text-mm-black/70 self-center">
+                                   Builder estimate {usd(r.est_total_usd)} per person, incl. their spending money{r.all_in_match ? ` · looks like ALL IN ${r.all_in_match}` : ""}{r.from_place ? ` · now in ${r.from_place}` : ""}{r.campaign_ref ? ` · ref ${r.campaign_ref}` : ""}{r.from_hostel ? ` · QR at ${r.from_hostel}` : ""}
+                                 </span>
+diff --git a/supabase/config.toml b/supabase/config.toml
+index b9c006e..f8933e4 100644
+--- a/supabase/config.toml
++++ b/supabase/config.toml
+@@ -66,6 +66,10 @@ verify_jwt = false
+ [functions.trip-builder-revise]
+ verify_jwt = false
+ 
++# "Log in": emails a guest a link to the trips they have sent (no passwords; the answer never says whether an address has trips).
++[functions.trip-builder-login]
++verify_jwt = false
++
+ # Daily job (cron secret checked inside): charges due trip builder payments and sends reminders.
+ [functions.charge-trip-builder-payments]
+ verify_jwt = false
+diff --git a/supabase/functions/_shared/admin-auth.ts b/supabase/functions/_shared/admin-auth.ts
+index 8ca8760..e74e030 100644
+--- a/supabase/functions/_shared/admin-auth.ts
++++ b/supabase/functions/_shared/admin-auth.ts
+@@ -62,3 +62,11 @@ export function adminAuthHeaderToken(req: Request): string | null {
+   if (!h) return null;
+   return h.replace(/^Bearer\s+/i, "").trim() || null;
+ }
++
++/** Compares two secrets without stopping at the first difference, so how long it takes says nothing about how close a guess was. */
++export function safeEqual(a: string, b: string): boolean {
++  const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
++  let diff = x.length ^ y.length;
++  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
++  return diff === 0;
++}
+diff --git a/supabase/functions/_shared/app-base.test.ts b/supabase/functions/_shared/app-base.test.ts
+index 6afb353..ebd8cb8 100644
+--- a/supabase/functions/_shared/app-base.test.ts
++++ b/supabase/functions/_shared/app-base.test.ts
+@@ -1,5 +1,5 @@
+-import { assertEquals } from "jsr:@std/assert@1";
+-import { appBase } from "./app-base.ts";
++import { assert, assertEquals } from "jsr:@std/assert@1";
++import { appBase, isTrustedOrigin, trustedBase } from "./app-base.ts";
+ 
+ Deno.test("live domain gets the /all-in-trips prefix", () => {
+   assertEquals(appBase("https://madmonkeyhostels.com"), "https://madmonkeyhostels.com/all-in-trips");
+@@ -17,3 +17,30 @@ Deno.test("missing or junk origin falls back to the live site", () => {
+   assertEquals(appBase("not a url"), "https://madmonkeyhostels.com/all-in-trips");
+   assertEquals(appBase("https://evilmadmonkeyhostels.com"), "https://evilmadmonkeyhostels.com");
+ });
++
++const LIVE = "https://madmonkeyhostels.com/all-in-trips";
++
++Deno.test("trustedBase: our own sites keep their address", () => {
++  assertEquals(trustedBase("https://madmonkeyhostels.com"), LIVE);
++  assertEquals(trustedBase("https://www.madmonkeyhostels.com"), "https://www.madmonkeyhostels.com/all-in-trips");
++  assertEquals(trustedBase("https://mm-squad-trips.lovable.app"), "https://mm-squad-trips.lovable.app");
++  assertEquals(trustedBase("http://localhost:8080"), "http://localhost:8080");
++  assertEquals(trustedBase("http://127.0.0.1:5173"), "http://127.0.0.1:5173");
++});
++
++Deno.test("trustedBase: anyone else's address, however it is dressed up, becomes the live site", () => {
++  for (const o of [
++    "https://evil.example", "https://evilmadmonkeyhostels.com", "https://madmonkeyhostels.com.evil.example", "https://evil.example/madmonkeyhostels.com",
++    "http://madmonkeyhostels.com", "https://other.lovable.app", "https://lovable.app", "javascript:alert(1)", "data:text/html,hi", "ftp://madmonkeyhostels.com",
++    "https://madmonkeyhostels.com@evil.example", "not a url", "", null, undefined,
++  ]) assertEquals(trustedBase(o), LIVE, String(o));
++});
++
++Deno.test("trustedBase: extra sites are added with TRIP_BUILDER_ALLOWED_ORIGINS, never by default", () => {
++  assertEquals(trustedBase("https://staging.example.com"), LIVE);
++  assertEquals(trustedBase("https://staging.example.com", "staging.example.com"), "https://staging.example.com");
++  assertEquals(trustedBase("https://a.preview.example.com", "*.preview.example.com, other.test"), "https://a.preview.example.com");
++  assertEquals(trustedBase("https://preview.example.com", "*.preview.example.com"), LIVE);          // the wildcard is for subdomains
++  assertEquals(trustedBase("https://evilpreview.example.com", "*.preview.example.com"), LIVE);
++  assert(!isTrustedOrigin("https://evil.example", ""));
++});
+diff --git a/supabase/functions/_shared/app-base.ts b/supabase/functions/_shared/app-base.ts
+index 63e605e..0442623 100644
+--- a/supabase/functions/_shared/app-base.ts
++++ b/supabase/functions/_shared/app-base.ts
+@@ -19,3 +19,30 @@ export function appBase(origin: string | null | undefined): string {
+     return LIVE_BASE;
+   }
+ }
++
++// The sites we are willing to point a link at. A browser's Origin header is just text: anyone can send a request with
++// `Origin: https://evil.example`, and appBase() above would then build the links in OUR emails on that address. For trip builder
++// links that matters, because the crew's Approve / Not approved / Edit it buttons carry a key that opens the review page: a link to
++// somebody else's site would hand them that key. So the trip builder only ever builds links on these, and anything else becomes the live site.
++//   madmonkeyhostels.com and its subdomains (https), the lovable.app copy, and local development.
++// Add more (a staging site) with the secret TRIP_BUILDER_ALLOWED_ORIGINS: hostnames, comma separated, `*.example.com` for every subdomain.
++const TRUSTED_HOSTS = ["mm-squad-trips.lovable.app"];
++
++const extraHosts = () => { try { return Deno.env.get("TRIP_BUILDER_ALLOWED_ORIGINS") ?? ""; } catch { return ""; } };   // (no permission to read it, as in a plain `deno test`: none)
++
++export function isTrustedOrigin(origin: string | null | undefined, extra = extraHosts()): boolean {
++  if (!origin) return false;
++  let url: URL;
++  try { url = new URL(origin); } catch { return false; }
++  const host = url.hostname.toLowerCase();
++  if (host === "localhost" || host === "127.0.0.1") return url.protocol === "http:" || url.protocol === "https:";
++  if (url.protocol !== "https:") return false;
++  if (host === "madmonkeyhostels.com" || host.endsWith(".madmonkeyhostels.com") || TRUSTED_HOSTS.includes(host)) return true;
++  return extra.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
++    .some((rule) => (rule.startsWith("*.") ? host.endsWith(rule.slice(1)) : host === rule));
++}
++
++/** Like appBase(), but only for our own sites. Use this for every link the trip builder puts in an email or a payment return. */
++export function trustedBase(origin: string | null | undefined, extra?: string): string {
++  return isTrustedOrigin(origin, extra) ? appBase(origin) : LIVE_BASE;
++}
+diff --git a/supabase/functions/_shared/email.ts b/supabase/functions/_shared/email.ts
+index cca6280..caf6f72 100644
+--- a/supabase/functions/_shared/email.ts
++++ b/supabase/functions/_shared/email.ts
+@@ -153,6 +153,12 @@ export async function sendEmail({ to, subject, html, replyTo, cc, templateName,
+ }
+ 
+ 
++/** A link we are willing to print in an email: plain http(s), no spaces or quotes. Anything else (a `javascript:` link, say) comes back empty and the link is left out. */
++export function safeHref(u: unknown): string {
++  const t = typeof u === "string" ? u.trim() : "";
++  return /^https?:\/\/[^\s"'<>]+$/i.test(t) ? t : "";
++}
++
+ function escapeHtml(s: string): string {
+   return s
+     .replace(/&/g, "&amp;")
+@@ -852,8 +858,19 @@ ${upd.note ? `<div style="margin-top:6px;font-size:13px">“${e(upd.note)}”</d
+ ${upd.withdrawn ? `<div style="margin-top:8px;font-weight:900;font-size:13px">You had approved the earlier version. That approval and the balance are withdrawn, so nothing is waiting for ${e(first)} to pay. Approve this one when you're happy with it.</div>` : ""}
+ </td></tr></table>`
+     : "";
+-  const title = upd ? "Trip updated" : "New trip to check";
+-  const subjectLead = upd ? `UPDATED (v${upd.rev}) · ` : "";
++  /* ---- a later stage of a journey ---- */
++  const stg = sum?.stage ?? null;
++  const stageBanner = stg
++    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:3px solid #0a0a0a;background:#00fef3;margin:0 0 16px 0"><tr><td style="padding:12px 14px;${D}">
++<div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em">Stage ${stg.n} of their journey</div>
++<div style="font-size:16px;font-weight:900;margin:2px 0 6px 0">${e(first)} is already travelling. Only the new stops need checking.</div>
++${stg.from ? `<div style="font-size:13px">Starting from <strong>${e(stg.from.name)}</strong>${stg.arrival ? `: ${e(stg.arrival.mode)} to ${e(stg.arrival.to)} · ${e(stg.arrival.hours)} · ${money(stg.arrival.usd)}${stg.arrival.overnight ? " · overnight" : ""}` : ""}</div>` : ""}
++${stg.been.length ? `<div style="font-size:13px">Already been to ${stg.been.map((x) => e(x)).join(", ")}. None of these were suggested.</div>` : ""}
++${stg.parent ? `<div style="font-size:12px;margin-top:4px">The earlier stage is ${e(stg.parent)} (find it in Admin &gt; Trip builder).</div>` : ""}
++</td></tr></table>`
++    : "";
++  const title = upd ? "Trip updated" : stg ? `Stage ${stg.n} to check` : "New trip to check";
++  const subjectLead = (upd ? `UPDATED (v${upd.rev}) · ` : "") + (stg ? `Stage ${stg.n} · ` : "");
+ 
+   /* ---- no summary (older trip): the plain version ---- */
+   if (!sum) {
+@@ -864,7 +881,7 @@ ${upd.withdrawn ? `<div style="margin-top:8px;font-weight:900;font-size:13px">Yo
+       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #0a0a0a;margin:0 0 16px 0;font-size:14px;border-collapse:collapse">${row("Route", v.route)}${row("Days", String(v.days))}${row("Start", v.startDate)}${row("Dates", v.dates)}${row("Builder estimate", v.estTotal)}${row("Looks like ALL IN", v.allInMatch)}${row("Notes", v.notes)}</table>`,
+       `<pre style="margin:0 0 16px 0;padding:12px;border:2px solid #0a0a0a;background:#f5efe2;font-size:12px;line-height:1.45;white-space:pre-wrap;font-family:Menlo,Consolas,monospace">${e(v.itinerary)}</pre>`,
+       actions,
+-      `<p style="margin:0 0 8px 0;font-size:13px"><a href="${e(v.tripLink)}" style="${D}">Open the trip in the builder</a> · <a href="${e(v.adminUrl)}" style="${D}">Open admin</a></p>`,
++      `<p style="margin:0 0 8px 0;font-size:13px">${safeHref(v.tripLink) ? `<a href="${e(safeHref(v.tripLink))}" style="${D}">Open the trip in the builder</a> · ` : ""}<a href="${e(v.adminUrl)}" style="${D}">Open admin</a></p>`,
+     ].join("\n");
+     return { subject: `${subjectLead}Trip to check: ${v.name} · ${v.route} · ${v.days} days`, html: tbShell(title, title, body) };
+   }
+@@ -932,11 +949,11 @@ ${sum.flags.map((f) => `<tr><td style="padding:6px 12px;font-size:13px;line-heig
+     : "";
+ 
+   const body = [
+-    banner, actions, who, glance,
++    banner, stageBanner, actions, who, glance,
+     `<p style="margin:0 0 8px 0;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#555">The trip, stop by stop</p>`,
+     stopCards, `<div style="height:8px"></div>`, money2, flags, note,
+     `<p style="margin:0 0 8px 0;font-size:14px;font-weight:900;${D}">Happy with it?</p>`, actions,
+-    `<p style="margin:12px 0 0 0;font-size:13px;line-height:1.7">${v.reviewUrl ? `<a href="${e(v.reviewUrl)}" style="${D}">Open the review page</a> · ` : ""}<a href="${e(v.tripLink)}" style="${D}">Open it in the builder</a> · <a href="${e(v.adminUrl)}" style="${D}">Admin</a></p>`,
++    `<p style="margin:12px 0 0 0;font-size:13px;line-height:1.7">${v.reviewUrl ? `<a href="${e(v.reviewUrl)}" style="${D}">Open the review page</a> · ` : ""}${safeHref(v.tripLink) ? `<a href="${e(safeHref(v.tripLink))}" style="${D}">Open it in the builder</a> · ` : ""}<a href="${e(v.adminUrl)}" style="${D}">Admin</a></p>`,
+   ].join("\n");
+   return {
+     subject: `${subjectLead}Trip to check: ${v.name}${v.people > 1 ? ` + ${v.people - 1}` : ""} · ${sum.headline || v.route} · ${sum.days} days${sum.start ? ` · from ${day(sum.start)}` : ""}`,
+@@ -957,7 +974,7 @@ export function tripBuilderReadyEmail(v: {
+     tbP(`Hey ${e(v.firstName)},`),
+     tbP(`Good news: the crew has checked your trip, <strong>${e(v.route)}</strong>.`),
+     v.note ? `<div style="margin:16px 0;padding:14px;border:2px solid #0a0a0a;background:#ccff01"><div style="font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">From the crew</div><div style="font-size:15px;white-space:pre-line">${e(v.note)}</div></div>` : "",
+-    v.planUrl ? tbP(`Have a look at the plan we checked: <a href="${e(v.planUrl)}" style="color:#0a0a0a">see your trip</a>.`) : "",
++    safeHref(v.planUrl) ? tbP(`Have a look at the plan we checked: <a href="${e(safeHref(v.planUrl))}" style="color:#0a0a0a">see your trip</a>.`) : "",
+     tbP(`The rest to pay is <strong>${e(v.balance)}</strong>. Your deposit is already taken off, and it's the same card that carries on.`),
+     v.choices && v.choices.length ? `<ul style="margin:0 0 12px 0;padding-left:20px">${v.choices.map((c) => `<li style="margin:0 0 4px 0">${e(c)}</li>`).join("")}</ul>` : "",
+     `<p style="margin:18px 0">${tbButton(v.payUrl, "Choose how to pay")}</p>`,
+@@ -987,6 +1004,25 @@ export function tripBuilderBookedEmail(v: {
+   return { subject: `You're booked: ${v.route} (${v.ref})`, html: tbShell("You're booked", "You're booked", body) };
+ }
+ 
++/** Guest: "log in" by email: a link to each trip they have sent (with their key), to change it or plan the next stage from any device. */
++export function tripBuilderLoginEmail(v: {
++  firstName: string; trips: { ref: string; route: string; days: number; status: string; url: string }[];
++}): { subject: string; html: string } {
++  const e = escapeHtml;
++  const label: Record<string, string> = { submitted: "With the crew", checking: "Being checked", ready: "Ready for your OK", approved: "Booked" };
++  const rows = v.trips.map((t) =>
++    `<tr><td style="padding:10px 0;border-top:2px solid #0a0a0a"><div style="font-size:16px;font-weight:900;text-transform:uppercase">${e(t.route)}</div><div style="font-size:12px;color:#555">${e(t.ref)} · ${e(label[t.status] ?? "Sent")}${t.days ? ` · ${t.days} days` : ""}</div><div style="margin-top:8px">${tbButton(t.url, "Open this trip")}</div></td></tr>`
++  ).join("");
++  const body = [
++    tbP(`Hey ${e(v.firstName)},`),
++    tbP("Here's your link to carry on. From your trip you can change it, or plan your next stage once you're there. We remember where you've been, so we never suggest it twice."),
++    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px 0">${rows}</table>`,
++    tbP("A real person checks every trip before anything is booked. Questions? Reply to this email, or ask Ewan on WhatsApp: " + `<a href="${TB_WA_LINK}" style="color:#0a0a0a">${TRIP_BUILDER_WHATSAPP}</a>.`),
++    `<p style="margin:0;font-size:12px;color:#555">Didn't ask for this? You can ignore it. The link only opens your own trip.</p>`,
++  ].join("\n");
++  return { subject: v.trips.length > 1 ? "Your Mad Monkey trips" : `Your Mad Monkey trip: ${v.trips[0]?.route ?? ""}`, html: tbShell("Your trip link", "Your trip link", body) };
++}
++
+ /** Guest: a payment comes out in a few days. */
+ export function tripBuilderReminderEmail(v: { firstName: string; ref: string; route: string; amount: string; due: string; statusUrl: string }): { subject: string; html: string } {
+   const e = escapeHtml;
+diff --git a/supabase/functions/_shared/links.test.ts b/supabase/functions/_shared/links.test.ts
+new file mode 100644
+index 0000000..05f88b7
+--- /dev/null
++++ b/supabase/functions/_shared/links.test.ts
+@@ -0,0 +1,20 @@
++import { assert, assertEquals } from "jsr:@std/assert@1";
++import { safeHref } from "./email.ts";
++import { safeEqual } from "./admin-auth.ts";
++
++Deno.test("safeHref: plain http(s) links come through, anything else is left out", () => {
++  assertEquals(safeHref("https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.hanoi.4"), "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.hanoi.4");
++  assertEquals(safeHref("  http://localhost:8080/x  "), "http://localhost:8080/x");
++  for (const bad of ["javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:text/html,<script>1</script>", "//evil.example", "https://x.test/a b", 'https://x.test/"onmouseover="alert(1)', "https://x.test/<b>", "", "   ", null, undefined, 42, {}]) {
++    assertEquals(safeHref(bad), "", String(bad));
++  }
++});
++
++Deno.test("safeEqual: the same string, and only the same string", () => {
++  assert(safeEqual("correct horse", "correct horse"));
++  assert(!safeEqual("correct horse", "correct horsf"));
++  assert(!safeEqual("correct horse", "correct hors"));
++  assert(!safeEqual("", "x"));
++  assert(safeEqual("", ""));
++  assert(!safeEqual("pässword", "password"));
++});
+diff --git a/supabase/functions/_shared/trip-builder-crew.ts b/supabase/functions/_shared/trip-builder-crew.ts
+index eb22914..8bb45a4 100644
+--- a/supabase/functions/_shared/trip-builder-crew.ts
++++ b/supabase/functions/_shared/trip-builder-crew.ts
+@@ -13,7 +13,7 @@
+ // declined or refunded until a person presses the confirm button on the page, so
+ // an email scanner that follows the links can't trigger anything.
+ 
+-import { appBase } from "./app-base.ts";
++import { trustedBase } from "./app-base.ts";
+ 
+ export const KEY_DAYS = 30;
+ 
+@@ -25,8 +25,13 @@ async function mac(secret: string, text: string): Promise<string> {
+   return hex(await crypto.subtle.sign("HMAC", k, enc.encode(text))).slice(0, 40);
+ }
+ 
++let warnedSecret = false;
+ export function crewSecret(): string {
+-  return Deno.env.get("TRIP_BUILDER_LINK_SECRET") || Deno.env.get("ADMIN_PASSWORD") || "";
++  const own = Deno.env.get("TRIP_BUILDER_LINK_SECRET");
++  if (own) return own;
++  // Links signed with the admin password work, but anyone holding one link (every guest does) could guess passwords against its signature offline.
++  if (!warnedSecret) { warnedSecret = true; console.warn("TRIP_BUILDER_LINK_SECRET is not set: trip builder links are signed with ADMIN_PASSWORD. Set a long random value (openssl rand -hex 32) instead."); }
++  return Deno.env.get("ADMIN_PASSWORD") || "";
+ }
+ 
+ // A key proves a link came from one of our emails. It is bound to one kind of link ("crew" or "guest") and one trip,
+@@ -59,7 +64,7 @@ export const verifyGuestKey = (ref: string, key: unknown, secret = crewSecret(),
+ 
+ /** The guest's own trip page, with their key so they can choose how to pay. */
+ export function guestTripUrl(origin: string | null, ref: string, key?: string): string {
+-  return `${appBase(origin)}/trip-builder/#/trip/${encodeURIComponent(ref)}${key ? `?k=${encodeURIComponent(key)}` : ""}`;
++  return `${trustedBase(origin)}/trip-builder/#/trip/${encodeURIComponent(ref)}${key ? `?k=${encodeURIComponent(key)}` : ""}`;
+ }
+ 
+ export type CrewAction = "review" | "approve" | "decline" | "edit";
+@@ -67,13 +72,15 @@ export type CrewAction = "review" | "approve" | "decline" | "edit";
+ /** The link in the email. `do` tells the page which panel to open first. */
+ export function crewReviewUrl(origin: string | null, ref: string, key: string, action: CrewAction = "review"): string {
+   const q = `k=${encodeURIComponent(key)}${action === "review" ? "" : `&do=${action}`}`;
+-  return `${appBase(origin)}/trip-builder/#/crew/${encodeURIComponent(ref)}?${q}`;
++  return `${trustedBase(origin)}/trip-builder/#/crew/${encodeURIComponent(ref)}?${q}`;
+ }
+ 
+ /* ---------- the summary the builder sends (crew.js), made safe to print ---------- */
+ 
+ export type Tour = { name: string; usd: number | null; est: boolean; payOnDay: boolean; date: string; day: number; fits: boolean; includesBeds: boolean };
+ export type Next = { to: string; mode: string; hours: string; usd: number; overnight: boolean; date: string };
++/** A later stage of a journey (the builder's "Plan my next stage"): where they start, where they have already been, and which trip came before. */
++export type Stage = { n: number; parent: string; from: { id: string; name: string } | null; been: string[]; arrival: { to: string; mode: string; hours: string; usd: number; overnight: boolean; date: string } | null };
+ export type Stop = {
+   kind: "stop" | "allin"; name: string; country: string; nights: number; days: number; usd: number; from: string; to: string;
+   route: string; bedUsd: number; bedsUsd: number; partner: boolean; tours: Tour[]; next: Next | null;
+@@ -85,6 +92,7 @@ export type Budget = {
+ export type Summary = {
+   headline: string; days: number; nights: number; stopCount: number; countries: string[]; start: string; end: string; datesLabel: string;
+   people: number; pref: string; stops: Stop[]; budget: Budget; flags: { level: "warn" | "info"; text: string }[];
++  stage: Stage | null;
+ };
+ 
+ const s = (v: unknown, max = 300) => (typeof v === "string" ? v.slice(0, max) : "");
+@@ -116,6 +124,20 @@ export function readSummary(payload: unknown): Summary | null {
+       guestBudget: n(b.guestBudget), budgetLeft: b.budgetLeft == null ? null : n(b.budgetLeft),
+     },
+     flags: (Array.isArray(x.flags) ? (x.flags as Record<string, unknown>[]) : []).slice(0, 16).map((f) => ({ level: f.level === "warn" ? "warn" as const : "info" as const, text: s(f.text, 400) })),
++    stage: readStage(x.stage),
++  };
++}
++
++/** The stage block of a summary, made safe to print: anything unexpected is dropped. */
++export function readStage(v: unknown): Stage | null {
++  if (!v || typeof v !== "object") return null;
++  const g = v as Record<string, unknown>, f = g.from as Record<string, unknown> | null, a = g.arrival as Record<string, unknown> | null;
++  return {
++    n: Math.min(20, Math.max(2, Math.round(Number(g.n)) || 2)),
++    parent: typeof g.parent === "string" && /^MM-[A-Z0-9]{6}$/.test(g.parent) ? g.parent : "",
++    from: f && typeof f === "object" ? { id: s(f.id, 40), name: s(f.name, 80) } : null,
++    been: (Array.isArray(g.been) ? g.been : []).slice(0, 40).map((x) => s(x, 80)).filter(Boolean),
++    arrival: a && typeof a === "object" ? { to: s(a.to, 80), mode: s(a.mode, 60), hours: s(a.hours, 20), usd: n(a.usd), overnight: a.overnight === true, date: isoDay(a.date) } : null,
+   };
+ }
+ 
+diff --git a/supabase/functions/_shared/trip-builder-stage.test.ts b/supabase/functions/_shared/trip-builder-stage.test.ts
+new file mode 100644
+index 0000000..13ba148
+--- /dev/null
++++ b/supabase/functions/_shared/trip-builder-stage.test.ts
+@@ -0,0 +1,58 @@
++import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
++import { readStage, readSummary } from "./trip-builder-crew.ts";
++import { tripBuilderLoginEmail, tripBuilderOpsEmail } from "./email.ts";
++
++const BUDGET = { beds: 100, tours: 40, transport: 60, allIn: 0, squadDiscount: 0, tripCost: 200, spendPerDay: 20, spendFund: 120, total: 320, people: 1, tripCostAllPeople: 200, totalAllPeople: 320, guestBudget: 0, budgetLeft: null };
++const STOP = { kind: "stop", name: "Phnom Penh", country: "Cambodia", nights: 3, days: 3, usd: 0, from: "2027-03-01", to: "2027-03-04", route: "", bedUsd: 9, bedsUsd: 27, partner: false, tours: [], next: null };
++const STAGE = { n: 3, parent: "MM-ABC234", from: { id: "saigon", name: "Ho Chi Minh City" }, been: ["Hanoi", "Hoi An", "Ho Chi Minh City"], arrival: { to: "Phnom Penh", mode: "Bus", hours: "7h", usd: 13, overnight: false, date: "2027-03-01" } };
++const summary = (stage: unknown) => readSummary({ summary: { headline: "Phnom Penh", days: 4, nights: 3, stopCount: 1, countries: ["Cambodia"], start: "2027-03-01", end: "2027-03-04", people: 1, pref: "Smart pick", stops: [STOP], budget: BUDGET, flags: [], stage } });
++const opsArgs = (sum: ReturnType<typeof summary>) => ({
++  ref: "MM-NEW123", name: "Sam Lee", contact: "Email sam@example.com", guestEmail: "sam@example.com", people: 1, route: "Phnom Penh", days: 4, startDate: "Mon 1 Mar 2027", dates: "fixed",
++  estTotal: "$320", deposit: "$50", allInMatch: "", notes: "", itinerary: "x", tripLink: "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/i=s.phnom-penh.3", adminUrl: "https://madmonkeyhostels.com/all-in-trips/admin", holdUntil: "", summary: sum,
++});
++
++Deno.test("a stage is read safely: the number is kept in range, the parent has to look like a trip reference, odd fields are dropped", () => {
++  assertEquals(readStage(null), null);
++  assertEquals(readStage("x"), null);
++  assertEquals(readStage(STAGE)?.n, 3);
++  assertEquals(readStage({ n: 99 })?.n, 20);
++  assertEquals(readStage({ n: 0 })?.n, 2);
++  assertEquals(readStage({ n: "x" })?.n, 2);
++  assertEquals(readStage({ n: 2, parent: "<img src=x>" })?.parent, "");
++  assertEquals(readStage({ n: 2, parent: "MM-ABC234" })?.parent, "MM-ABC234");
++  const s = readStage({ n: 2, from: { id: 5, name: { x: 1 } }, been: [1, null, "Hanoi", ..."abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz".split("")], arrival: { to: "X", usd: "nope", overnight: "yes", date: "soon" } });
++  assert(s !== null && s.from?.id === "" && s.from?.name === "" && s.been[0] === "Hanoi" && s.been.length <= 40 && s.arrival?.usd === 0 && s.arrival?.overnight === false && s.arrival?.date === "");
++});
++
++Deno.test("the summary carries the stage; an older summary has none", () => {
++  assertEquals(summary(STAGE)?.stage?.from?.name, "Ho Chi Minh City");
++  assertEquals(summary(undefined)?.stage, null);
++  assertEquals(summary(null)?.stage, null);
++});
++
++Deno.test("the crew email says which stage it is, where they start, where they have been and which trip came first", () => {
++  const m = tripBuilderOpsEmail(opsArgs(summary(STAGE)));
++  assertStringIncludes(m.subject, "Stage 3 · ");
++  for (const t of ["Stage 3 of their journey", "already travelling", "Starting from", "Ho Chi Minh City", "Bus to Phnom Penh", "Already been to Hanoi, Hoi An, Ho Chi Minh City", "MM-ABC234", "Only the new stops need checking"]) assertStringIncludes(m.html, t);
++  const plain = tripBuilderOpsEmail(opsArgs(summary(null)));
++  assert(!/Stage \d+ of their journey/.test(plain.html) && !/^Stage/.test(plain.subject), "an ordinary trip shows no stage");
++});
++
++Deno.test("nothing a guest puts in the stage can break out of the crew email", () => {
++  const evil = '<img src=x onerror=alert(1)><script>alert(2)</script>';
++  const m = tripBuilderOpsEmail(opsArgs(summary({ ...STAGE, from: { id: "x", name: evil }, been: [evil, "Hanoi"], arrival: { ...STAGE.arrival, to: evil, mode: evil } })));
++  assert(!m.html.includes("<img src=x") && !m.html.includes("<script>alert"), "markup in the stage is printed as text");
++});
++
++Deno.test("the log-in email lists each trip with its own link, and prints nothing as markup", () => {
++  const evil = '<img src=x onerror=alert(1)>';
++  const one = tripBuilderLoginEmail({ firstName: "Sam", trips: [{ ref: "MM-ABC234", route: "Hanoi → Hoi An", days: 12, status: "checking", url: "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/trip/MM-ABC234?k=abc.def" }] });
++  assertStringIncludes(one.subject, "Hanoi → Hoi An");
++  assertStringIncludes(one.html, "https://madmonkeyhostels.com/all-in-trips/trip-builder/#/trip/MM-ABC234?k=abc.def");
++  assertStringIncludes(one.html, "plan your next stage");
++  assertStringIncludes(one.html, "A real person checks every trip before anything is booked");
++  const two = tripBuilderLoginEmail({ firstName: evil, trips: [{ ref: "MM-ABC234", route: evil, days: 5, status: "approved", url: "https://x.test/#/trip/MM-ABC234?k=1" }, { ref: "MM-DEF567", route: "Laos", days: 8, status: "ready", url: "https://x.test/#/trip/MM-DEF567?k=2" }] });
++  assertEquals(two.subject, "Your Mad Monkey trips");
++  assert(!two.html.includes("<img src=x"), "a route or name is printed as text");
++  assertStringIncludes(two.html, "MM-DEF567");
++});
+diff --git a/supabase/functions/_shared/trip-builder.ts b/supabase/functions/_shared/trip-builder.ts
+index 557f870..4ec0674 100644
+--- a/supabase/functions/_shared/trip-builder.ts
++++ b/supabase/functions/_shared/trip-builder.ts
+@@ -5,7 +5,7 @@
+ // handleTripBuilderPaid below. Table: trip_builder_requests.
+ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import Stripe from "https://esm.sh/stripe@18.5.0";
+-import { appBase } from "./app-base.ts";
++import { trustedBase } from "./app-base.ts";
+ import {
+   APP_URL,
+   sendEmail,
+@@ -38,7 +38,7 @@ export const usd = (n: number) =>
+ 
+ /** The builder's own address for a request's status page, on whichever site the guest used. */
+ export function builderStatusUrl(origin: string | null, ref: string): string {
+-  return `${appBase(origin)}/trip-builder/#/trip/${encodeURIComponent(ref)}`;
++  return `${trustedBase(origin)}/trip-builder/#/trip/${encodeURIComponent(ref)}`;
+ }
+ 
+ export function fmtDay(iso: string | null | undefined): string {
+diff --git a/supabase/functions/trip-builder-admin/index.ts b/supabase/functions/trip-builder-admin/index.ts
+index 1ea9d37..d31c939 100644
+--- a/supabase/functions/trip-builder-admin/index.ts
++++ b/supabase/functions/trip-builder-admin/index.ts
+@@ -16,7 +16,8 @@
+ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import Stripe from "https://esm.sh/stripe@18.5.0";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+-import { adminAuthHeaderToken, verifyAdminToken } from "../_shared/admin-auth.ts";
++import { adminAuthHeaderToken, safeEqual, verifyAdminToken } from "../_shared/admin-auth.ts";
++import { isTrustedOrigin } from "../_shared/app-base.ts";
+ import { sendEmail, TRIP_BUILDER_CONTACT, tripBuilderDeclinedEmail, tripBuilderReadyEmail } from "../_shared/email.ts";
+ import { builderStatusUrl, fmtDay, usd } from "../_shared/trip-builder.ts";
+ import { crewReviewUrl, guestTripUrl, readSummary, signCrewKey, signGuestKey, suggestBalance, verifyCrewKey } from "../_shared/trip-builder-crew.ts";
+@@ -26,6 +27,8 @@ import { currentRev, lastRevision } from "../_shared/trip-builder-revise.ts";
+ const json = (body: unknown, status = 200) =>
+   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+ const LIVE_ORIGIN = "https://madmonkeyhostels.com";
++/** A link to the trip builder on one of our own sites (the crew's edited trip, and what we hand back to the page). */
++const ownLink = (u: string) => { try { return isTrustedOrigin(new URL(u).origin) && u.includes("#/build/"); } catch { return false; } };
+ 
+ Deno.serve(async (req) => {
+   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+@@ -40,7 +43,7 @@ Deno.serve(async (req) => {
+   let authed = bearer ? await verifyAdminToken(bearer) : false;
+   if (!authed) {
+     const pw = typeof body.password === "string" ? body.password.trim() : "";
+-    authed = !!pw && pw === adminPassword;
++    authed = !!pw && safeEqual(pw, adminPassword);
+   }
+   // The key in a crew review link: good for one trip only.
+   const bodyRef = typeof body.ref === "string" ? body.ref.trim().toUpperCase() : "";
+@@ -81,7 +84,7 @@ Deno.serve(async (req) => {
+     for (const k of VIEW) request[k] = (row as Record<string, unknown>)[k] ?? null;
+     const pl = (row.payload ?? {}) as Record<string, unknown>;
+     const orig = pl.original as { trip?: Record<string, unknown> } | undefined;
+-    const original = orig?.trip ? { trip: { route: String(orig.trip.route ?? "").slice(0, 400), days: Number(orig.trip.days) || 0, estTotalUsd: orig.trip.estTotalUsd == null ? null : Number(orig.trip.estTotalUsd), link: String(orig.trip.link ?? "").slice(0, 2000) } } : null;
++    const original = orig?.trip ? { trip: { route: String(orig.trip.route ?? "").slice(0, 400), days: Number(orig.trip.days) || 0, estTotalUsd: orig.trip.estTotalUsd == null ? null : Number(orig.trip.estTotalUsd), link: ownLink(String(orig.trip.link ?? "")) ? String(orig.trip.link).slice(0, 2000) : "" } } : null;
+     // rev counts the guest's changes after sending; guestRevision is the latest one (what moved, their note, what it replaced).
+     return json({ ok: true, request, summary: sum, suggestedBalance: suggestBalance(sum, Number(row.deposit_amount)), revision: pl.revision ?? null, original, canAct: OPEN.includes(String(row.status)), rev: currentRev(pl), guestRevision: lastRevision(pl) });
+   }
+@@ -128,7 +131,7 @@ Deno.serve(async (req) => {
+       const link = typeof t.link === "string" ? t.link.trim().slice(0, 2000) : "";
+       const route = typeof t.route === "string" ? t.route.trim().slice(0, 400) : "";
+       const days = Math.round(Number(t.days) || 0);
+-      if (!/^https?:\/\/[^\s]+#\/build\//.test(link) || !route || days < 1) return json({ error: "That edited trip didn't come through properly. Open it from the email again and retry." }, 400);
++      if (!ownLink(link) || !route || days < 1) return json({ error: "That edited trip didn't come through properly. Open it from the email again and retry." }, 400);
+       const strs = (v: unknown, n: number) => (Array.isArray(v) ? v.map((x) => String(x).trim().slice(0, 60)).filter(Boolean).slice(0, n) : []);
+       const payload = ((row.payload ?? {}) as Record<string, unknown>);
+       const original = payload.original ?? { trip: { link: row.trip_link, route: row.route, days: row.days, nights: row.nights, stops: row.stops, start: row.start_date, estTotalUsd: row.est_total_usd }, summary: payload.summary ?? null };
+diff --git a/supabase/functions/trip-builder-login/index.ts b/supabase/functions/trip-builder-login/index.ts
+new file mode 100644
+index 0000000..6eed0e1
+--- /dev/null
++++ b/supabase/functions/trip-builder-login/index.ts
+@@ -0,0 +1,57 @@
++// "Log in" for guests who have sent a trip (Ewan, 23 Oct 2026): POST { email } emails them a link to each trip they've sent, so they can change it or
++// plan the next stage from any device. No passwords: the link carries the same signed guest key as the "your trip" emails (_shared/trip-builder-crew.ts).
++//
++// The answer is always { ok: true } whether or not that address has a trip, and a throttled address gets the same answer, so this can't be used to find
++// out who has booked. Only trips whose deposit was paid and that are still live (not declined) are included. A few emails an hour per address.
++import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
++import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
++import { sendEmail, tripBuilderLoginEmail } from "../_shared/email.ts";
++import { guestTripUrl, signGuestKey } from "../_shared/trip-builder-crew.ts";
++
++const json = (body: unknown, status = 200) =>
++  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
++const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
++const LIVE = ["submitted", "checking", "ready", "approved"];
++const MAX_PER_HOUR = 3;
++const COLS = "ref,name,status,route,days,created_at,deposit_paid_at,email,guest_email";
++/** An email address as a LIKE pattern that can only match itself ("_" and "%" are wildcards, and "_" is common in an address like a_b@x.com). */
++const exactLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
++  if (req.method !== "POST") return json({ error: "POST only" }, 405);
++  const url = Deno.env.get("SUPABASE_URL"), key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
++  if (!url || !key) return json({ error: "Not set up yet." }, 503);
++  let b: Record<string, unknown>;
++  try { b = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
++  if (typeof b.website === "string" && b.website.trim()) return json({ ok: true });            // a bot filled the hidden field
++  const email = (typeof b.email === "string" ? b.email : "").trim().toLowerCase().slice(0, 200);
++  if (!EMAIL.test(email)) return json({ error: "That email doesn't look right." }, 400);
++  if (email.includes("*")) return json({ ok: true });                                         // "*" is a wildcard in a PostgREST pattern and can't be escaped: no real address needs it
++
++  const sb = createClient(url, key);
++  const since = new Date(Date.now() - 3600_000).toISOString();
++  const recent = await sb.from("email_send_log").select("id").eq("template_name", "trip_builder_login").eq("recipient_email", email).gte("created_at", since).limit(10);
++  if ((recent.data?.length ?? 0) >= MAX_PER_HOUR) return json({ ok: true });                  // quietly: "too many" would say this address has trips
++
++  const [byContact, byReceipt] = await Promise.all([
++    sb.from("trip_builder_requests").select(COLS).eq("email", email).in("status", LIVE),
++    sb.from("trip_builder_requests").select(COLS).ilike("guest_email", exactLike(email)).in("status", LIVE),
++  ]);
++  const seen = new Set<string>();
++  const rows = [...(byContact.data ?? []), ...(byReceipt.data ?? [])]
++    .filter((r) => r.deposit_paid_at && (String(r.email ?? "").toLowerCase() === email || String(r.guest_email ?? "").toLowerCase() === email))
++    .filter((r) => (seen.has(r.ref) ? false : (seen.add(r.ref), true)))
++    .sort((x, y) => String(y.created_at ?? "").localeCompare(String(x.created_at ?? "")))
++    .slice(0, 5);
++  if (!rows.length) return json({ ok: true });
++
++  const origin = req.headers.get("origin");
++  const trips = await Promise.all(rows.map(async (r) => ({
++    ref: String(r.ref), route: String(r.route ?? "your trip"), days: Number(r.days) || 0, status: String(r.status), url: guestTripUrl(origin, r.ref, await signGuestKey(r.ref)),
++  })));
++  const first = String(rows[0].name ?? "").trim().split(/\s+/)[0] || "there";
++  const m = tripBuilderLoginEmail({ firstName: first, trips });
++  await sendEmail({ to: email, subject: m.subject, html: m.html, templateName: "trip_builder_login", metadata: { trips: trips.length } });
++  return json({ ok: true });
++});
+diff --git a/supabase/functions/trip-builder-request/index.ts b/supabase/functions/trip-builder-request/index.ts
+index 5427f69..1be07d3 100644
+--- a/supabase/functions/trip-builder-request/index.ts
++++ b/supabase/functions/trip-builder-request/index.ts
+@@ -8,7 +8,9 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import Stripe from "https://esm.sh/stripe@18.5.0";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+ import { DEPOSIT_PER_PERSON_USD, HOLD_HOURS, MAX_PEOPLE } from "../_shared/trip-builder.ts";
+-import { guestTripUrl, signGuestKey } from "../_shared/trip-builder-crew.ts";
++import { trustedBase } from "../_shared/app-base.ts";
++import { crewSecret, guestTripUrl, signGuestKey } from "../_shared/trip-builder-crew.ts";
++import { ownTripLink } from "../_shared/trip-builder-revise.ts";
+ 
+ const json = (body: unknown, status = 200) =>
+   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+@@ -16,6 +18,18 @@ const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0
+ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+ const DATE = /^\d{4}-\d{2}-\d{2}$/;
+ 
++/** Who is asking, as a keyed hash: enough to count how many trips one address sends in an hour, and never the address itself. */
++async function hashIp(req: Request): Promise<string> {
++  const ip = req.headers.get("cf-connecting-ip")
++    || (req.headers.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean).pop()   // the last one is added by our own gateway; the first can be made up
++    || "";
++  const secret = crewSecret();
++  if (!ip || !secret) return "";
++  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
++  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`tbip:${ip}`)));
++  return Array.from(sig.slice(0, 12), (b) => b.toString(16).padStart(2, "0")).join("");
++}
++
+ function newRef() {
+   const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+   let o = "MM-";
+@@ -58,6 +72,22 @@ Deno.serve(async (req) => {
+   const origin = req.headers.get("origin");
+   const sb = createClient(url, key);
+ 
++  // Anyone on the internet can call this, so keep a runaway script from filling Admin with junk: a few trips an hour from one
++  // contact and from one address. (Not a global cap: that would let one script lock every real guest out.)
++  const ipHash = await hashIp(req);
++  const since = new Date(Date.now() - 3600_000).toISOString();
++  const sentRecently = async (col: string, val: string) => {
++    const { data } = await sb.from("trip_builder_requests").select("ref").eq(col, val).gte("created_at", since).limit(12);
++    return Array.isArray(data) ? data.length : 0;
++  };
++  if ((await sentRecently(via === "email" ? "email" : "whatsapp", via === "email" ? email : whatsapp)) >= 5 || (ipHash && (await sentRecently("payload->>ipHash", ipHash)) >= 10)) {
++    return json({ error: "That's a few trips from you in the last hour. Check your email for the link, or message the crew and we'll sort it out." }, 429);
++  }
++  // The link goes into emails the crew and the guest open, so it has to lead to our own trip builder (see _shared/app-base.ts).
++  const tripLink = ownTripLink(str(trip.link, 2000), new URL(trustedBase(origin)).origin) ? str(trip.link, 2000) : null;
++  delete p.ipHash;
++  if (ipHash) p.ipHash = ipHash;
++
+   // Save first, with a fresh reference (retry on the unlikely clash).
+   let ref = "";
+   for (let i = 0; i < 5 && !ref; i++) {
+@@ -80,7 +110,7 @@ Deno.serve(async (req) => {
+       countries: Array.isArray(trip.countries) ? trip.countries.map((s) => str(s, 4)).filter(Boolean).slice(0, 10) : [],
+       est_total_usd: Number.isFinite(Number(trip.estTotalUsd)) ? Number(trip.estTotalUsd) : null,
+       all_in_match: str(trip.allInMatch, 40) || null,
+-      trip_link: str(trip.link, 2000) || null,
++      trip_link: tripLink,
+       // crewText is the stop-by-stop brief for the team (builder crew.js); older builders only send the day-by-day itinerary.
+       itinerary: str(p.crewText, 20_000) || str(p.itinerary, 20_000) || null,
+       notes: str(contact.notes, 2000) || null,
+diff --git a/supabase/functions/trip-builder-revise/index.ts b/supabase/functions/trip-builder-revise/index.ts
+index fca319e..5e63fbe 100644
+--- a/supabase/functions/trip-builder-revise/index.ts
++++ b/supabase/functions/trip-builder-revise/index.ts
+@@ -5,7 +5,7 @@
+ // so nobody reviews a plan the guest has already moved on from. Rules per status are in _shared/trip-builder-revise.ts.
+ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+-import { appBase } from "../_shared/app-base.ts";
++import { trustedBase } from "../_shared/app-base.ts";
+ import { sendEmail, TRIP_BUILDER_CONTACT, tripBuilderRevisedEmail } from "../_shared/email.ts";
+ import { fmtDay, notifyCrew, usd } from "../_shared/trip-builder.ts";
+ import { guestTripUrl, verifyGuestKey } from "../_shared/trip-builder-crew.ts";
+@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
+   if (!(await verifyGuestKey(ref, b.k))) return json({ error: "This link has expired or isn't yours. Open your trip from the email we sent you." }, 401);
+ 
+   const origin = req.headers.get("origin");
+-  const c = cleanRevision(b, new URL(appBase(origin)).origin);
++  const c = cleanRevision(b, new URL(trustedBase(origin)).origin);
+   if (!c.ok) return json({ error: c.error }, 400);
+ 
+   const sb = createClient(url, key);
+-- 
+2.39.5 (Apple Git-154)
+

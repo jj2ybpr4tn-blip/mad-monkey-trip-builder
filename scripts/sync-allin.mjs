@@ -17,7 +17,7 @@ if (!target) { console.error('usage: node scripts/sync-allin.mjs <path to mm-squ
 const DEST = path.join(path.resolve(target), 'public', 'trip-builder');
 if (!fs.existsSync(DEST)) { console.error('No public/trip-builder in ' + target); process.exit(2); }
 
-const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-tour.js', 'styles.css', 'crew.css'];
+const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'styles.css', 'crew.css'];
 const DATA = fs.readdirSync(path.join(ROOT, 'data')).filter((f) => f.endsWith('.js')).map((f) => 'data/' + f);
 const changes = [];
 function put(rel, text) {
@@ -45,7 +45,7 @@ const aroot = path.join(ROOT, 'assets');
 
 // config.js: add any key the live copy doesn't have yet, never touch the ones it has
 const cfgPath = path.join(DEST, 'config.js'), live = fs.readFileSync(cfgPath, 'utf8'), mine = fs.readFileSync(path.join(ROOT, 'config.js'), 'utf8');
-const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", REVISE_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-revise'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '50' };
+const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", REVISE_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-revise'", LOGIN_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-login'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '50' };
 let cfg = live;
 const missingKeys = Object.keys(ALLIN_DEFAULTS).filter((k) => !new RegExp('^\\s*' + k + '\\s*:', 'm').test(cfg));
 if (missingKeys.length) {

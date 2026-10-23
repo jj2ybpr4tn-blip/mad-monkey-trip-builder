@@ -12,17 +12,20 @@
   var MAX_STOPS = 14, STYLE = { cheap: 'cheap', cheapest: 'cheap', balanced: 'balanced', smart: 'balanced', fast: 'fast', fastest: 'fast' };
   var STYLE_NAME = { cheap: 'Cheapest', balanced: 'Smart pick', fast: 'Fastest' };
   function clone(s) { return JSON.parse(JSON.stringify(s)); }
+  function has(o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }     // an id, not "constructor" or "__proto__"
   function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
   function norm(s) { return String(s == null ? '' : s).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim(); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
 
   /* ---------- finding things by name ---------- */
-  var ALIAS = { 'ho chi minh': 'saigon', 'ho chi minh city': 'saigon', hcmc: 'saigon', 'hcm city': 'saigon', 'gili t': 'gili-trawangan', 'gili': 'gili-trawangan', bali: 'uluwatu', 'nusa penida': 'nusa-lembongan', 'luang prabang': 'luang-prabang', 'vang vieng': 'vang-vieng', 'vang vieng laos': 'vang-vieng', 'chiang mai': 'chiang-mai', 'siem reap': 'siem-reap', 'phnom penh': 'phnom-penh', 'koh rong': 'koh-rong', 'hoi an': 'hoi-an', 'ha noi': 'hanoi' };
+  var ALIAS = (function () {                                   // what people type -> a place id (the terms live in data/places.js; the first place to claim a word keeps it)
+    var a = {}; Object.keys(MM.PLACE_TERMS || {}).forEach(function (id) { MM.PLACE_TERMS[id].forEach(function (t) { if (!a[t]) a[t] = id; }); }); return a;
+  })();
   // A place by id or by what a person would type. Returns { id } or { error } (with the candidates when it's ambiguous).
   function place(q) {
     var ids = Object.keys(P()); if (q == null || q === '') return { error: 'No place given.' };
-    if (P()[q]) return { id: q };
-    var n = norm(q); if (ALIAS[n] && P()[ALIAS[n]]) return { id: ALIAS[n] };
+    if (has(P(), q)) return { id: q };
+    var n = norm(q); if (has(ALIAS, n) && has(P(), ALIAS[n])) return { id: ALIAS[n] };
     var exact = ids.filter(function (id) { return norm(P()[id].n) === n || norm(id) === n; }); if (exact.length === 1) return { id: exact[0] };
     var part = ids.filter(function (id) { return n && (norm(P()[id].n).indexOf(n) > -1 || n.indexOf(norm(P()[id].n)) > -1); });
     if (part.length === 1) return { id: part[0] };
@@ -30,6 +33,7 @@
     return { error: 'There is no Mad Monkey called "' + q + '". Use search_places to find the id.' };
   }
   function tour(placeId, q) {
+    if (!has(P(), placeId)) return { error: 'A packaged ALL IN trip comes with its own tours.' };
     var list = MM.actsAt(placeId); if (!q) return { error: 'No tour given.' };
     var ex = list.filter(function (a) { return a.id === q; })[0]; if (ex) return { id: ex.id };
     var n = norm(q), words = n.split(' ').filter(Boolean);
@@ -123,7 +127,9 @@
       return 'Moved ' + a.n + ' to day ' + d.n + (d.dateLabel ? ' (' + d.dateLabel + ')' : '');
     },
     unpin_tour: function (s, o, e) {
-      var i = needStop(s, o.stop, e); if (i == null) return; var it = s.items[i], t = tour(it.p, o.tour); if (t.error) return e(t.error);
+      var i = needStop(s, o.stop, e); if (i == null) return; var it = s.items[i];
+      if (it.kind !== 'stop') return e('That stop is a packaged ALL IN trip.');
+      var t = tour(it.p, o.tour); if (t.error) return e(t.error);
       if (it.pins) delete it.pins[t.id]; return MM.ACTS[t.id].n + ' goes back to being scheduled automatically';
     },
     set_start: function (s, o, e) {
@@ -170,6 +176,48 @@
     if (errors.length) return { ok: false, state: state, changes: [], errors: errors };
     tidy(s);
     return { ok: true, state: s, changes: changes, errors: [] };
+  };
+
+  /* ---------- the quickest order ----------
+     Keeps where you land (stop 1) and puts the rest in the order that costs the least travel: every journey's hours, with a dollar counted as
+     five minutes. Up to 12 stops it tries every order (exact); beyond that it takes the nearest stop each time and then untangles it.
+     Returns { state, savedH, savedUsd, before, after } or null when there is nothing worth changing. */
+  MM.edit.bestOrder = function (state) {
+    var items = (state && state.items) || [], n = items.length; if (n < 3) return null;
+    var pref = state.pref || 'balanced', INF = 1e6;
+    function firstOf(it) { return it.kind === 'allin' ? (MM.tripById(it.trip).stops[0].p) : it.p; }
+    function lastOf(it) { var t = it.kind === 'allin' ? MM.tripById(it.trip) : null; return t ? t.stops[t.stops.length - 1].p : it.p; }
+    var c = [], i, j, hop = {};
+    for (i = 0; i < n; i++) { c[i] = []; for (j = 0; j < n; j++) {
+      if (i === j) { c[i][j] = 0; continue; }
+      var a = lastOf(items[i]), b = firstOf(items[j]), r = a === b ? { h: 0, u: 0 } : MM.route(a, b, pref);
+      c[i][j] = r ? r.h + r.u / 12 : INF; hop[i + '>' + j] = r ? { h: r.h, u: r.u } : { h: 0, u: 0 };
+    } }
+    function pathCost(o) { var t = 0; for (var k = 1; k < o.length; k++) t += c[o[k - 1]][o[k]]; return t; }
+    var best;
+    if (n <= 12) {                                                  // exact: the cheapest way through every stop, starting at stop 1
+      var m = n - 1, full = (1 << m) - 1, dp = [], par = [];
+      for (var mask = 0; mask <= full; mask++) { dp[mask] = []; par[mask] = []; for (var e = 0; e < m; e++) dp[mask][e] = INF * 100; }
+      for (e = 0; e < m; e++) { dp[1 << e][e] = c[0][e + 1]; par[1 << e][e] = -1; }
+      for (mask = 1; mask <= full; mask++) for (e = 0; e < m; e++) {
+        if (!(mask & (1 << e)) || dp[mask][e] >= INF * 100) continue;
+        for (var f = 0; f < m; f++) { if (mask & (1 << f)) continue; var nm = mask | (1 << f), v = dp[mask][e] + c[e + 1][f + 1]; if (v < dp[nm][f] - 1e-9) { dp[nm][f] = v; par[nm][f] = e; } }
+      }
+      var be = 0; for (e = 1; e < m; e++) if (dp[full][e] < dp[full][be] - 1e-9) be = e;
+      var seq = [], mk = full, cur = be; while (cur !== -1 && cur !== undefined) { seq.unshift(cur + 1); var pe = par[mk][cur]; mk &= ~(1 << cur); cur = pe; }
+      best = [0].concat(seq);
+    } else {                                                        // many stops: nearest next, then swap pairs while it helps
+      var left = [], o = [0]; for (i = 1; i < n; i++) left.push(i);
+      while (left.length) { var bi = 0; for (j = 1; j < left.length; j++) if (c[o[o.length - 1]][left[j]] < c[o[o.length - 1]][left[bi]]) bi = j; o.push(left.splice(bi, 1)[0]); }
+      var improved = true, guard = 0;
+      while (improved && guard++ < 50) { improved = false; for (i = 1; i < n - 1; i++) for (j = i + 1; j < n; j++) { var t = o.slice(0, i).concat(o.slice(i, j + 1).reverse(), o.slice(j + 1)); if (pathCost(t) < pathCost(o) - 1e-9) { o = t; improved = true; } } }
+      best = o;
+    }
+    var now = items.map(function (_, k) { return k; });
+    if (best.join() === now.join() || pathCost(best) >= pathCost(now) - 0.4) return null;          // not worth a shuffle: under about 25 minutes
+    var st = JSON.parse(JSON.stringify(state)); st.items = best.map(function (k) { return JSON.parse(JSON.stringify(items[k])); }); st.legPick = {};
+    var A = MM.plan(state).totals, B = MM.plan(st).totals;
+    return { state: st, order: best, savedH: Math.max(0, Math.round((pathCost(now) - pathCost(best)) * 10) / 10), savedUsd: A.total - B.total, before: A, after: B };
   };
 
   /* ---------- what changed, in words ---------- */

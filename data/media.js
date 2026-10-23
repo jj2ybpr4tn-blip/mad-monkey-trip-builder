@@ -56,6 +56,13 @@
   MM.hostelImg = function (id) { return HOSTEL[id] ? (own() ? own() + '/hostel/' + id + '.jpg' : BASE + 'property/' + id + '/' + HOSTEL[id] + '.jpg') : null; };
   MM.tourImg = function (slug) { return slug && TOUR[slug] ? (own() ? own() + '/tour/' + slug + '.jpg' : BASE + 'tour/' + slug + '/' + TOUR[slug] + '.jpg') : null; };
   MM.actImg = function (a) { return MM.tourImg(a.slug); };
+  // Small copies of the same photos (scripts/make-thumbs.mjs): 's' is 320px wide for thumbnails and strips, 'm' is 720px wide for the big cards.
+  // Only our own copies have them, so hot-linked photos come back unchanged. The page falls back to the full photo if a small one is missing.
+  MM.thumb = function (url, size) {
+    var b = own(), cfg = r.MM_CONFIG || {};
+    if (!url || !b || cfg.PHOTO_THUMBS === false || (size !== 's' && size !== 'm') || url.indexOf(b + '/') !== 0) return url;
+    return b + '/' + size + '/' + url.slice(b.length + 1).replace(/\.jpe?g$/i, '.webp');
+  };
 
   if (typeof module !== 'undefined') module.exports = { HOSTEL: HOSTEL, TOUR: TOUR };
 })(typeof window !== 'undefined' ? window : globalThis);

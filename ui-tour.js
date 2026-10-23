@@ -4,20 +4,20 @@
    by itself when they do. Nothing is added or changed for them: it starts from a blank sheet and stays blank.
    ============================================================ */
 (function () {
-  var A = window.MMApp, MM = window.MM, u = A.util, esc = u.esc, OFF = 'mm-tour-off';
+  var A = window.MMApp, u = A.util, esc = u.esc, OFF = 'mm-tour-off';
   var tour = null, root = null;
   var phone = function () { return window.innerWidth < 700; };
 
   // target: selectors tried in order, first one that's on screen wins. gate: 'stop' waits for a first stop.
   var STEPS = [
-    { id: 'welcome', title: 'Build it your way', body: 'This is a blank sheet. Add the places you want, set your dates, and the real bus, boat and flight times and prices appear as you go. Want a 30-second walk around?', primary: 'Show me around', skip: 'No thanks, I\'ll explore', off: true },
-    { id: 'map', target: ['#bmap'], title: 'Start with a stop', body: 'Tap a pin on the map to add that Mad Monkey to your trip. Press LIST on the map if you would rather pick from a list.', gate: 'stop', wait: 'Add your first stop to carry on' },
+    { id: 'welcome', title: 'Build it your way', body: 'This is a blank sheet. Type where you\'re going and add the places you want, and the real bus, boat and flight times and prices appear as you go. Want a 30-second walk around?', primary: 'Show me around', skip: 'No thanks, I\'ll explore', off: true },
+    { id: 'map', target: ['.srch--sheet', '#bmap'], title: 'Start with a stop', body: 'Type a city, a country or something to do in the box, or tap a pin on the map to add that Mad Monkey to your trip. Press LIST on the map if you would rather pick from a list.', gate: 'stop', wait: 'Add your first stop to carry on' },
     { id: 'stop', target: ['.stopc', '.blockc'], title: 'Every stop is a card', body: 'Use − and + to change the nights. Swap place changes your mind about where, and Remove stop takes it out. Nothing is final: Undo is always one tap away.' },
-    { id: 'add', target: ['.editbar [data-act="insertat"]', '.addbar__btn'], title: 'Add another stop', body: 'This asks where it goes: the start, the end or anywhere in between. Between two stops you also get "+ Add a stop in between", and there is a big add button at the end of your list.' },
+    { id: 'add', target: ['.srch--add', '.editbar [data-act="insertat"]', '.addbar__btn'], title: 'Add another stop', body: 'Type a place or a tour here and it goes where it adds the least travel. Or use "+ Add a stop" to choose where it goes: the start, the end or anywhere in between.' },
     { id: 'things', target: ['.stopc__more'], title: 'Pick things to do', body: 'Open "Things to do" to choose tours for each stop. They show up in Day by day, where you can move a tour to another day.' },
     { id: 'summary', target: ['.bsum'], title: 'Dates, budget and travel style', body: 'Set your start date, how you like to travel and a budget. The total and the travel times update as you build.' },
     { id: 'send', target: ['.mbar [data-act="lead"]', '.bsum [data-act="lead"]', '[data-act="lead"]'], title: 'Happy with it? Send it to the crew', body: 'Hold my beds sends your trip to a real person who checks it before you pay anything. You can still change it afterwards.' },
-    { id: 'done', title: 'That\'s it', body: 'Start with a pin on the map. You can replay this walk-around any time from "Show me around".', primary: 'Start building' }
+    { id: 'done', title: 'That\'s it', body: 'Start with a search or a pin on the map. You can replay this walk-around any time from "Show me around".', primary: 'Start building' }
   ];
 
   function visible(el) { if (!el) return false; var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; }

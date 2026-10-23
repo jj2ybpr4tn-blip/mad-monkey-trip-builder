@@ -41,17 +41,18 @@
   MM.util = { parseDate: parseDate, isoDate: isoDate, addDays: addDays, fmtDate: fmtDate, hoursLabel: hoursLabel, hav: hav, DOWN: DOWN, MONTHN: MONTHN };
 
   /* ---------------- currency ----------------
-     Rates are indicative (the booking engine has the real one). The app refreshes the majors from a free
-     public feed when it can (ui-live.js) and falls back to these. Local currencies are for "roughly how much is that". */
+     Rates are indicative (the booking engine has the real one; deposits and the crew's price are always in US dollars). These are the rates
+     of 22 Oct 2026. Set FX_ENDPOINT in config.js and ui-live.js refreshes them from a free feed (once every 12 hours, quietly, and
+     only if each rate is within 40% of these). Local currencies are for "roughly how much is that". */
   MM.CURRENCIES = { USD: { sym: '$', n: 'US dollar' }, GBP: { sym: '£', n: 'British pound' }, EUR: { sym: '€', n: 'Euro' }, AUD: { sym: 'A$', n: 'Australian dollar' }, CAD: { sym: 'C$', n: 'Canadian dollar' } };
-  MM.FX = { USD: 1, GBP: 0.79, EUR: 0.92, AUD: 1.52, CAD: 1.37 };                      // units per 1 USD
-  MM.LOCAL = { TH: { code: 'THB', sym: '฿', per: 34, live: true }, LA: { code: 'LAK', sym: '₭', per: 21500 }, VN: { code: 'VND', sym: '₫', per: 25500 },
-    KH: { code: 'KHR', sym: '៛', per: 4050 }, ID: { code: 'IDR', sym: 'Rp', per: 16300, live: true }, PH: { code: 'PHP', sym: '₱', per: 57, live: true } };
+  MM.FX = { USD: 1, GBP: 0.75, EUR: 0.89, AUD: 1.43, CAD: 1.40 };                      // units per 1 USD
+  MM.LOCAL = { TH: { code: 'THB', sym: '฿', per: 34, live: true }, LA: { code: 'LAK', sym: '₭', per: 22400 }, VN: { code: 'VND', sym: '₫', per: 25800 },
+    KH: { code: 'KHR', sym: '៛', per: 4060 }, ID: { code: 'IDR', sym: 'Rp', per: 18100, live: true }, PH: { code: 'PHP', sym: '₱', per: 63.5, live: true } };
   MM.setRates = function (r) {
-    if (!r) return; Object.keys(r).forEach(function (k) {
-      var v = +r[k]; if (!(v > 0)) return;
-      if (MM.CURRENCIES[k]) MM.FX[k] = v;
-      Object.keys(MM.LOCAL).forEach(function (c) { if (MM.LOCAL[c].code === k) MM.LOCAL[c].per = v; });
+    if (!r || typeof r !== 'object') return; Object.keys(r).forEach(function (k) {
+      var v = +r[k], cur = Object.prototype.hasOwnProperty.call(MM.CURRENCIES, k);
+      Object.keys(MM.LOCAL).forEach(function (c) { var L = MM.LOCAL[c]; if (L.code === k && v > L.per * 0.6 && v < L.per * 1.6) L.per = v; });     // a rate that is far from what it was is a faulty feed, not news
+      if (cur && v > MM.FX[k] * 0.6 && v < MM.FX[k] * 1.6) MM.FX[k] = v;
     });
   };
   MM.money = function (usd, cur) {
@@ -131,9 +132,9 @@
     ['balanced', 'cheap', 'fast'].forEach(function (pref) {
       var rt = route(a, b, pref); if (!rt || seen[rt.sig]) return; seen[rt.sig] = 1;
       var d = describe(rt, a, b);
-      var dep = rt.ovn ? 19.5 : 8.5, arrAbs = dep + rt.h, arrH = arrAbs % 24, arrDays = Math.floor(arrAbs / 24);
-      var hh = Math.floor(arrH), mm2 = Math.round((arrH - hh) * 60 / 5) * 5; if (mm2 === 60) { hh++; mm2 = 0; }
-      var arrive = (hh < 10 ? '0' : '') + (hh % 24) + ':' + (mm2 < 10 ? '0' : '') + mm2;
+      var dep = rt.ovn ? 19.5 : 8.5, tot = Math.round((dep + rt.h) * 60 / 5) * 5, arrDays = Math.floor(tot / 1440), arrH = (tot % 1440) / 60;   // whole 5-minute steps, so 23:58 rolls over to 00:00 the next day
+      var hh = Math.floor(arrH), mm2 = tot % 60;
+      var arrive = (hh < 10 ? '0' : '') + hh + ':' + (mm2 < 10 ? '0' : '') + mm2;
       out.push({ key: pref, label: PREF_LABEL[pref], route: rt, h: rt.h, u: rt.u, ovn: rt.ovn, nights: rt.nights, main: d.main, modeLabel: d.label, mm: d.mm,
         arrive: arrive, arriveNext: arrDays > 0, odd: rt.nights < 2 && ((arrH < 5.5) || (!rt.ovn && arrH >= 22.5)) });
     });
@@ -160,8 +161,6 @@
   /* ============================================================
      PLAN
      ============================================================ */
-  var EXTRA_SLOT = { full: ['am', 'pm'], half: ['am|pm'], eve: ['eve'] };
-
   function blockPlaces(trip) { return trip.stops.map(function (s) { return s.p; }); }
   function blockFirst(trip) { return trip.stops[0].p; }
   function blockLast(trip) { return trip.stops[trip.stops.length - 1].p; }
@@ -169,8 +168,51 @@
   function defaultState() { return { items: [], start: '', pref: 'balanced', legPick: {}, fund: 18, crew: 0, budget: 0 }; }
   MM.defaultState = defaultState;
 
+  /* A state the planner can safely use, made from anything: a share link, data saved by an older version of the site, a record from a server.
+     Places, tours and ALL IN trips that no longer exist are dropped, numbers are clamped, and it never throws. */
+  var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+  var MAX_ITEMS = 40;
+  function realDate(s) { var d = typeof s === 'string' ? parseDate(s) : null; return d && isoDate(d) === s ? s : ''; }       // 2027-02-31 isn't a day
+  function clampInt(v, lo, hi, dflt) { var n = Math.round(+v); return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt; }
+  function sanitizeState(raw) {
+    var st = defaultState(); if (!raw || typeof raw !== 'object') return st;
+    (Array.isArray(raw.items) ? raw.items : []).slice(0, MAX_ITEMS).forEach(function (it) {
+      if (!it || typeof it !== 'object') return;
+      if (it.kind === 'allin') { if (typeof it.trip === 'string' && MM.ALL_IN.some(function (t) { return t.id === it.trip; })) st.items.push({ kind: 'allin', trip: it.trip }); return; }
+      if (it.kind !== 'stop' || typeof it.p !== 'string' || !has(P(), it.p)) return;
+      var n = clampInt(it.n, 1, 30, 2), acts = [], pins = {};
+      (Array.isArray(it.acts) ? it.acts : []).forEach(function (id) { if (typeof id === 'string' && has(MM.ACTS, id) && MM.ACTS[id].p === it.p && acts.indexOf(id) < 0) acts.push(id); });
+      if (it.pins && typeof it.pins === 'object') acts.forEach(function (id) { if (has(it.pins, id)) { var d = Math.round(+it.pins[id]); if (d >= 1 && d <= n) pins[id] = d; } });
+      var item = { kind: 'stop', p: it.p, n: n, acts: acts }; if (Object.keys(pins).length) item.pins = pins;
+      st.items.push(item);
+    });
+    st.start = realDate(raw.start);
+    if (typeof raw.pref === 'string' && has(TV, raw.pref)) st.pref = raw.pref;
+    if (raw.legPick && typeof raw.legPick === 'object') Object.keys(raw.legPick).forEach(function (k) { if (/^(\d{1,2}|o)$/.test(k) && typeof raw.legPick[k] === 'string' && has(TV, raw.legPick[k])) st.legPick[k] = raw.legPick[k]; });
+    if (typeof raw.from === 'string' && has(P(), raw.from)) st.from = raw.from;                         // a later stage of a journey: where they are now...
+    if (Array.isArray(raw.been)) { var bn = []; raw.been.forEach(function (id) { if (typeof id === 'string' && has(P(), id) && bn.indexOf(id) < 0 && bn.length < 40) bn.push(id); }); if (bn.length) st.been = bn; }   // ...and where they have already been
+    st.fund = clampInt(raw.fund, 0, 100, 18); st.crew = clampInt(raw.crew, 0, 12, 0); st.budget = clampInt(raw.budget, 0, 99999, 0);
+    if (raw.month != null && raw.month !== '' && isFinite(+raw.month)) st.month = clampInt(raw.month, 0, 11, 0);
+    return st;
+  }
+  MM.sanitizeState = sanitizeState;
+  // cheap check that a state can go straight to plan(); anything odd gets sanitised first (the screens stop at 30 nights a stop, the planner itself copes with up to a year)
+  function isClean(st) {
+    if (!st || !Array.isArray(st.items) || st.items.length > MAX_ITEMS) return false;
+    if (st.fund != null && !(+st.fund >= 0 && +st.fund <= 100)) return false;
+    if (st.from && !(typeof st.from === 'string' && has(P(), st.from))) return false;
+    if (st.been != null && (!Array.isArray(st.been) || st.been.some(function (id) { return !(typeof id === 'string' && has(P(), id)); }))) return false;                 // the only top-level number that goes straight into the price
+    for (var i = 0; i < st.items.length; i++) {
+      var it = st.items[i]; if (!it || typeof it !== 'object') return false;
+      if (it.kind === 'allin') { if (!MM.ALL_IN.some(function (t) { return t.id === it.trip; })) return false; }
+      else if (it.kind !== 'stop' || !has(P(), it.p) || !(it.n >= 1 && it.n <= 366) || it.n !== Math.floor(it.n) || (it.acts != null && !Array.isArray(it.acts))) return false;
+    }
+    return true;
+  }
+
   function plan(state) {
     state = state || defaultState();
+    if (!isClean(state)) state = sanitizeState(state);               // an old save with a place that has since gone must not blank the page
     var items = state.items || [];
     var start = parseDate(state.start);
     var out = { days: [], legs: [], stops: [], warnings: [], totals: null, countries: [], places: [], match: [], km: 0, unscheduled: [], blocks: [] };
@@ -187,26 +229,30 @@
       return { idx: idx, kind: 'stop', p: it.p, n: it.n, acts: acts, epics: epics, inline: inline, first: it.p, last: it.p };
     });
 
-    /* ---- 2. legs between consecutive segments ---- */
-    var legBetween = [];
+    /* ---- 2. legs between consecutive segments (and, for a later stage, the journey from where they are now to the first stop) ---- */
+    function buildLeg(a, b, index, pickKey) {
+      var opts = legOptions(a, b); if (!opts.length) { out.warnings.push({ t: 'warn', m: 'No route found between ' + P()[a].n + ' and ' + P()[b].n + '.' }); return null; }
+      var chosen = opts.filter(function (o) { return o.key === pickKey; })[0];
+      if (!chosen) chosen = opts.filter(function (o) { return o.key === (state.pref || 'balanced'); })[0] || opts[0];
+      // `pref` may map to an option that was de-duplicated away; fall back to the closest
+      if (!chosen) chosen = opts[0];
+      return { index: index, from: a, to: b, options: opts, chosen: chosen, key: chosen.key, pkgs: MM.LEG_PKGS[a + '|' + b] || MM.LEG_PKGS[b + '|' + a] || null,
+        tickets: MM.TICKETS[a + '|' + b] || MM.TICKETS[b + '|' + a] || null, border: borderNote(a, b), h: chosen.h, u: chosen.u, ovn: chosen.ovn, nights: chosen.nights };
+    }
+    var legBetween = [], originLeg = null;
     for (var i = 0; i < segs.length - 1; i++) {
       var a = segs[i].last, b = segs[i + 1].first, leg = null;
-      if (a !== b) {
-        var opts = legOptions(a, b); if (!opts.length) { out.warnings.push({ t: 'warn', m: 'No route found between ' + P()[a].n + ' and ' + P()[b].n + '.' }); }
-        else {
-          var pick = state.legPick && state.legPick[i], chosen = opts.filter(function (o) { return o.key === pick; })[0];
-          if (!chosen) chosen = opts.filter(function (o) { return o.key === (state.pref || 'balanced'); })[0] || opts[0];
-          // `pref` may map to an option that was de-duplicated away; fall back to the closest
-          if (!chosen) chosen = opts[0];
-          leg = { index: i, from: a, to: b, options: opts, chosen: chosen, key: chosen.key, pkgs: MM.LEG_PKGS[a + '|' + b] || MM.LEG_PKGS[b + '|' + a] || null,
-            tickets: MM.TICKETS[a + '|' + b] || MM.TICKETS[b + '|' + a] || null, border: borderNote(a, b), h: chosen.h, u: chosen.u, ovn: chosen.ovn, nights: chosen.nights };
-        }
-      }
+      if (a !== b) leg = buildLeg(a, b, i, state.legPick && state.legPick[i]);
       legBetween.push(leg); if (leg) out.legs.push(leg);
+    }
+    if (state.from && segs.length && has(P(), state.from) && state.from !== segs[0].first) {      // the first journey of a later stage: from where they are now (index -1)
+      originLeg = buildLeg(state.from, segs[0].first, -1, state.legPick && state.legPick.o);
+      if (originLeg) { originLeg.origin = true; out.legs.unshift(originLeg); out.arrival = originLeg; }
     }
 
     /* ---- 3. timeline of nights ---- */
     var timeline = [];                     // {t:'bed'|'epic'|'move'|'block', seg, ...}
+    if (originLeg && originLeg.nights > 0) for (var om = 0; om < originLeg.nights; om++) timeline.push({ t: 'move', si: -1, leg: originLeg, m: om, of: originLeg.nights });
     segs.forEach(function (s, si) {
       if (s.kind === 'allin') { for (var k = 0; k < s.trip.days - 1; k++) timeline.push({ t: 'block', si: si, k: k, trip: s.trip }); }
       else {
@@ -221,7 +267,6 @@
 
     /* ---- 4. day entries ---- */
     var N = timeline.length;
-    var firstBedOfSeg = {}, prevEntryByIdx = {};
     var segDays = segs.map(function () { return []; });
     timeline.forEach(function (tn, k) {
       var day = { n: k + 1, date: start ? addDays(start, k) : null, kind: tn.t === 'move' ? 'move' : tn.t === 'epic' ? 'epic' : tn.t === 'block' ? 'block' : 'stay',
@@ -230,10 +275,10 @@
       if (tn.t === 'bed') {
         day.loc = seg.p; day.title = P()[seg.p].n;
         var prev = timeline[k - 1];
-        var isArrival = tn.first && (k > 0), legIn = tn.first && tn.si > 0 ? legBetween[tn.si - 1] : null;
+        var legIn = tn.first && tn.si > 0 ? legBetween[tn.si - 1] : (tn.first && tn.si === 0 ? originLeg : null);
         if (tn.first) {
           day.arrival = true;
-          if (k === 0) { day.slots.am = false; day.title = 'Land in ' + P()[seg.p].n; }
+          if (k === 0 && !legIn) { day.slots.am = false; day.title = 'Land in ' + P()[seg.p].n; }
           else if (legIn) {
             day.travel = legIn;
             if (prev && prev.t === 'move') { day.slots.am = false; day.note = 'Arrive after the overnight journey'; }
@@ -265,7 +310,6 @@
       if (s.kind !== 'stop') return;
       var days = segDays[si];
       // n=0 multi-day (surf camp, PADI) occupy consecutive full days
-      s.inline.forEach(function (a) { if (a.multi && a.multi.d > 1) a._occ = a.multi.d; else a._occ = 1; });
       var order = s.inline.slice().sort(function (x, y) {
         var rx = (x.multi ? 0 : x.dows ? 1 : x.slot === 'full' ? 2 : x.slot === 'half' ? 3 : 4), ry = (y.multi ? 0 : y.dows ? 1 : y.slot === 'full' ? 2 : y.slot === 'half' ? 3 : 4);
         return rx - ry;
@@ -328,14 +372,14 @@
       var key = d.loc + m; if (seenSeas[key]) return; seenSeas[key] = 1;
       if (seasonOf(d.loc, m) === 1) out.warnings.push({ t: 'season', p: d.loc, m: P()[d.loc].n + ' in ' + MONTHN[m] + ': ' + (P()[d.loc].note || 'Wet or rough-sea season.') + ' It still runs, pack for it.' });
     });
-    segs.forEach(function (s) {
+    segs.forEach(function (s, si) {
       if (s.kind !== 'stop') return;
-      var pl = P()[s.p];
-      if (pl.opens && start && isoDate(start) < pl.opens) out.warnings.push({ t: 'warn', p: s.p, m: pl.n + ' opens ' + fmtDate(parseDate(pl.opens)) + '. Your dates start earlier.' });
+      var pl = P()[s.p], here = segDays[si] && segDays[si][0], arrives = here && here.date ? isoDate(here.date) : '';     // the night you get there, not the day the trip starts
+      if (pl.opens && arrives && arrives < pl.opens) out.warnings.push({ t: 'warn', p: s.p, m: pl.n + ' opens ' + fmtDate(parseDate(pl.opens)) + ' and you\'d arrive on ' + fmtDate(here.date) + '. Move your dates, or this stop.' });
       if (pl.partner) out.warnings.push({ t: 'info', p: s.p, m: pl.n + ' has no Mad Monkey yet. We\'ll find you a partner hostel (bed price is an estimate).' });
       s.acts.forEach(function (a) { if (/rinjani/i.test(a.id) && start && [0, 1, 2].indexOf(start.getUTCMonth()) > -1) out.warnings.push({ t: 'warn', p: s.p, m: 'Rinjani is usually closed roughly Jan–Mar.' }); });
     });
-    legBetween.forEach(function (l) {
+    (originLeg ? [originLeg] : []).concat(legBetween).forEach(function (l) {
       if (!l) return; if (l.border) out.warnings.push({ t: 'warn', m: l.border });
       if (l.chosen.odd) out.warnings.push({ t: 'warn', m: P()[l.from].n + ' → ' + P()[l.to].n + ' (' + l.chosen.modeLabel.toLowerCase() + ') lands around ' + l.chosen.arrive + '. Ask the hostel about early or late check-in so you\'re not on a doorstep.' });
       if (l.chosen.h >= 18 && !l.chosen.ovn) out.warnings.push({ t: 'info', m: P()[l.from].n + ' → ' + P()[l.to].n + ' is a very long journey. Consider the flight option.' });
@@ -374,9 +418,9 @@
       if (got) { l.u = Math.max(0, Math.round(l.u + delta)); l.chosen.u = l.u; l.chosen.fare = l.fare = { min: Math.round(lo), max: Math.round(hi), n: got, of: fl, date: l.date }; }
     });
     out.legs.forEach(function (l) { transport += l.u; });
-    var diyDays = 0, blockDays = 0;
+    var blockDays = 0;
     segs.forEach(function (s) { if (s.kind === 'allin') blockDays += s.trip.days - 1; });
-    diyDays = Math.max(0, N - blockDays);
+    var diyDays = Math.max(0, N - blockDays);
     var fund = Math.round(diyDays * (state.fund || 0) + blockDays * (state.fund || 0) * 0.4);
     var squad = 0, mates = state.crew || 0;
     if (allin) squad = mates >= 6 ? -allin : mates >= 3 ? -Math.round(allin * 0.5) : 0;
@@ -386,7 +430,7 @@
     // distance + countries + places
     var seq = []; segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (st) { seq.push(st.p); }); else seq.push(s.p); });
     var dedup = seq.filter(function (p, i) { return i === 0 || p !== seq[i - 1]; });
-    var km = 0; for (var q = 1; q < dedup.length; q++) km += hav(P()[dedup[q - 1]].ll, P()[dedup[q]].ll);
+    var kmSeq = originLeg ? [state.from].concat(dedup) : dedup, km = 0; for (var q = 1; q < kmSeq.length; q++) km += hav(P()[kmSeq[q - 1]].ll, P()[kmSeq[q]].ll);
     var ctry = {}; dedup.forEach(function (p) { ctry[P()[p].c] = 1; });
     out.places = dedup; out.countries = Object.keys(ctry); out.km = Math.round(km);
     out.stops = segs; out.segs = segs;
@@ -397,6 +441,14 @@
     return out;
   }
   MM.plan = plan;
+
+  // Everywhere they have already been (a later stage of a journey), plus where they are now: recommendations skip these.
+  function beenSet(state, prof) {
+    var out = {}; ((state && state.been) || (prof && prof.been) || []).forEach(function (id) { out[id] = 1; });
+    var f = (state && state.from) || (prof && prof.from); if (f) out[f] = 1;
+    return out;
+  }
+  MM.beenSet = beenSet;
 
   /* ============================================================
      ALL IN match — is a packaged crew trip a better deal for this route?
@@ -411,9 +463,10 @@
   function matchAllIn(pl, state) {
     var res = [];
     var mine = {}; pl.places.forEach(function (p) { mine[p] = 1; });
-    var hasBlock = (state.items || []).some(function (it) { return it.kind === 'allin'; });
+    var hasBlock = (state.items || []).some(function (it) { return it.kind === 'allin'; }), seen = beenSet(state);
     if (hasBlock || !pl.places.length) return res;
     MM.ALL_IN.forEach(function (t) {
+      if (blockPlaces(t).some(function (p) { return seen[p]; })) return;                // a packaged trip through places they have already been isn't a match
       var tp = {}; blockPlaces(t).forEach(function (p) { tp[p] = 1; });
       var tk = Object.keys(tp), hit = tk.filter(function (p) { return mine[p]; });
       var cover = hit.length / tk.length;
@@ -502,6 +555,8 @@
     if (prof && prof.month != null) st.month = prof.month;
     st.fund = prof && prof.budget === 'cheap' ? 14 : prof && prof.budget === 'splash' ? 30 : 20;
     st.crew = prof && prof.crew || 0;
+    if (prof && prof.from) st.from = prof.from;
+    if (prof && prof.been && prof.been.length) st.been = prof.been.slice();
     if (extra) for (var k in extra) st[k] = extra[k];
     return st;
   }
@@ -570,13 +625,14 @@
 
   function suggest(prof) {
     prof = prof || {}; var out = [];
+    if (prof.from || (prof.been && prof.been.length)) return generate(prof);                  // the next stage of a journey: the fixed routes would go back over old ground
     var target = Math.max(4, prof.days || 14);
     var vibeTags = {}; (prof.vibes || []).forEach(function (v) { (VIBE_TAGS[v] || []).forEach(function (t) { vibeTags[t] = 1; }); });
     var month = prof.month;
 
     function evaluate(cand, isAllIn) {
       var tpl = cand.tpl, o = orient(tpl, prof.start);
-      var stops = o.stops, fitted, items;
+      var stops = o.stops, fitted;
       if (isAllIn) { fitted = { days: tpl.days }; }
       else {
         var seedList = stops.map(function (s0) { return s0.acts.filter(function (id) { var a = MM.ACTS[id]; return a && a.multi && a.multi.n > 0; }); });
@@ -691,7 +747,8 @@
     var musts = prof.must || [], month = prof.month;
     var allow = prof.countries && prof.countries.length ? prof.countries : null;
     if (allow && allow.length > 1) switchPen = 0.4;
-    var ids = Object.keys(P()).filter(function (id) { return (!P()[id].partner || id === prof.start) && (!allow || allow.indexOf(P()[id].c) > -1); });
+    var seenB = beenSet(null, prof), origin = prof.from && P()[prof.from] ? prof.from : '';
+    var ids = Object.keys(P()).filter(function (id) { return (!P()[id].partner || id === prof.start) && (!allow || allow.indexOf(P()[id].c) > -1) && !seenB[id]; });
     if (!ids.length) return [];
 
     var ps = {};
@@ -712,16 +769,22 @@
     var gates = GATES.filter(function (g) { return ids.indexOf(g) > -1; }); if (!gates.length) gates = ids.slice().sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 3);
     var starts = prof.start && ids.indexOf(prof.start) > -1 ? [prof.start] : gates.sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 6);
     var beam = [], done = [];
+    if (origin) {                                                    // a later stage: the first stop is wherever is within reach of where they are now
+      starts = ids.filter(function (q) { var r0 = route(origin, q, pref); return r0 && r0.h <= maxLeg; }).sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 8);
+      if (!starts.length) return [];
+    }
     starts.forEach(function (s) {
-      var n = nightsFor(s, nightsCap - 0), bed = P()[s].bed * n + n * fund + n * 10;
-      beam.push({ seq: [{ p: s, n: n }], used: n, cost: bed, score: ps[s] * Math.pow(n, 0.85) + 1, h: 0, sw: 0 });
+      var lg = origin ? route(origin, s, pref) : null, lh = lg ? lg.h : 0, lu = lg ? lg.u : 0, ln = lg ? lg.nights : 0;
+      var n = nightsFor(s, nightsCap - ln), bed = P()[s].bed * n + n * fund + n * 10 + lu;
+      if (n < 1 || nightsCap - ln < 1) return;
+      beam.push({ seq: [{ p: s, n: n }], used: n + ln, cost: bed, score: ps[s] * Math.pow(n, 0.85) + 1 - 0.7 * lh, h: lh, sw: 0 });
     });
     for (var depth = 0; depth < 9 && beam.length; depth++) {
       var next = [];
       beam.forEach(function (st) {
         var left = nightsCap - st.used;
         if (left <= 2) { done.push(st); return; }
-        var last = st.seq[st.seq.length - 1].p, grew = false;
+        var last = st.seq[st.seq.length - 1].p;
         ids.forEach(function (q) {
           if (st.seq.some(function (x) { return x.p === q; })) return;
           var leg = route(last, q, pref); if (!leg || leg.h > maxLeg) return;
@@ -734,7 +797,6 @@
           var flights = leg.steps.filter(function (x) { return x.e.m === 'flight'; }).length, flightPen = flights * (D <= 14 ? 3.2 : D <= 21 ? 2 : 1);
           next.push({ seq: st.seq.concat([{ p: q, n: n }]), used: st.used + leg.nights + n, cost: cost,
             score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * leg.h - flightPen - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0) + (newC ? 5 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
-          grew = true;
         });
         done.push(st);                                  // stopping here is always an option
       });
@@ -747,7 +809,9 @@
       var cover = Math.min(1, st.used / nightsCap), mh = 0; musts.forEach(function (k) { if (st.seq.some(function (x) { return mustHit(x.p, k); })) mh++; });
       var rush = Math.max(0, st.seq.length - Math.ceil(D / 3.2));
       var cov = 0; if (allow) allow.forEach(function (c) { if (st.seq.some(function (x) { return P()[x.p].c === c; })) cov++; });
-      return { st: st, cov: cov, total: st.score * (0.55 + 0.45 * cover) - rush * 2.5 + mh * 2 - (musts.length - mh) * 4 + (allow ? cov * 6 - (allow.length - cov) * 40 : 0) };
+      // asked for one country (or a few)? show more of it: a route that takes in two of its hostels beats one that sits in a single town
+      var seen = st.seq.length ? new Set(st.seq.map(function (x) { return x.p; })).size : 0;
+      return { st: st, cov: cov, total: st.score * (0.55 + 0.45 * cover) - rush * 2.5 + mh * 2 - (musts.length - mh) * 4 + (allow ? cov * 6 - (allow.length - cov) * 40 + Math.min(seen, 4) * 4 : 0) };
     }).sort(function (a, b) { return b.total - a.total; });
 
     if (allow) { var full = ranked.filter(function (r) { return r.cov === allow.length; }); if (full.length) ranked = full; }
@@ -798,7 +862,7 @@
      ============================================================ */
   function missed(state, off) {
     off = off || {};
-    var pl = plan(state), out = [], inTrip = {};
+    var pl = plan(state), out = [], inTrip = beenSet(state);
     pl.places.forEach(function (p) { inTrip[p] = 1; });
     if (!pl.places.length) return out;
     pl.legs.forEach(function (l) {
@@ -906,9 +970,9 @@
       var k2 = r.b + '>' + r.a, o2 = W[k2] = W[k2] || { w: 0, l: {} }; o2.w += w * 0.5; o2.l[r.src === 'stays' ? 'Real Mad Monkey stays' : 'Popular with guests planning now'] = 1;
     });
   };
-  MM.nextRanked = function (id) {
-    var W = flow();
-    return Object.keys(P()).filter(function (q) { return W[id + '>' + q] && !P()[q].partner || (W[id + '>' + q] && q === 'saigon'); }).map(function (q) {
+  MM.nextRanked = function (id, been) {
+    var W = flow(), skip = {}; (been || []).forEach(function (b) { skip[b] = 1; });
+    return Object.keys(P()).filter(function (q) { return !skip[q] && (W[id + '>' + q] && !P()[q].partner || (W[id + '>' + q] && q === 'saigon')); }).map(function (q) {
       var o = W[id + '>' + q]; return { id: q, w: o.w, why: Object.keys(o.l).slice(0, 2) };
     }).sort(function (a, b) { return b.w - a.w; }).slice(0, 6);
   };
@@ -942,14 +1006,14 @@
      SUGGEST NEXT STOP — scores what comes after the current route
      ============================================================ */
   MM.suggestNext = function (state) {
-    var pl = plan(state); if (!pl.places.length) return [];
-    var last = pl.segs[pl.segs.length - 1].last, tags = {}, used = {};
+    var pl = plan(state); if (!pl.places.length && !state.from) return [];
+    var last = pl.places.length ? pl.segs[pl.segs.length - 1].last : state.from, tags = {}, used = beenSet(state);
     pl.places.forEach(function (p) { used[p] = 1; });
     pl.segs.forEach(function (sg) {
       if (sg.kind === 'stop') { sg.acts.forEach(function (a) { a.tags.forEach(function (t) { tags[t] = (tags[t] || 0) + 1; }); }); P()[sg.p].tags.forEach(function (t) { tags[t] = (tags[t] || 0) + 0.5; }); }
       else blockPlaces(sg.trip).forEach(function (p) { P()[p].tags.forEach(function (t) { tags[t] = (tags[t] || 0) + 0.5; }); });
     });
-    var W = flow(), start = parseDate(state.start), month = start ? start.getUTCMonth() + Math.floor(pl.totals.days / 30) : (state.month != null ? state.month : null);
+    var W = flow(), start = parseDate(state.start), month = start ? start.getUTCMonth() + Math.floor((pl.totals.days || 0) / 30) : (state.month != null ? state.month : null);
     if (month != null) month = month % 12;
     return Object.keys(P()).filter(function (id) { return !used[id] && !P()[id].partner; }).map(function (id) {
       var leg = route(last, id, state.pref || 'balanced'); if (!leg || leg.h > 16) return null;
@@ -1001,41 +1065,46 @@
     var q = ['i=' + parts.join('~')];
     if (st.start) q.push('d=' + st.start);
     if (st.pref && st.pref !== 'balanced') q.push('p=' + st.pref);
-    if (st.fund && st.fund !== 18) q.push('f=' + st.fund);
+    if (st.fund != null && st.fund !== 18) q.push('f=' + st.fund);
     if (st.crew) q.push('c=' + st.crew);
     var lp = Object.keys(st.legPick || {}).map(function (k) { return k + ':' + st.legPick[k]; }).join(',');
     if (lp) q.push('l=' + lp);
     if (st.month != null && !st.start) q.push('m=' + st.month);
     if (st.budget) q.push('b=' + st.budget);
+    if (st.from) q.push('o=' + st.from);
+    if (st.been && st.been.length) q.push('v=' + st.been.join(','));
     return q.join('&');
   }
+  function safeDecode(x) { try { return decodeURIComponent(x); } catch (e) { return x; } }                 // a stray % in a link must not break the page
   function decodeState(str) {
-    var st = defaultState(); if (!str) return st;
-    str = str.replace(/^#?t?=?/, '');
-    var map = {}; str.split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) map[kv.slice(0, i)] = kv.slice(i + 1); });
-    (map.i || '').split('~').forEach(function (tok) {
+    var st = defaultState(); if (typeof str !== 'string' || !str) return st;
+    str = str.slice(0, 12000).replace(/^#?t?=?/, '');
+    var map = Object.create(null); str.split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) map[kv.slice(0, i)] = kv.slice(i + 1); });
+    (map.i || '').split('~').slice(0, MAX_ITEMS).forEach(function (tok) {
       var f = tok.split('.');
       if (f[0] === 'a' && MM.ALL_IN.some(function (t) { return t.id === f[1]; })) st.items.push({ kind: 'allin', trip: f[1] });
-      else if (f[0] === 's' && P()[f[1]]) {
+      else if (f[0] === 's' && has(P(), f[1])) {
         var n = Math.max(1, Math.min(30, parseInt(f[2], 10) || 2));
         if (!idOf) buildCodes();
-        var pins = {}, acts = (f[3] ? f[3].split('+').map(function (tok) {
-          var at = tok.split('@'), id = idOf[at[0]] || decodeURIComponent(at[0]), d = parseInt(at[1], 10);   // "code@3": pinned to the 3rd day of the stop
+        var pins = {}, acts = (f[3] ? f[3].split('+').slice(0, 60).map(function (tok2) {
+          var at = tok2.split('@'), id = has(idOf, at[0]) ? idOf[at[0]] : safeDecode(at[0]), d = parseInt(at[1], 10);   // "code@3": pinned to the 3rd day of the stop
           if (d >= 1 && d <= n) pins[id] = d;
           return id;
-        }) : []).filter(function (id) { return MM.ACTS[id] && MM.ACTS[id].p === f[1]; });
+        }) : []).filter(function (id, i, arr) { return has(MM.ACTS, id) && MM.ACTS[id].p === f[1] && arr.indexOf(id) === i; });
         Object.keys(pins).forEach(function (id) { if (acts.indexOf(id) < 0) delete pins[id]; });
         var item = { kind: 'stop', p: f[1], n: n, acts: acts }; if (Object.keys(pins).length) item.pins = pins;
         st.items.push(item);
       }
     });
-    if (map.d && parseDate(map.d)) st.start = map.d;
-    if (map.p && TV[map.p]) st.pref = map.p;
-    if (map.f) st.fund = Math.max(0, Math.min(100, parseInt(map.f, 10) || 18));
-    if (map.c) st.crew = Math.max(0, Math.min(12, parseInt(map.c, 10) || 0));
-    if (map.m != null && map.m !== '') st.month = Math.max(0, Math.min(11, parseInt(map.m, 10) || 0));
-    if (map.b) st.budget = Math.max(0, Math.min(99999, parseInt(map.b, 10) || 0));
-    if (map.l) map.l.split(',').forEach(function (kv) { var q = kv.split(':'); if (TV[q[1]]) st.legPick[q[0]] = q[1]; });
+    if (map.d) st.start = realDate(map.d);
+    if (map.p && has(TV, map.p)) st.pref = map.p;
+    if (map.f != null && map.f !== '') st.fund = clampInt(map.f, 0, 100, 18);
+    if (map.c) st.crew = clampInt(map.c, 0, 12, 0);
+    if (map.m != null && map.m !== '' && isFinite(+map.m)) st.month = clampInt(map.m, 0, 11, 0);
+    if (map.b) st.budget = clampInt(map.b, 0, 99999, 0);
+    if (map.l) map.l.split(',').slice(0, MAX_ITEMS).forEach(function (kv) { var q = kv.split(':'); if (/^(\d{1,2}|o)$/.test(q[0]) && has(TV, q[1])) st.legPick[q[0]] = q[1]; });
+    if (map.o && has(P(), map.o)) st.from = map.o;
+    if (map.v) { var bn = []; map.v.split(',').slice(0, 60).forEach(function (id) { if (has(P(), id) && bn.indexOf(id) < 0 && bn.length < 40) bn.push(id); }); if (bn.length) st.been = bn; }
     return st;
   }
   MM.encodeState = encodeState; MM.decodeState = decodeState;
@@ -1075,8 +1144,8 @@
     // The same trip, laid out for the crew: stop by stop, tours, travel, money and a heads-up list (crew.js).
     if (MM.crewSummary) {
       try {
-        var sum = MM.crewSummary(state, pl, { people: contact && contact.partySize, dates: contact && contact.dates });
-        out.summary = sum;
+        var sum = MM.crewSummary(state, pl, { people: contact && contact.partySize, dates: contact && contact.dates, stage: meta && meta.stage });
+        out.summary = sum; if (sum.stage) out.stage = { n: sum.stage.n, parent: sum.stage.parent, from: state.from || '', been: (state.been || []).slice() };
         out.crewText = MM.crewText(sum, { name: contact && contact.name, from: contact && contact.from, notes: contact && contact.notes, link: meta && meta.link,
           contact: contact && (contact.via === 'whatsapp' ? 'WhatsApp ' + (contact.whatsapp || '') : 'Email ' + (contact.email || '')) });
       } catch (e) { /* the lead still goes through without the crew layout */ }

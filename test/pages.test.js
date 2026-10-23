@@ -19,6 +19,7 @@ pages.forEach((f) => {
   if ((h.match(/<h1[ >]/g) || []).length !== 1) bad.push(f + ' h1');
   [...h.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].forEach((m) => { try { JSON.parse(m[1]); ld++; } catch (e) { bad.push(f + ' json-ld'); } });
   [...h.matchAll(/href="(\/[^"#?]*)"/g)].forEach((m) => { const p = m[1]; if (/^\/(trips|routes|hostels|guides)\//.test(p) && !fs.existsSync(path.join(OUT, p.replace(/^\//, ''), 'index.html'))) missing.add(f + ' -> ' + p); else if (/^\/assets\//.test(p) && !fs.existsSync(path.join(ROOT, p.replace(/^\//, '')))) missing.add(f + ' -> ' + p); });
+  [...h.matchAll(/(?:src|srcset)="(\/assets\/[^"#?]*)"/g)].forEach((m) => { if (!fs.existsSync(path.join(ROOT, m[1].replace(/^\//, '')))) missing.add(f + ' -> ' + m[1]); });          // images, including the small WebP copies in <source srcset>
 });
 ok('every page has a title, description, one h1 and a canonical link', bad.length === 0, bad.slice(0, 5).join('; '));
 ok('no two pages share a title or description', Object.values(titles).every((v) => v.length === 1) && Object.values(descs).every((v) => v.length === 1), Object.entries(titles).filter(([k, v]) => v.length > 1).map(([k]) => k).join('; '));

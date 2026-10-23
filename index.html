@@ -6,6 +6,9 @@
   <title>Trip Builder · Mad Monkey</title>
   <meta name="description" content="Build your own Southeast Asia trip: 23 Mad Monkey hostels, every bus, boat and flight between them, real activity prices. Send it to the crew, or jump on an ALL IN.">
   <meta name="theme-color" content="#0a0a0a">
+  <!-- Only our own scripts may run: even if some text got into the page unescaped, it could not execute. Styles may be inline (the page sets a few); fonts come from Google; photos and APIs are over https. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta property="og:title" content="BUILD THE TRIP YOU ACTUALLY WANT · Mad Monkey">
   <meta property="og:description" content="Pick your stops, see what it really costs, send it to the crew.">
   <!--og:start--><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image"><!--og:end-->
@@ -14,10 +17,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
-  <link rel="stylesheet" href="styles.css?v=50">
-  <link rel="stylesheet" href="crew.css?v=50">
+  <link rel="stylesheet" href="styles.css?v=82">
+  <link rel="stylesheet" href="crew.css?v=82">
 </head>
 <body data-view="home">
+  <a class="skip" href="#app">Skip to the content</a>
   <header class="hdr" id="hdr">
     <a class="hdr__logo" href="#/" aria-label="Mad Monkey Trip Builder, home"><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="100" height="30"></a>
     <nav class="hdr__nav" aria-label="Main">
@@ -29,7 +33,10 @@
     </nav>
   </header>
 
-  <main id="app"></main>
+  <div id="humanbar" class="humanbar" role="region" aria-label="Checked by real humans"></div>
+
+  <main id="app" tabindex="-1"></main>
+  <div id="route-announcer" class="sr" aria-live="polite" aria-atomic="true"></div>
 
   <!--seo:start--><footer class="foot seo-nav"><div class="wrap"><nav aria-label="Explore Mad Monkey trips and guides" class="seo__foot">
     <div><b>Backpacking guides</b><a href="guides/vietnam/">Vietnam</a><a href="guides/thailand/">Thailand</a><a href="guides/cambodia/">Cambodia</a><a href="guides/laos/">Laos</a><a href="guides/indonesia/">Indonesia</a><a href="guides/philippines/">Philippines</a></div>
@@ -39,31 +46,34 @@
   <div id="modal-root"></div>
   <div id="toast-root" aria-live="polite"></div>
 
-  <script src="data/map-data.js?v=50"></script>
-  <script src="data/places.js?v=50"></script>
-  <script src="data/activities.js?v=50"></script>
-  <script src="data/media.js?v=50"></script>
-  <script src="data/legs.js?v=50"></script>
-  <script src="data/trips.js?v=50"></script>
-  <script src="data/entry.js?v=50"></script>
-  <script src="data/gallery.js?v=50"></script>
-  <script src="data/rules.js?v=50"></script>
-  <script src="data/guide.js?v=50"></script>
-  <script src="logic.js?v=50"></script>
-  <script src="extras.js?v=50"></script>
-  <script src="crew.js?v=50"></script>
-  <script src="edit.js?v=50"></script>
-  <script src="group.js?v=50"></script>
-  <script src="config.js?v=50"></script>
-  <script src="ui-map.js?v=50"></script>
-  <script src="ui-story.js?v=50"></script>
-  <script src="app.js?v=50"></script>
-  <script src="ui-review.js?v=50"></script>
-  <script src="ui-group.js?v=50"></script>
-  <script src="ui-live.js?v=50"></script>
-  <script src="ui-extras.js?v=50"></script>
-  <script src="ui-pack.js?v=50"></script>
-  <script src="ui-crew.js?v=50"></script>
-  <script src="ui-tour.js?v=50"></script>
+  <script src="data/map-data.js?v=82"></script>
+  <script src="data/places.js?v=82"></script>
+  <script src="data/activities.js?v=82"></script>
+  <script src="data/media.js?v=82"></script>
+  <script src="data/legs.js?v=82"></script>
+  <script src="data/trips.js?v=82"></script>
+  <script src="data/entry.js?v=82"></script>
+  <script src="data/gallery.js?v=82"></script>
+  <script src="data/rules.js?v=82"></script>
+  <script src="data/guide.js?v=82"></script>
+  <script src="logic.js?v=82"></script>
+  <script src="extras.js?v=82"></script>
+  <script src="crew.js?v=82"></script>
+  <script src="edit.js?v=82"></script>
+  <script src="search.js?v=82"></script>
+  <script src="group.js?v=82"></script>
+  <script src="config.js?v=82"></script>
+  <script src="ui-map.js?v=82"></script>
+  <script src="ui-story.js?v=82"></script>
+  <script src="app.js?v=82"></script>
+  <script src="ui-review.js?v=82"></script>
+  <script src="ui-group.js?v=82"></script>
+  <script src="ui-live.js?v=82"></script>
+  <script src="ui-extras.js?v=82"></script>
+  <script src="ui-pack.js?v=82"></script>
+  <script src="ui-crew.js?v=82"></script>
+  <script src="ui-tour.js?v=82"></script>
+  <script src="ui-search.js?v=82"></script>
+  <script src="ui-stage.js?v=82"></script>
 </body>
 </html>

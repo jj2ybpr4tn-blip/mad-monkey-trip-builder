@@ -1,20 +1,21 @@
 /* UI smoke test: presses every button on the main screens and reports the ones that visibly do nothing.
-   Run it in a browser tab on the builder:   await import('/test/ui-smoke.js?' + Date.now()); await __smoke()
+   Run it in a browser tab on the builder:   await import('/test/ui-smoke.js?' + Date.now()); await __smoke()      (or __smoke(['home']) for just some screens)
    (serve the folder with `npm start`, open http://localhost:8000). It never needs a network: lead/status calls are stubbed.
    A "dead" button is one where nothing on the page changed after it was pressed: no new screen, modal, toast, scroll or address. */
 (function () {
   var SKIP = { print: 1, ics: 1, dlstory: 1, copytext: 1, copylead: 1, share: 0, openpack: 0 };
+  var effects = 0;   // scrolls asked for and map resets: a smooth scroll can still be on its way when the screen is sampled, and "fit the map" changes nothing if it is already fitted
   function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function djb(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h; }
   function snap() {
     var a = document.getElementById('app');
     // What is drawn on screen, not the address: an action that changes the address but leaves the screen as it was is a dead button.
     var mapView = (document.querySelector('#bmap svg') || {}).getAttribute ? (document.querySelector('#bmap svg').getAttribute('viewBox') || '') : '';
-    return [a ? djb(a.innerHTML) : 0, mapView, document.querySelectorAll('.modal').length, document.querySelectorAll('.toast').length, Math.round(window.scrollY / 40),
+    return [a ? djb(a.innerHTML) : 0, mapView, effects, document.querySelectorAll('.modal').length, document.querySelectorAll('.toast').length, Math.round(window.scrollY / 40),
       document.body.getAttribute('data-view'), document.body.classList.contains('touring')].join('|');
   }
   var TRIP = '#/build/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10&f=20&b=1500';
-  var SCENES = [
+  var ALL = [
     { name: 'home', hash: '#/' },
     { name: 'builder (empty)', hash: '#/build', empty: true },
     { name: 'builder (trip)', hash: TRIP },
@@ -34,10 +35,14 @@
   }
   // (a dropdown does nothing until its value changes, so pressing it proves nothing: the day-by-day dropdowns are checked by changing them, see the editing tests)
   function label(el) { return (el.getAttribute('data-act') || el.getAttribute('data-go') || el.className) + ' "' + el.textContent.replace(/\s+/g, ' ').trim().slice(0, 36) + '"'; }
-  window.__smoke = async function () {
-    var report = [], dead = [], errors = [];
+  // __smoke() runs every screen (about 14 minutes); __smoke(['home', 'pack']) runs just those, by name
+  window.__smoke = async function (only) {
+    var report = [], dead = [], errors = [], SCENES = only ? ALL.filter(function (x) { return only.indexOf(x.name) > -1; }) : ALL;
     window.addEventListener('error', function (e) { errors.push(e.message); });
     var realOpen = window.open; window.open = function () { return null; }; var realConfirm = window.confirm; window.confirm = function () { return true; };
+    var realScroll = Element.prototype.scrollIntoView, map = window.MM && window.MM.BuilderMap, realReset = map && map.reset;
+    Element.prototype.scrollIntoView = function () { effects++; return realScroll.apply(this, arguments); };
+    if (realReset) map.reset = function () { effects++; return realReset.apply(this, arguments); };
     var realFetch = window.fetch; window.fetch = function (u) { return Promise.resolve(new Response('{}', { status: 404 })); };
     for (var s = 0; s < SCENES.length; s++) {
       await fresh(SCENES[s]);
@@ -52,7 +57,7 @@
       }
       report.push(SCENES[s].name + ': ' + n + ' buttons, ' + sceneDead + ' did nothing');
     }
-    window.open = realOpen; window.confirm = realConfirm; window.fetch = realFetch;
+    window.open = realOpen; window.confirm = realConfirm; window.fetch = realFetch; Element.prototype.scrollIntoView = realScroll; if (realReset) map.reset = realReset;
     return { report: report, dead: dead, errors: errors };
   };
 })();

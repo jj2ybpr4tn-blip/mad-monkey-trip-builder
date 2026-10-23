@@ -1,6 +1,6 @@
 /* Server integration tests. Boots the real server on a temp port + temp data dir and exercises the API.
    Run: node test/server.test.js   (also part of `npm test`) */
-const { spawn } = require('node:child_process'); const path = require('node:path'); const fs = require('node:fs'); const os = require('node:os');
+const { spawn } = require('node:child_process'); const http = require('node:http'); const path = require('node:path'); const fs = require('node:fs'); const os = require('node:os');
 const PORT = 8300 + Math.floor(Math.random() * 500), TOKEN = 'test-token-xyz', DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mm-test-'));
 const B = 'http://localhost:' + PORT; let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('PASS  ' + n); } else { fail++; console.log('FAIL  ' + n + (x ? '  -> ' + x : '')); } };
@@ -22,9 +22,21 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
     ok('every script and stylesheet index.html loads is served (' + files.length + ')', files.length > 20 && !bad.length, bad.join(', ')); }
   ok('config.js switches the API on', /API_BASE:\s*'\/api'/.test(await (await fetch(B + '/config.js')).text()));
   for (const p of ['/server/server.mjs', '/package.json', '/test/logic.test.js', '/.git/config', '/docs/LEADS.md', '/assets/../server/data/leads.json']) ok('blocks ' + p, (await fetch(B + p)).status === 404);
+  // fetch() tidies "../" away before it sends anything, so these go out exactly as written, the way an attacker would send them
+  const raw = (p, h) => new Promise((res) => { const rq = http.request({ host: 'localhost', port: PORT, path: p, method: 'GET', headers: h || {} }, (r) => { const c = []; r.on('data', (d) => c.push(d)); r.on('end', () => res({ s: r.statusCode, body: Buffer.concat(c).toString('utf8'), h: r.headers })); }); rq.on('error', () => res({ s: 0, body: '' })); rq.end(); });
+  for (const p of ['/assets/..%2fserver/server.mjs', '/assets/..%2fserver%2fserver.mjs', '/data/..%2fserver/admin.html', '/assets/%2e%2e%2fserver/server.mjs', '/assets/..%5cserver%5cserver.mjs', '/assets/..%2f..%2fpackage.json', '/assets/%2e%2e/%2e%2e/package.json', '/assets/x%00/../../package.json', '/trips/..%2f..%2fpackage.json', '/%2e%2e%2fpackage.json'])
+    { const r = await raw(p); ok('encoded traversal is refused: ' + p, r.s === 404 && !/createServer|"name": "mad-monkey/.test(r.body), r.s + ' ' + r.body.slice(0, 40)); }
+  ok('a stray % in the address is a 404, not a crash', (await raw('/index%.html')).s === 404 && (await raw('/%')).s === 404);
+  { const r = await raw('/'); ok('every response carries the security headers', r.h['x-content-type-options'] === 'nosniff' && r.h['x-frame-options'] === 'SAMEORIGIN' && /strict-origin/.test(r.h['referrer-policy'] || '')); }
+  ok('the crew console can never be framed', (await raw('/admin')).h['x-frame-options'] === 'DENY');
   /* leads */
   const l = await post('/api/leads', lead());
   ok('accepts a lead, issues an MM- reference + hold', l.s === 200 && /^MM-[A-Z0-9]{6}$/.test(l.b.ref) && l.b.hold && l.b.hold.until);
+  { const r = await post('/api/leads', lead({ trip: { state: 'i=s.hanoi.3', route: 'x', days: 4, link: 'javascript:alert(document.domain)' } }));
+    const rec2 = (await j('/api/admin/leads', { headers: adm })).b.find((x) => x.ref === r.b.ref);
+    ok('a javascript: trip link is not stored (it would run when the crew click "Open their trip")', r.s === 200 && rec2 && rec2.trip.link === '', rec2 && rec2.trip.link); }
+  { const r = await post('/api/leads', lead({ trip: { state: 'i=s.hanoi.3', route: 'x', days: 4, link: 'https://trips.example/#/build/i=s.hanoi.3' } }));
+    const rec3 = (await j('/api/admin/leads', { headers: adm })).b.find((x) => x.ref === r.b.ref); ok('a normal https trip link is kept', rec3 && rec3.trip.link === 'https://trips.example/#/build/i=s.hanoi.3'); }
   ok('refuses a lead without consent', (await post('/api/leads', lead({ contact: { name: 'x', email: 'x@x.io' } }))).s === 400);
   ok('refuses a bad email with no WhatsApp', (await post('/api/leads', lead({ contact: { name: 'x', email: 'nope', consent: true } }))).s === 400);
   { const r = await post('/api/leads', lead({ contact: { name: 'Wa', via: 'whatsapp', whatsapp: '+44 7700 900123', consent: true } }));
@@ -104,6 +116,7 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
   /* events + funnel + limits */
   await post('/api/event', { n: 'door', p: { door: 'quiz' }, s: 'abc' }); await post('/api/event', { n: 'view', s: 'abc' });
   const fu = (await j('/api/admin/funnel', { headers: adm })).b; ok('funnel counts events, sessions and doors', fu.byName.door === 1 && fu.sessions.view === 1 && fu.doors.quiz === 1);
-  let last = 0; for (let i = 0; i < 14; i++) last = (await post('/api/leads', lead({ contact: { name: 'x', email: 'bad' } }))).s; ok('rate limit kicks in per IP (429)', last === 429);
+  let last = 0; for (let i = 0; i < 14; i++) last = (await post('/api/leads', lead({ contact: { name: 'x', email: 'bad' } }), { 'X-Forwarded-For': '203.0.113.' + (i + 1) })).s;
+  ok('rate limit kicks in per IP (429), and a made-up X-Forwarded-For doesn\'t dodge it', last === 429);
   done(fail ? 1 : 0);
 })().catch((e) => { console.error(e); done(1); });

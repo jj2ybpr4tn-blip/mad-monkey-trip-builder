@@ -11,7 +11,7 @@
 (function (r) {
   var MM = r.MM = r.MM || {};
   var P = function () { return MM.PLACES; }, U = function () { return MM.util; };
-  var DAY = 86400000, MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var DAY = 86400000;
   function utc(y, m, d) { return new Date(Date.UTC(y, m, d)); }
   function iso(d) { return d.toISOString().slice(0, 10); }
   function pISO(s) { var p = s.split('-'); return utc(+p[0], +p[1] - 1, +p[2]); }
@@ -154,7 +154,6 @@
     var T = pl.totals, legs = pl.legs, F = out.findings, stops = pl.segs;
     function cost(fix) { var p2 = MM.plan(MM.applyFix(state, fix)).totals; return { dCost: Math.round(p2.total - T.total), dDays: p2.days - T.days }; }
     function add(f) { if (f.fix) { var c = cost(f.fix); f.fix.dCost = c.dCost; f.fix.dDays = c.dDays; } F.push(f); }
-    function segIdxOfLegFrom(l) { return l.index; }                       // leg i sits between segs i and i+1
 
     var transitH = legs.reduce(function (a, l) { return a + l.h; }, 0), ovnLegs = legs.filter(function (l) { return l.ovn; });
     out.stats = { transitH: Math.round(transitH), transitDays: Math.round(transitH / 16 * 10) / 10, overnights: ovnLegs.length, stops: pl.places.length, nights: T.nights, days: T.days, avgNights: pl.places.length ? Math.round(T.nights / pl.places.length * 10) / 10 : 0 };
@@ -227,7 +226,7 @@
     pl.segs.forEach(function (s) { if (s.kind === 'stop') s.acts.forEach(function (a) { ids[a.id] = 1; (a.tags || []).forEach(function (t) { tags[t] = 1; }); }); });
     pl.days.forEach(function (d) { if (d.date) months[d.date.getUTCMonth()] = 1; });
     pl.places.forEach(function (p) { Object.keys(months).forEach(function (m) { if (MM.seasonOf(p, +m) === 1) wet = true; }); });
-    var tem = 'Rain', anyMtn = pl.places.some(function (p) { return /hanoi|luang-prabang|pai|chiang-mai/.test(p); }) && (months[11] || months[0] || months[1] || !Object.keys(months).length);
+    var anyMtn = pl.places.some(function (p) { return /hanoi|luang-prabang|pai|chiang-mai/.test(p); }) && (months[11] || months[0] || months[1] || !Object.keys(months).length);
     var loop = Object.keys(ids).some(function (i) { return /ha-giang|sapa|rinjani|batur|nong-khiaw/.test(i); });
     var list = [
       { g: 'Documents', items: ['Passport with at least 6 months left on it', 'Printed or saved copy of your trip + bed holds', 'Travel insurance details (and the policy number saved offline)', 'A couple of passport photos (handy for visas and SIMs)', 'Debit and credit cards, plus some spare US dollars in clean notes'] },

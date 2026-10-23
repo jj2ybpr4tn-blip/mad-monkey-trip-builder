@@ -54,6 +54,7 @@
     if (it) { if (it.acts.indexOf(id) < 0) it.acts.push(id); return state; }
     return insertStop(state, a.p, [id]);
   }
+  function validIdea(k) { var kind = String(k).slice(0, 1), id = String(k).slice(2); return kind === 'p' ? !!P[id] : kind === 'a' ? !!MM.ACTS[id] : false; }
   function ideaDone(pl, k) {
     var kind = k.slice(0, 1), id = k.slice(2);
     if (kind === 'p') return pl.places.indexOf(id) > -1;
@@ -62,9 +63,10 @@
 
   function view(id) {
     var root = document.getElementById('app'), me = null, isOrg = false, orgKey = u.store('mm-org-' + id);
-    root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qwait"><h2 class="disp">Loading the group…</h2></div></div></section>';
-    G.get(id).then(function (g) {
-      if (!g) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Group</span><h2 class="disp">Can\'t find that group.</h2><p class="qhelp">' + (G.mode() === 'local' ? 'Demo mode only syncs inside one browser. Set GROUP_ENDPOINT so mates on other phones can join.' : 'The link may be wrong or expired.') + '</p><div class="qnav"><button class="btn" data-go="build" type="button">Back to the builder</button></div></div></div></section>'; return; }
+    root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qwait"><h1 class="disp">Loading the group…</h1></div></div></section>';
+    G.get(id).catch(function () { return undefined; }).then(function (g) {
+      if (g === undefined) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Group</span><h1 class="disp">Couldn\'t load the group.</h1><p class="qhelp">Check your connection and try again.</p><div class="qnav"><button class="btn" data-act="reloadpage" type="button">Try again</button></div></div></div></section>'; return; }
+      if (!g) { root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Group</span><h1 class="disp">Can\'t find that group.</h1><p class="qhelp">' + (G.mode() === 'local' ? 'Demo mode only syncs inside one browser. Set GROUP_ENDPOINT so mates on other phones can join.' : 'The link may be wrong or expired.') + '</p><div class="qnav"><button class="btn" data-go="build" type="button">Back to the builder</button></div></div></div></section>'; return; }
       isOrg = !!orgKey; var meId = u.store('mm-me-' + id); me = g.members.filter(function (m) { return m.id === meId; })[0] || null;
       if (!isOrg && !me) return joinScreen(g);
       var last = '';
@@ -76,7 +78,7 @@
 
     function joinScreen(g) {
       var st = MM.decodeState(g.trip), pl = MM.plan(st);
-      root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">You\'re invited</span><h2 class="disp">' + esc(g.organiser.name) + ' is planning a trip.</h2><p class="qhelp">' + esc(MM.routeLine(pl)) + ' · ' + pl.totals.days + ' days · about ' + u.money(pl.totals.total) + ' each. Vote on the stops, suggest your own and see where your plans cross.</p>' +
+      root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">You\'re invited</span><h1 class="disp">' + esc(g.organiser.name) + ' is planning a trip.</h1><p class="qhelp">' + esc(MM.routeLine(pl)) + ' · ' + pl.totals.days + ' days · about ' + u.money(pl.totals.total) + ' each. Vote on the stops, suggest your own and see where your plans cross.</p>' +
         '<form id="joinf"><div class="field" style="max-width:360px"><label for="j-name">Your name</label><input class="input" id="j-name" required></div><div class="qnav"><button class="btn btn--pink" type="submit">See the trip</button></div></form></div></div></section>' + u.footer();
       $('#joinf').addEventListener('submit', function (e) { e.preventDefault(); var n = $('#j-name').value.trim(); if (!n) return; G.join(id, n).then(function (r) { u.store('mm-me-' + id, r.me.id); u.track('group_join'); view(id); }); });
     }
@@ -116,7 +118,7 @@
       }).join('') + '</div>';
     }
     function ideasHTML(g, pl) {
-      var list = G.ideas(g).filter(function (x) { return !ideaDone(pl, x.k); });
+      var list = G.ideas(g).filter(function (x) { return validIdea(x.k) && !ideaDone(pl, x.k); });                  // another phone can send anything: draw only what exists
       var opts = MM.PLACE_ORDER.filter(function (p) { return pl.places.indexOf(p) < 0 && !P[p].partner; }).map(function (p) { return '<option value="' + p + '">' + esc(P[p].n) + ' · ' + MM.COUNTRIES[P[p].c].n + '</option>'; }).join('');
       return '<section class="gsec"><div class="gsec__hd"><span class="over">Plan together</span><h3 class="disp">Crew ideas</h3><p>' + (isOrg ? 'Add the good ones and everyone sees the new trip straight away.' : 'Suggest a stop or heart an activity. ' + esc(g.organiser.name) + ' adds the good ones.') + '</p></div>' +
         (list.length ? '<ul class="ideas">' + list.map(function (x) {
@@ -149,7 +151,7 @@
     function paint(g) {
       var st = MM.decodeState(g.trip), pl = MM.plan(st), ins = G.ins(g), hasAll = pl.segs.some(function (s) { return s.kind === 'allin'; });
       var perk = ins >= 6 ? 'Squad Leader travels FREE' : ins >= 3 ? 'Squad Leader gets 50% off' : (3 - ins) + ' more for 50% off';
-      var h = '<section class="quiz grp"><div class="wrap"><div class="qbox" style="max-width:960px"><span class="over">' + (isOrg ? 'Your group' : 'Group trip') + '</span><h2 class="disp">' + esc(MM.routeLine(pl)) + '</h2>' +
+      var h = '<section class="quiz grp"><div class="wrap"><div class="qbox" style="max-width:960px"><span class="over">' + (isOrg ? 'Your group' : 'Group trip') + '</span><h1 class="disp">' + esc(MM.routeLine(pl)) + '</h1>' +
         '<p class="qhelp">' + pl.totals.days + ' days · ' + plural(pl.countries.length, 'country', 'countries') + ' · about ' + u.money(pl.totals.total) + ' each · planned by ' + esc(g.organiser.name) + '</p>' +
         (G.mode() === 'local' ? '<div class="demo">DEMO: changes only sync between tabs of this browser. Set <code>GROUP_ENDPOINT</code> in config.js so mates on other phones count.</div>' : '') +
         '<div class="grp__top"><div class="meter"><div class="meter__hd"><b>' + plural(ins, 'mate') + ' in</b><span>' + (hasAll ? perk : 'Squad perks apply on ALL IN trips') + '</span></div><div class="meter__bar"><i style="width:' + Math.min(100, ins / 6 * 100) + '%"></i><u style="left:50%"><em>3 · 50% off</em></u><u style="left:100%"><em>6 · free</em></u></div>' +

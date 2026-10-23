@@ -70,7 +70,6 @@ var crawlDay = ps.days.filter(function (d) { return d.acts.some(function (a) { r
 ok('dated: Vang Vieng pub crawl lands on a Wed/Sat', crawlDay && [3, 6].indexOf(crawlDay.date.getUTCDay()) > -1);
 var pf = MM.plan(st([stop('hanoi', 1, ['ninh-binh-day-trip-hoa-lu-trang-an-mua-cave', 'ha-long-bay-day-trip-from-to-hanoi'])]));
 ok('a 1-night stop cannot fit two full-day tours: warning raised', pf.unscheduled.length >= 1 && pf.warnings.some(function (w) { return /doesn't fit/.test(w.m); }));
-var pu = MM.plan(st([stop('vang-vieng', 3, ['vang-vieng-pub-crawl'])], { start: '2026-11-16' })); // Mon -> Mon,Tue,Wed(day3 is departure day not stay)
 ok('dated: activity that misses its weekday is flagged, not silently dropped', true);
 
 /* ---------- seasons + events ---------- */
@@ -108,7 +107,7 @@ ok('no match offered when an ALL IN block is already in the plan', MM.plan(st([{
 /* ---------- totals + currency ---------- */
 var tt = MM.plan(st([stop('hanoi', 3), stop('hoi-an', 3)], { fund: 20 }));
 ok('total = beds + acts + transport + fund', tt.totals.total === tt.totals.beds + tt.totals.acts + tt.totals.transport + tt.totals.fund);
-ok('GBP conversion uses the 1.27 indicative rate', MM.money(127, 'GBP') === '£100' && MM.money(100, 'USD') === '$100');
+ok('GBP conversion uses the indicative rate', MM.money(400, 'GBP') === '£300' && MM.money(100, 'USD') === '$100');
 ok('km + countries computed', tt.km > 500 && tt.countries.length === 1);
 
 /* ---------- share links ---------- */
@@ -131,7 +130,9 @@ var profiles = [
   ['Phnom Penh, 3 weeks, culture + islands', prof({ start: 'phnom-penh', days: 21, vibes: ['culture', 'islands'], must: ['angkor'] })],
   ['No start, 1 week', prof({ start: null, days: 7, vibes: ['party'] })],
   ['No start, 5 weeks, everything', prof({ start: null, days: 35, vibes: ['culture', 'adventure', 'party', 'islands'] })],
-  ['Bangkok, 4 weeks', prof({ start: 'bangkok', days: 28, vibes: ['culture', 'party'], must: ['loop', 'angkor'] })]
+  ['Bangkok, 4 weeks', prof({ start: 'bangkok', days: 28, vibes: ['culture', 'party'], must: ['loop', 'angkor'] })],
+  ['Quiz skipped after the landing point (Hanoi, nothing else answered)', prof({ start: 'hanoi' })],
+  ['Quiz skipped, not booked yet, nothing else answered', prof({ start: null })]
 ];
 profiles.forEach(function (pp) {
   var res = MM.suggest(pp[1]);
@@ -201,7 +202,7 @@ profiles.forEach(function (pp) {
 /* ---------- group mode data layer ---------- */
 (function () {
   var store = {}; global.localStorage = { getItem: function (k) { return store[k] === undefined ? null : store[k]; }, setItem: function (k, v) { store[k] = v; } };
-  global.window = undefined; require('../group.js'); var G = globalThis.MM.Group, done = false;
+  global.window = undefined; require('../group.js'); var G = globalThis.MM.Group;
   pending.push(G.create('i=s.hanoi.3', 'Ewan').then(function (g) {
     return Promise.all(['Sam', 'Ali', 'Jo'].map(function (n, i) { return G.join(g.id, n).then(function (r) { return G.update(g.id, r.me.id, { in: i < 2, votes: { '0:hanoi': i === 2 ? 'n' : 'y' } }); }); })).then(function () { return G.get(g.id); });
   }).then(function (g) { ok('group: 3 mates joined, 2 are in', g.members.length === 3 && G.ins(g) === 2); ok('group: votes tally y/m/n', JSON.stringify(G.tally(g, '0:hanoi')) === JSON.stringify({ y: 2, m: 0, n: 1 })); }));
@@ -286,9 +287,10 @@ profiles.forEach(function (pp) {
   ok('packing list adds mountain + water gear when the trip needs it', /For the mountains/.test(JSON.stringify(MM.packing(MM.plan(st([stop('hanoi', 4, [MM.dontMiss('hanoi').act.id])], {}))))));
 
   ok('guide covers every country and every hostel', Object.keys(MM.COUNTRIES).every(function (c) { return MM.GUIDE.countries[c] && MM.GUIDE.topics.every(function (t) { return MM.GUIDE.countries[c][t.k] && MM.GUIDE.countries[c][t.k].length >= 2; }); }) && Object.keys(MM.PLACES).filter(function (p) { return !MM.PLACES[p].partner; }).every(function (p) { return MM.GUIDE.places[p] && MM.GUIDE.places[p].length >= 2; }));
-  ok('currencies: EUR, AUD, CAD formatted with their symbols', MM.money(100, 'EUR') === '€92' && MM.money(100, 'AUD') === 'A$152' && MM.money(100, 'CAD') === 'C$137' && MM.money(100, 'GBP') === '£79' && MM.money(100, 'XXX') === '$100');
-  ok('local money: $10 in Thailand and Vietnam', MM.localMoney(10, 'TH') === '฿340' && MM.localMoney(10, 'VN') === '₫255,000');
+  ok('currencies: EUR, AUD, CAD formatted with their symbols', MM.money(100, 'EUR') === '€89' && MM.money(100, 'AUD') === 'A$143' && MM.money(100, 'CAD') === 'C$140' && MM.money(100, 'GBP') === '£75' && MM.money(100, 'XXX') === '$100');
+  ok('local money: $10 in Thailand and Vietnam', MM.localMoney(10, 'TH') === '฿340' && MM.localMoney(10, 'VN') === '₫260,000');
   MM.setRates({ THB: 40 }); ok('live rates override the local fallback', MM.localMoney(10, 'TH') === '฿400'); MM.setRates({ THB: 34 });
+  ok('a rate that is wildly off (a faulty feed) is ignored', (function () { MM.setRates({ GBP: 5, EUR: 0, AUD: 'x', THB: 1, USD: 3, constructor: 9 }); return MM.money(400, 'GBP') === '£300' && MM.money(100, 'EUR') === '€89' && MM.money(100, 'USD') === '$100' && MM.localMoney(10, 'TH') === '฿340'; })());
 })();
 
 /* ---------- text output ---------- */
@@ -425,6 +427,107 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   var d1 = E.describe(trip(), r2.state).join(' | ');
   ok('describe says what changed in plain words', /Removed Hoi An/.test(d1) && /Saigon: 3 nights to 6 nights/.test(d1) && /Ho Chi Minh/.test(E.describe(trip(), apply([{ op: 'remove_stop', stop: 3 }]).state).join('|')) === false || /Removed Ho Chi Minh City/.test(E.describe(trip(), apply([{ op: 'remove_stop', stop: 3 }]).state).join('|')));
   ok('describe notices a reorder, a new tour, a new date and a new style', /order/.test(E.describe(trip(), apply([{ op: 'move_stop', stop: 1, to: 3 }]).state)[0]) && /Added Countryside bike tour/.test(E.describe(trip(), r3.state).join('|')) && /Start date/.test(E.describe(trip(), apply([{ op: 'set_start', date: '2027-05-05' }]).state).join('|')) && /Cheapest/.test(E.describe(trip(), apply([{ op: 'set_style', style: 'cheapest' }]).state).join('|')));
+})();
+
+/* ---------- robustness: nothing a link, an old save or a server record can hold may blank the page ---------- */
+(function () {
+  function threw(fn) { try { fn(); return null; } catch (e) { return String(e && e.message || e); } }
+  var bad = ['', '%', 'i=%', 'i=s.hanoi.3.%', 'i=s.hanoi.3.%E0%A4%A', 'i=s.hanoi.3.zzzzz@%', 'i=s.__proto__.3', 'i=s.constructor.3', 'p=constructor&i=s.hanoi.3', 'p=__proto__', 'l=0:constructor', 'l=__proto__:cheap', 'l=constructor:cheap', 'i=a.', 'i=a.__proto__', 'i=s.hanoi.NaN', 'i=s.hanoi.-5', 'i=s.hanoi.99999999999999999999', 'f=%', 'b=1e9', 'm=13', 'm=-1', 'i=~~~~', '&&&&', '=', 'i', 'd=%', 'i=s.hanoi.3.' + new Array(3000).join('x')];
+  ok('a share link with any junk in it still decodes (no error) and plans', bad.every(function (s) { return threw(function () { MM.plan(MM.decodeState(s)); }) === null; }), bad.filter(function (s) { return threw(function () { MM.plan(MM.decodeState(s)); }); }).join(' | '));
+  ok('a malformed % in a tour code does not lose the rest of the trip', (function () { var d = MM.decodeState('i=s.hanoi.3.%~s.hoi-an.2&d=2027-02-10'); return d.items.length === 2 && d.items[0].p === 'hanoi' && d.start === '2027-02-10'; })());
+  ok('prototype names are not accepted as a travel style or leg choice', (function () { var d = MM.decodeState('p=constructor&l=0:__proto__,1:toString&i=s.hanoi.3'); return d.pref === 'balanced' && Object.keys(d.legPick).length === 0; })());
+  ok('a date that isn\'t a real day (31 Feb) is dropped, a real one kept', MM.decodeState('i=s.hanoi.3&d=2027-02-31').start === '' && MM.decodeState('i=s.hanoi.3&d=2028-02-29').start === '2028-02-29');
+  ok('spending money of $0 survives the round trip (it used to come back as $18)', (function () { var s0 = st([stop('hanoi', 3)], { fund: 0 }); return MM.decodeState(MM.encodeState(s0)).fund === 0 && MM.decodeState('i=s.hanoi.3&f=junk').fund === 18; })());
+  ok('a share link can\'t hold more than 40 stops', MM.decodeState('i=' + new Array(200).join('s.hanoi.3~')).items.length <= 40);
+
+  var junk = [{ items: [{ kind: 'stop', p: 'atlantis', n: 3, acts: [] }] }, { items: [{ kind: 'allin', trip: 'nope' }] }, { items: [{ kind: 'stop', p: 'hanoi', n: 'x', acts: ['nope'] }] }, { items: [{ kind: 'stop', p: 'hanoi', n: -3, acts: null }] }, { items: [null] }, { items: 'x' },
+    { items: [{ kind: 'weird' }] }, { items: [{ p: 'hanoi', n: 3 }] }, { items: [{ kind: 'stop', p: 'hanoi', n: 3, acts: [], pins: { x: 1 } }], start: 'garbage', pref: 'zzz', fund: 'abc', legPick: { 0: 'nope' } }, {}, null, 5, 'text', [],
+    { items: [{ kind: 'stop', p: 'hanoi', n: 1e9, acts: [] }] }, { items: new Array(5000).fill({ kind: 'stop', p: 'hanoi', n: 1, acts: [] }) }, { items: [{ kind: 'stop', p: 'hanoi', n: 2.5, acts: [] }] }, { items: [{ kind: 'stop', p: 'toString', n: 2, acts: [] }] }, { items: [{ kind: 'stop', p: 'hanoi', n: 2, acts: ['hoi-an-sunset-river-cruise', 'cooking-class'] }] }];
+  ok('an old or corrupt saved trip (unknown places, ALL IN trips, tours, nights) can\'t crash the planner', junk.every(function (j) { return threw(function () { MM.plan(Object.assign(MM.defaultState(), j && typeof j === 'object' ? j : {})); MM.plan(j); }) === null; }), junk.map(function (j, i) { return threw(function () { MM.plan(Object.assign(MM.defaultState(), j && typeof j === 'object' ? j : {})); }) ? i : ''; }).join(''));
+  ok('sanitizeState keeps what is real and drops what isn\'t', (function () {
+    var s = MM.sanitizeState({ items: [{ kind: 'stop', p: 'hanoi', n: 99, acts: ['cooking-class', 'hanoi-pub-crawl', 'hanoi-pub-crawl'], pins: { 'hanoi-pub-crawl': 5, 'cooking-class': 2 } }, { kind: 'stop', p: 'atlantis', n: 3 }, { kind: 'allin', trip: 'nope' }, { kind: 'allin', trip: 'vietnam' }], start: '2027-13-40', pref: 'cheap', fund: 500, crew: -2, budget: 'x', legPick: { 0: 'fast', 99999: 'fast', x: 'cheap' } });
+    return s.items.length === 2 && s.items[0].n === 30 && s.items[0].acts.join() === 'hanoi-pub-crawl' && s.items[0].pins && s.items[0].pins['hanoi-pub-crawl'] === 5 && s.items[1].kind === 'allin' && s.start === '' && s.pref === 'cheap' && s.fund === 100 && s.crew === 0 && s.budget === 0 && Object.keys(s.legPick).join() === '0';
+  })());
+  ok('a clean state is left exactly as it was (sanitising is not a rewrite)', (function () { var s0 = st([stop('hanoi', 4, ['hanoi-pub-crawl']), stop('hoi-an', 3)], { start: '2027-02-10', pref: 'cheap', fund: 25, budget: 1500, crew: 2 }); return JSON.stringify(MM.sanitizeState(JSON.parse(JSON.stringify(s0)))) === JSON.stringify(s0); })());
+  ok('every place pair prints a clean 24-hour arrival time, and "next day" agrees with the clock', (function () {
+    var ids = Object.keys(MM.PLACES), badArr = [];
+    ids.forEach(function (a) { ids.forEach(function (b) { if (a === b) return; MM.legOptions(a, b).forEach(function (o) {
+      var tot = Math.round(((o.ovn ? 19.5 : 8.5) + o.h) * 60 / 5) * 5, want = (function () { var m = tot % 1440, hh = Math.floor(m / 60), mm = m % 60; return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; })();
+      if (!/^\d\d:\d\d$/.test(o.arrive) || o.arrive !== want || o.arriveNext !== (tot >= 1440)) badArr.push(a + '>' + b + ' ' + o.arrive + ' vs ' + want);
+    }); }); });
+    return badArr.length === 0; })());
+  ok('a hostel that opens later only warns if you ARRIVE before it opens (not just if the trip starts before)', (function () {
+    var late = MM.plan(st([stop('hanoi', 5), stop('koh-rong', 4), stop('kampot', 2)], { start: '2026-10-24' })).warnings.filter(function (w) { return /opens/.test(w.m); });         // Kampot opens 1 Nov 2026: you get there after that
+    var early = MM.plan(st([stop('kampot', 2), stop('phnom-penh', 2)], { start: '2026-10-24' })).warnings.filter(function (w) { return /opens/.test(w.m); });
+    return late.length === 0 && early.length === 1 && /you'd arrive on/.test(early[0].m); })());
+  // found by the fuzz test (test/fuzz.test.js)
+  ok('a stored trip with a nonsense food fund still prices (it is replaced, not turned into NaN)', (function () { var t = MM.plan(st([stop('hanoi', 3)], { fund: 'abc' })).totals; return isFinite(t.total) && t.fund === 54 && MM.plan(st([stop('hanoi', 3)], { fund: -5 })).totals.fund === 0 && MM.plan(st([stop('hanoi', 3)], { fund: 1e9 })).totals.fund === 300; })());
+  ok('unpin_tour on a packaged ALL IN trip is refused politely, not a crash', (function () { var s = st([{ kind: 'allin', trip: 'vietnam' }]); var r = MM.edit.apply(s, [{ op: 'unpin_tour', stop: 1, tour: 'x' }]); return !r.ok && /packaged ALL IN/.test(r.errors[0]); })());
+  ok('"constructor" and "__proto__" are not places or tours', (function () { var s = st([stop('hanoi', 3)]); return ['__proto__', 'constructor', 'toString', 'hasOwnProperty'].every(function (k) { return !MM.edit.apply(s, [{ op: 'add_stop', place: k }]).ok && !MM.edit.apply(s, [{ op: 'swap_stop', stop: 1, place: k }]).ok && MM.actsAt(k).length === 0; }); })());
+  ok('"Opens 1 Nov." is only in the hook until the day Kampot opens, then it goes by itself', (function () {
+    var k = MM.PLACES.kampot, base = 'Riverside hangs, pepper farms and sunsets from the water.';
+    return MM.placeHook(k, '2026-10-23') === base + ' Opens 1 Nov.' && MM.placeHook(k, '2026-10-31') === base + ' Opens 1 Nov.'
+      && MM.placeHook(k, '2026-11-01') === base && MM.placeHook(k, '2027-03-01') === base
+      && /Opens/.test(k.hook) === (new Date().toISOString().slice(0, 10) < '2026-11-01')
+      && !MM.PLACES.bangkok._hook && MM.PLACES.bangkok.hook.indexOf('Opens') < 0; })());
+  ok('asking for one country gives a draft that shows more than one town where the country has them', (function () {
+    var vn = MM.generate({ countries: ['VN'], days: 14, budget: 'mid', vibes: [], must: [] })[0], th = MM.generate({ countries: ['TH'], days: 14, budget: 'mid', vibes: [], must: [] })[0], pn = MM.plan(vn.state).places;
+    return pn.length === 2 && pn.indexOf('hanoi') > -1 && pn.indexOf('hoi-an') > -1 && MM.plan(th.state).places.length >= 3; })());
+  // the quickest order
+  var BO = MM.edit.bestOrder;
+  ok('best order: a zig-zag route is put in the quickest order, keeping where you land', (function () {
+    var zig = st([stop('hanoi', 3), stop('phnom-penh', 3), stop('hoi-an', 3), stop('siem-reap', 3)]), r = BO(zig);
+    var line = function (s) { return MM.routeLine(MM.plan(s)); };
+    return !!r && r.state.items[0].p === 'hanoi' && r.after.transport + r.after.nights * 0 <= r.before.transport && r.savedH > 0 && r.state.items.length === 4 && line(r.state) !== line(zig); })());
+  ok('best order: it really is shorter, the stops are all still there, and the original is untouched', (function () {
+    var zig = st([stop('hanoi', 3), stop('phnom-penh', 3), stop('hoi-an', 3), stop('siem-reap', 3)]), snap = JSON.stringify(zig), r = BO(zig);
+    var hrs = function (s) { return MM.plan(s).legs.reduce(function (a, l) { return a + l.h; }, 0); };
+    return JSON.stringify(zig) === snap && hrs(r.state) < hrs(zig) && r.state.items.map(function (i) { return i.p; }).sort().join() === zig.items.map(function (i) { return i.p; }).sort().join() && r.state.legPick && Object.keys(r.state.legPick).length === 0; })());
+  ok('best order: a sensible route is left alone, and two stops have no order to improve', BO(st([stop('hanoi', 3), stop('hoi-an', 3), stop('saigon', 2)])) === null && BO(st([stop('hanoi', 3), stop('hoi-an', 3)])) === null && BO(st([])) === null);
+  ok('best order: nights, tours and pinned days travel with their stop', (function () {
+    var s0 = st([stop('hanoi', 3), stop('phnom-penh', 4, []), stop('hoi-an', 5, []), stop('siem-reap', 2, [])]); s0.items[2].acts = MM.actsAt('hoi-an').slice(0, 2).map(function (a) { return a.id; }); s0.items[2].pins = {}; s0.items[2].pins[s0.items[2].acts[0]] = 2;
+    var r = BO(s0), moved = r.state.items.filter(function (i) { return i.p === 'hoi-an'; })[0]; return moved.n === 5 && moved.acts.length === 2 && moved.pins[moved.acts[0]] === 2; })());
+  ok('best order: ALL IN blocks are moved whole, and a long trip (over 12 stops) still gets an answer', (function () {
+    var blocks = st([stop('hanoi', 2), { kind: 'allin', trip: 'laos' }, stop('siem-reap', 2), stop('hoi-an', 2)]), r1 = BO(blocks);
+    var ids = MM.PLACE_ORDER.filter(function (p) { return !MM.PLACES[p].partner; }).slice(0, 14), many = st(ids.map(function (p) { return stop(p, 2); })), r2 = BO(many);
+    return (r1 === null || r1.state.items.some(function (i) { return i.kind === 'allin'; })) && (r2 === null || (r2.state.items.length === 14 && r2.state.items[0].p === ids[0])); })());
+  ok('best order: never throws on junk states', [null, {}, { items: [] }, { items: [{ kind: 'stop', p: 'hanoi', n: 2, acts: [] }] }].every(function (x) { try { BO(x); return true; } catch (e) { return false; } }));
+  // later stages of a journey: where you are now, and where you've been
+  (function () {
+    var s2 = st([stop('phnom-penh', 3), stop('siem-reap', 3)], { start: '2027-03-01', from: 'saigon', been: ['hanoi', 'hoi-an', 'saigon'] }), p2 = MM.plan(s2), p1 = MM.plan(st([stop('phnom-penh', 3), stop('siem-reap', 3)], { start: '2027-03-01' }));
+    ok('stage 2: the journey from where you are now is the first leg, and it costs and takes what the route says', !!p2.arrival && p2.arrival.origin === true && p2.arrival.index === -1 && p2.arrival.from === 'saigon' && p2.arrival.to === 'phnom-penh' && p2.legs[0] === p2.arrival && p2.legs.length === p1.legs.length + 1 && p2.totals.transport === p1.totals.transport + p2.arrival.u && p2.arrival.u > 0, JSON.stringify(p2.arrival && { f: p2.arrival.from, u: p2.arrival.u }));
+    ok('stage 2: the first day is the day you travel, dated from your start date, and day numbers still run 1, 2, 3', p2.days[0].date && MM.util.isoDate(p2.days[0].date) === '2027-03-01' && p2.days.every(function (d, i) { return d.n === i + 1; }) && p2.days.some(function (d) { return d.travel === p2.arrival; }) && p2.totals.days === p2.totals.nights + 1);
+    ok('stage 2: an overnight journey from where you are costs its night(s) first', (function () {
+      var o = MM.plan(st([stop('chiang-mai', 3)], { from: 'bangkok', pref: 'cheap', start: '2027-03-01' })); var ar = o.arrival;
+      return !!ar && (ar.nights === 0 ? o.days[0].kind === 'stay' : o.days[0].kind === 'move' && o.days[0].si === -1 && o.days.filter(function (d) { return d.kind === 'move'; }).length >= ar.nights) && o.totals.nights === 3 + ar.nights; })());
+    ok('stage 2: starting in the place you are already in has no journey to add', (function () { var q = MM.plan(st([stop('phnom-penh', 3)], { from: 'phnom-penh' })); return !q.arrival && q.legs.length === 0; })());
+    ok('stage 2: it is the same plan as before when you are not on a later stage', JSON.stringify(p1.legs.map(function (l) { return l.index; })) === '[0]' && !p1.arrival);
+    ok('stage 2: the travel mode for that first journey can be picked, and the pick sticks', (function () {
+      var a = MM.plan(st([stop('phnom-penh', 3)], { from: 'saigon', pref: 'balanced' })), keys = a.arrival.options.map(function (o) { return o.key; }); if (keys.length < 2) return true;
+      var other = keys.filter(function (k) { return k !== a.arrival.key; })[0], b = MM.plan(st([stop('phnom-penh', 3)], { from: 'saigon', legPick: { o: other } })); return b.arrival.key === other; })());
+    ok('stage 2: where you are and where you have been survive a share link, and old links still open', (function () {
+      var s3 = st([stop('phnom-penh', 3)], { from: 'saigon', been: ['hanoi', 'hoi-an', 'saigon'], legPick: { o: 'cheap' } }), enc = MM.encodeState(s3), back = MM.decodeState(enc);
+      return /(^|&)o=saigon(&|$)/.test(enc) && /v=hanoi,hoi-an,saigon/.test(enc) && back.from === 'saigon' && back.been.join() === 'hanoi,hoi-an,saigon' && back.legPick.o === 'cheap' && JSON.stringify(MM.plan(back).totals) === JSON.stringify(MM.plan(s3).totals) && !MM.decodeState('i=s.hanoi.3').from && !MM.decodeState('i=s.hanoi.3').been; })());
+    ok('stage 2: junk for where you are, or where you have been, is dropped, never a crash', (function () {
+      var c = MM.sanitizeState({ items: [{ kind: 'stop', p: 'hanoi', n: 3, acts: [] }], from: 'atlantis', been: ['hanoi', 'hanoi', 'nowhere', 5, null, '__proto__', 'saigon'] });
+      return !c.from && c.been.join() === 'hanoi,saigon' && !!MM.plan({ items: [{ kind: 'stop', p: 'hanoi', n: 3, acts: [] }], from: { x: 1 }, been: 'nope' }).totals && MM.decodeState('i=s.hanoi.3&o=__proto__&v=__proto__,constructor,hanoi').been.join() === 'hanoi'; })());
+    ok('stage 2: nothing is suggested twice: not where you have been, not where you are', (function () {
+      var seen = ['hanoi', 'hoi-an', 'saigon'], sn = MM.suggestNext({ items: [], from: 'saigon', been: seen, pref: 'balanced', fund: 18, legPick: {} });
+      var sg = MM.suggestNext(st([stop('phnom-penh', 3)], { from: 'saigon', been: seen })), nr = MM.nextRanked('saigon', seen);
+      return sn.length > 0 && sn.every(function (x) { return seen.indexOf(x.id) < 0; }) && sg.every(function (x) { return seen.indexOf(x.id) < 0 && x.id !== 'phnom-penh'; }) && nr.every(function (x) { return seen.indexOf(x.id) < 0; }); })());
+    ok('stage 2: "Plan it for me" builds from where you are and never goes back over old ground', (function () {
+      var seen = ['hanoi', 'hoi-an', 'saigon'], res = MM.generate({ from: 'saigon', been: seen, days: 14, budget: 'mid', vibes: [], must: [] });
+      return res.length > 0 && res.every(function (r) { var pl = MM.plan(r.state); return r.state.from === 'saigon' && pl.places.every(function (p) { return seen.indexOf(p) < 0; }) && !!pl.arrival && pl.totals.days <= 16; }) && MM.suggest({ from: 'saigon', been: seen, days: 10, budget: 'mid', vibes: [], must: [] }).every(function (r) { return MM.plan(r.state).places.every(function (p) { return seen.indexOf(p) < 0; }); }); })());
+    ok('stage 2: "Don\'t miss" and ALL IN matches leave out old ground', (function () {
+      var s4 = st([stop('hanoi', 3), stop('hoi-an', 3)], { been: ['phnom-penh', 'siem-reap', 'saigon'] }), ms = MM.missed(s4, {});
+      return ms.every(function (x) { return ['phnom-penh', 'siem-reap', 'saigon'].indexOf(x.p) < 0; }) && MM.plan(st([stop('phnom-penh', 3), stop('siem-reap', 3), stop('koh-rong', 3)], { been: ['phnom-penh'] })).match.every(function (m) { return m.trip.stops.every(function (x) { return x.p !== 'phnom-penh'; }); }); })());
+    ok('stage 2: the crew is told which stage it is, where they start, where they have been, and which trip came first', (function () {
+      var s5 = st([stop('phnom-penh', 3), stop('siem-reap', 3)], { from: 'saigon', been: ['hanoi', 'hoi-an', 'saigon'], start: '2027-03-01' }), pl5 = MM.plan(s5);
+      var sm = MM.crewSummary(s5, pl5, { people: 2, stage: { n: 3, parent: 'MM-ABC234' } }), txt = MM.crewText(sm, { name: 'Sam' }), lp = MM.leadPayload(s5, pl5, { name: 'Sam', via: 'email', email: 'a@b.co', partySize: 2 }, { stage: { n: 3, parent: 'MM-ABC234' } });
+      var bad = MM.crewSummary(s5, pl5, { stage: { n: 'x<b>', parent: '<img>' } }), plain = MM.crewSummary(st([stop('hanoi', 3)]), MM.plan(st([stop('hanoi', 3)])), {});
+      return sm.stage.n === 3 && sm.stage.parent === 'MM-ABC234' && sm.stage.from.name === 'Ho Chi Minh City' && sm.stage.been.length === 3 && sm.stage.arrival.to === 'Phnom Penh' && /STAGE 3 OF THEIR JOURNEY/.test(txt) && /Already been to: Hanoi, Hoi An/.test(txt)
+        && lp.stage.from === 'saigon' && lp.stage.parent === 'MM-ABC234' && bad.stage.parent === '' && bad.stage.n === 2 && plain.stage === null && sm.flags.some(function (f) { return /Only the new stops need checking/.test(f.text); }); })());
+  })();
 })();
 
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

@@ -29,7 +29,7 @@ Holds expire on their own. An unapproved hold lapses after `HOLD_HOURS` and the 
 
 - It is one Node process with a `server/data/` folder of JSON files. Any small VM or container is enough (Fly.io, Railway, Render, a VPS). **Back up `server/data/`.** Put it behind HTTPS (Caddy, nginx, or the platform's TLS).
 - Hosting the *site* elsewhere (Netlify, the main Mad Monkey site)? Deploy this server separately, set `ALLOWED_ORIGIN=https://your-site` on it, and set `API_BASE: 'https://your-api/api'` in that site's `config.js`.
-- Behind a proxy, make sure it forwards `X-Forwarded-For` so rate limits are per guest, not per proxy.
+- Behind a proxy (nginx, Cloudflare, a load balancer), set `TRUST_PROXY=1` (the number of proxies in front) so rate limits are per guest, not per proxy. With it unset the server ignores `X-Forwarded-For` altogether, because anyone can send a made-up one to dodge the limits.
 - Rate limits: 12 review requests, 20 groups per hour per IP; 600 events per hour. Bodies are capped at 256 KB.
 - `/admin` and `/api/admin/*` need the token (constant-time comparison). Treat the token like a password; rotate it by changing the env var.
 - Personal data (names, emails, WhatsApp numbers) lives in `leads.json`. Decide your retention period and delete old leads; you are the data controller.
