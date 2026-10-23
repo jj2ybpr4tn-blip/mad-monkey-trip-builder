@@ -63,8 +63,8 @@ In a browser tab on `npm start`: `test/ui-xss.js` (hostile data), `test/ui-lint.
 | server | 70 |
 | Google pages | 12 |
 | photo copies (`test/thumbs.test.js`) | 18 |
-| ALL IN backend: Deno tests / end to end / vitest | 58 / 157 / 45 |
-| free to send, in the browser (`test/ui-free.js`: the form, the trip page in every state, the crew page) | 36 |
+| ALL IN backend: Deno tests / end to end / vitest | 58 / 161 / 45 |
+| free to send, in the browser (`test/ui-free.js`: the form, the trip page in every state, the crew page) | 37 |
 | hostile data in the browser | 22 screens, clean |
 | axe-core | clean on every main screen and modal |
 | phone layout (320 / 375 / 414 / 767 touch) | clean |

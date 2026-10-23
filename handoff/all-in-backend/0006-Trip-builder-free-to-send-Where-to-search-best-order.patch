@@ -1,4 +1,4 @@
-From 278c560a0818ec342a3722a89fc0da3b616dcaf9 Mon Sep 17 00:00:00 2001
+From 953d9539c77d3ceef22ffe94d40108afe26fdba9 Mon Sep 17 00:00:00 2001
 From: Ewan McIntyre <ewan3568@me.com>
 Date: Fri, 23 Oct 2026 15:58:16 +0800
 Subject: [PATCH 6/7] Trip builder: free to send, Where to? search, best order,
@@ -62,11 +62,11 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  public/trip-builder/ui-live.js         |  20 +-
  public/trip-builder/ui-map.js          |  14 +-
  public/trip-builder/ui-pack.js         |   8 +-
- public/trip-builder/ui-review.js       | 103 ++++----
+ public/trip-builder/ui-review.js       | 105 ++++----
  public/trip-builder/ui-search.js       | 109 ++++++++
  public/trip-builder/ui-stage.js        | 158 ++++++++++++
  public/trip-builder/ui-tour.js         |  10 +-
- 24 files changed, 1266 insertions(+), 310 deletions(-)
+ 24 files changed, 1267 insertions(+), 311 deletions(-)
  create mode 100644 public/trip-builder/search.js
  create mode 100644 public/trip-builder/ui-search.js
  create mode 100644 public/trip-builder/ui-stage.js
@@ -1097,7 +1097,7 @@ index c6d7dc9..ddb15c9 100644
      },
      routeVotes: function (g) { var t = { a: 0, b: 0 }; g.members.forEach(function (m) { var v = m.votes.route; if (v === 'a' || v === 'b') t[v]++; }); return t; },
 diff --git a/public/trip-builder/index.html b/public/trip-builder/index.html
-index bd259c7..869508b 100644
+index bd259c7..9667a0b 100644
 --- a/public/trip-builder/index.html
 +++ b/public/trip-builder/index.html
 @@ -6,6 +6,9 @@
@@ -1116,8 +1116,8 @@ index bd259c7..869508b 100644
    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
 -  <link rel="stylesheet" href="styles.css?v=50">
 -  <link rel="stylesheet" href="crew.css?v=50">
-+  <link rel="stylesheet" href="styles.css?v=88">
-+  <link rel="stylesheet" href="crew.css?v=88">
++  <link rel="stylesheet" href="styles.css?v=89">
++  <link rel="stylesheet" href="crew.css?v=89">
  </head>
  <body data-view="home">
 +  <a class="skip" href="#app">Skip to the content</a>
@@ -1165,35 +1165,35 @@ index bd259c7..869508b 100644
 -  <script src="ui-pack.js?v=50"></script>
 -  <script src="ui-crew.js?v=50"></script>
 -  <script src="ui-tour.js?v=50"></script>
-+  <script src="data/map-data.js?v=88"></script>
-+  <script src="data/places.js?v=88"></script>
-+  <script src="data/activities.js?v=88"></script>
-+  <script src="data/media.js?v=88"></script>
-+  <script src="data/legs.js?v=88"></script>
-+  <script src="data/trips.js?v=88"></script>
-+  <script src="data/entry.js?v=88"></script>
-+  <script src="data/gallery.js?v=88"></script>
-+  <script src="data/rules.js?v=88"></script>
-+  <script src="data/guide.js?v=88"></script>
-+  <script src="logic.js?v=88"></script>
-+  <script src="extras.js?v=88"></script>
-+  <script src="crew.js?v=88"></script>
-+  <script src="edit.js?v=88"></script>
-+  <script src="search.js?v=88"></script>
-+  <script src="group.js?v=88"></script>
-+  <script src="config.js?v=88"></script>
-+  <script src="ui-map.js?v=88"></script>
-+  <script src="ui-story.js?v=88"></script>
-+  <script src="app.js?v=88"></script>
-+  <script src="ui-review.js?v=88"></script>
-+  <script src="ui-group.js?v=88"></script>
-+  <script src="ui-live.js?v=88"></script>
-+  <script src="ui-extras.js?v=88"></script>
-+  <script src="ui-pack.js?v=88"></script>
-+  <script src="ui-crew.js?v=88"></script>
-+  <script src="ui-tour.js?v=88"></script>
-+  <script src="ui-search.js?v=88"></script>
-+  <script src="ui-stage.js?v=88"></script>
++  <script src="data/map-data.js?v=89"></script>
++  <script src="data/places.js?v=89"></script>
++  <script src="data/activities.js?v=89"></script>
++  <script src="data/media.js?v=89"></script>
++  <script src="data/legs.js?v=89"></script>
++  <script src="data/trips.js?v=89"></script>
++  <script src="data/entry.js?v=89"></script>
++  <script src="data/gallery.js?v=89"></script>
++  <script src="data/rules.js?v=89"></script>
++  <script src="data/guide.js?v=89"></script>
++  <script src="logic.js?v=89"></script>
++  <script src="extras.js?v=89"></script>
++  <script src="crew.js?v=89"></script>
++  <script src="edit.js?v=89"></script>
++  <script src="search.js?v=89"></script>
++  <script src="group.js?v=89"></script>
++  <script src="config.js?v=89"></script>
++  <script src="ui-map.js?v=89"></script>
++  <script src="ui-story.js?v=89"></script>
++  <script src="app.js?v=89"></script>
++  <script src="ui-review.js?v=89"></script>
++  <script src="ui-group.js?v=89"></script>
++  <script src="ui-live.js?v=89"></script>
++  <script src="ui-extras.js?v=89"></script>
++  <script src="ui-pack.js?v=89"></script>
++  <script src="ui-crew.js?v=89"></script>
++  <script src="ui-tour.js?v=89"></script>
++  <script src="ui-search.js?v=89"></script>
++  <script src="ui-stage.js?v=89"></script>
  </body>
  </html>
 diff --git a/public/trip-builder/logic.js b/public/trip-builder/logic.js
@@ -2480,7 +2480,7 @@ index 90dc972..ba87d84 100644
      root.innerHTML = h;
      $('#packprint').addEventListener('click', function () { u.track('pack_print'); window.print(); });
 diff --git a/public/trip-builder/ui-review.js b/public/trip-builder/ui-review.js
-index 009c74e..7a1c425 100644
+index 009c74e..527ebec 100644
 --- a/public/trip-builder/ui-review.js
 +++ b/public/trip-builder/ui-review.js
 @@ -6,11 +6,12 @@
@@ -2539,7 +2539,7 @@ index 009c74e..7a1c425 100644
        '<form id="leadf" novalidate><div class="form2"><div class="field"><label for="lf-name">First name</label><input class="input" id="lf-name" name="name" autocomplete="given-name" required value="' + esc(q.name || '') + '"></div>' +
        u.contactPick(q) +
        '<div class="field"><label for="lf-from">Where are you now?</label><input class="input" id="lf-from" name="from" placeholder="city or country" value="' + esc(q.from || '') + '"></div>' +
-@@ -85,7 +88,7 @@
+@@ -85,23 +88,24 @@
      u.store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
      var plan = u.getPlan(), wantHold = !!A.state.start, people = Math.min(8, Math.max(1, +v.size || 1)), dep = deposit();
      var payload = MM.leadPayload(A.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: people, dates: v.flex, notes: v.notes || '', consent: true },
@@ -2548,12 +2548,13 @@ index 009c74e..7a1c425 100644
      payload.type = 'review_request'; payload.status = 'submitted'; payload.hold = { requested: wantHold, hours: hold() };
      if (dep) payload.deposit = { perPersonUsd: per(), people: people };
      u.track('review_request', { stops: plan.places.length, days: plan.totals.days, hold: wantHold });
-@@ -93,15 +96,16 @@
+     var btn = $('button[type=submit]', f), label = btn.textContent; btn.disabled = true; btn.textContent = dep && C.LEAD_ENDPOINT ? 'Opening secure payment…' : 'Sending…';
      function record(data, demo) {
-       var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
+-      var r = (data && data.ref) || ref(), now = new Date(), rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
++      var r = (data && data.ref) || ref(), now = new Date(), had = subs().filter(function (x) { return x.ref === r; })[0], rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
          hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: !!demo, name: v.name, email: ct.email, whatsapp: ct.whatsapp, via: ct.via,
 -        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || '', people: people, datesFlex: v.flex || '' };
-+        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || '', people: people, datesFlex: v.flex || '', stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null };
++        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || (had && had.key) || '', people: people, datesFlex: v.flex || '', stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null };
        saveRec(rec); return rec;
      }
      if (!C.LEAD_ENDPOINT) return setTimeout(function () { A._lastLead = payload; success(record(null, true), payload); }, 400);

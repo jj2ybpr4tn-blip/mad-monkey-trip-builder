@@ -549,9 +549,21 @@ const adminKeyFor = async (ref: string) => (await send("trip-builder-admin", { a
   const wb = await send("trip-builder-admin", { action: "balance", ref: wa.ref, amount: 300, password: "test-admin-pw" });
   ok("approving it says no email could be sent and hands back the guest's link for the crew to pass on", wb.s === 200 && wb.b.emailed === false && /#\/trip\/MM-[A-Z0-9]{6}\?k=/.test(wb.b.url));
 
+  // pressing Send twice, or trying again after a dropped connection: the same contact and the same trip within ten minutes is the one already sent
+  const d1 = await freeTrip(120, "free.dupe@example.com"), nd0 = outbox().length;
+  const d2 = await freeTrip(120, "free.dupe@example.com");
+  ok("sending the very same trip again within minutes does not make a second copy or email anyone again, and does not hand out the guest's key a second time", d2.r.s === 200 && d2.r.b.ref === d1.ref && d2.r.b.duplicate === true && !d2.r.b.key && d2.r.b.status === "submitted" && __db.trip_builder_requests.filter((r) => r.email === "free.dupe@example.com").length === 1 && outbox().length === nd0);
+  const d3 = await freeTrip(120, "free.dupe@example.com", (p) => { p.trip.link = p.trip.link + "&x=1"; });
+  ok("a different trip from the same person is a new one", d3.r.s === 200 && d3.ref !== d1.ref && !d3.r.b.duplicate && !!d3.key && __db.trip_builder_requests.filter((r) => r.email === "free.dupe@example.com").length === 2);
+  row(d1.ref).created_at = new Date(Date.now() - 11 * 60_000).toISOString();
+  const d4 = await freeTrip(120, "free.dupe@example.com");
+  ok("after ten minutes the same trip is sent as a new one", d4.r.s === 200 && d4.ref !== d1.ref && !d4.r.b.duplicate && __db.trip_builder_requests.filter((r) => r.email === "free.dupe@example.com").length === 3);
+  row(d1.ref).status = "declined"; row(d4.ref).status = "declined"; row(d3.ref).status = "declined";
+  ok("a declined copy doesn't count: they can send it again", (await freeTrip(120, "free.dupe@example.com")).r.b.duplicate !== true);
+
   let sent = 0, code = 0;
-  for (let i = 0; i < 7; i++) { const x = (await freeTrip(120, "free.flood@example.com")).r; if (x.s === 200) sent++; else code = x.s; }
-  const countBefore = __db.trip_builder_requests.length; await freeTrip(120, "free.flood@example.com");
+  for (let i = 0; i < 7; i++) { const x = (await freeTrip(120, "free.flood@example.com", (p) => { p.trip.link = p.trip.link + "&n=" + i; })).r; if (x.s === 200) sent++; else code = x.s; }
+  const countBefore = __db.trip_builder_requests.length; await freeTrip(120, "free.flood@example.com", (p) => { p.trip.link = p.trip.link + "&n=99"; });
   ok("free sending is still limited: 5 trips an hour from one contact, then 429, and a refused one saves nothing", sent === 5 && code === 429 && __db.trip_builder_requests.length === countBefore, sent + " sent, " + code);
 
   // the switch: a typo in the secret means free; a real number brings the deposit back

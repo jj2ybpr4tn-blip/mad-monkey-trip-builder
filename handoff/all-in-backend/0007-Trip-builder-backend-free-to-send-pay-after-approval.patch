@@ -1,4 +1,4 @@
-From a98c4be1752e35d6b791a1f11be2a2aa425c7be7 Mon Sep 17 00:00:00 2001
+From 5aee6468663bb32d72a176cfb72fe31bbf0b59a4 Mon Sep 17 00:00:00 2001
 From: Ewan McIntyre <ewan3568@me.com>
 Date: Fri, 23 Oct 2026 16:56:33 +0800
 Subject: [PATCH 7/7] Trip builder backend: free to send, pay after approval
@@ -27,7 +27,7 @@ junk-text cases). See docs/trip-builder-free-send.md.
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 ---
  docs/trip-builder-crew-review.md              |   4 +-
- docs/trip-builder-free-send.md                |  35 +++++
+ docs/trip-builder-free-send.md                |  36 +++++
  docs/trip-builder-journeys.md                 |   4 +-
  docs/trip-builder-payments.md                 |  22 +--
  docs/trip-builder-revise.md                   |   4 +-
@@ -42,11 +42,11 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  .../functions/trip-builder-admin/index.ts     |  20 +--
  .../functions/trip-builder-login/index.ts     |  12 +-
  supabase/functions/trip-builder-pay/index.ts  |  33 +++--
- .../functions/trip-builder-request/index.ts   |  49 ++++---
+ .../functions/trip-builder-request/index.ts   |  59 +++++---
  .../functions/trip-builder-revise/index.ts    |  15 ++-
  .../functions/trip-builder-status/index.ts    |   6 +-
  .../trip-builder-test-emails/index.ts         |  17 +--
- 20 files changed, 446 insertions(+), 128 deletions(-)
+ 20 files changed, 457 insertions(+), 128 deletions(-)
  create mode 100644 docs/trip-builder-free-send.md
  create mode 100644 supabase/functions/_shared/trip-builder-free.test.ts
 
@@ -67,10 +67,10 @@ index fddae34..d825864 100644
  Opening a link only **reads**. Nothing is sent, charged or refunded until someone presses the button inside a panel, so mail scanners that follow links do nothing.
 diff --git a/docs/trip-builder-free-send.md b/docs/trip-builder-free-send.md
 new file mode 100644
-index 0000000..a4b8023
+index 0000000..2967ee2
 --- /dev/null
 +++ b/docs/trip-builder-free-send.md
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,36 @@
 +# Free to send (Ewan, 23 Oct 2026)
 +
 +Sending a trip to the crew for checking used to take a $50 per person deposit on Stripe. It is now **free**: no payment, no Stripe, nothing to refund. A real person checks the trip first; the guest pays only after the crew has approved it and said the price.
@@ -95,6 +95,7 @@ index 0000000..a4b8023
 +
 +Sending used to cost $50, which kept junk out. Free means anyone can send a trip with any email address, so:
 +
++- **Pressing Send twice, or trying again after a dropped connection** (common on a phone abroad) doesn't put two copies in front of the crew: the same contact and the same trip within ten minutes is the one already sent. The reply says `duplicate: true`, sends no second email, and does **not** repeat the guest's key (it is in the first reply and the first email; handing it to whoever repeats a contact and a trip would let a stranger open someone's trip).
 +- **5 trips an hour per contact and 10 per address** (added with the links hardening, see [trip-builder-journeys.md](trip-builder-journeys.md)); a refused request saves nothing.
 +- **Nothing a sender typed reaches somebody else's inbox as text of their own.** The first email to the guest prints only their first name (letters only, otherwise "there") and a route only if it reads as a route (no links, addresses or messages). The log-in email does the same. A guest who changes a trip that nobody on the crew has picked up yet gets no confirmation email (the crew still gets the update); once the crew has it, the confirmation prints plain text only.
 +- The new-trip email goes to Ewan and the team only, so what a sender types in it is read by people who know it is a form.
@@ -105,7 +106,7 @@ index 0000000..a4b8023
 +
 +`trip-builder-request` (free path, deposit kept behind the switch), `_shared/trip-builder.ts` (`depositPerPerson`, `needsDeposit`, `handleTripBuilderSubmitted`, the card-saving branches of `handleTripBuilderPaid`, `plainFirstName` / `plainText`), `trip-builder-pay` (the card page for "a week before"; the first instalment saves the card), `trip-builder-admin` (the crew can act without a deposit), `trip-builder-status` (`canPay`, no card needed to be offered every plan), `trip-builder-revise`, `trip-builder-login`, `stripe-webhook` (the new kind), `_shared/email.ts` (`tripBuilderReceivedEmail`, and every email reads correctly when nothing was paid up front), `TripBuilderAdmin.tsx`, `trip-builder-test-emails`, and the live builder's `config.js` (`DEPOSIT_PER_PERSON: 0`). No migration: `deposit_amount` is 0 on a free trip.
 +
-+Tests: `trip-builder-free.test.ts` and `trip-builder-pay.test.ts` (Deno), and sections 11 onwards of the end-to-end run (`handoff/all-in-backend/e2e` in Ewan's builder repo), which run every flow above against fakes for Supabase, Stripe and Resend.
++Tests: `trip-builder-free.test.ts` and `trip-builder-pay.test.ts` (Deno), and sections 11 onwards of the end-to-end run (161 checks in all) (`handoff/all-in-backend/e2e` in Ewan's builder repo), which run every flow above against fakes for Supabase, Stripe and Resend.
 diff --git a/docs/trip-builder-journeys.md b/docs/trip-builder-journeys.md
 index 7064607..ab486fe 100644
 --- a/docs/trip-builder-journeys.md
@@ -1004,7 +1005,7 @@ index daa79db..65dd1c0 100644
    } catch (e) {
      console.error("trip builder pay failed:", e instanceof Error ? e.message : e);
 diff --git a/supabase/functions/trip-builder-request/index.ts b/supabase/functions/trip-builder-request/index.ts
-index 1be07d3..20a7b50 100644
+index 1be07d3..2116ff6 100644
 --- a/supabase/functions/trip-builder-request/index.ts
 +++ b/supabase/functions/trip-builder-request/index.ts
 @@ -1,13 +1,19 @@
@@ -1052,10 +1053,20 @@ index 1be07d3..20a7b50 100644
    const start = typeof trip.start === "string" && DATE.test(trip.start) ? trip.start : null;
    const origin = req.headers.get("origin");
    const sb = createClient(url, key);
-@@ -88,13 +96,15 @@ Deno.serve(async (req) => {
+@@ -88,13 +96,25 @@ Deno.serve(async (req) => {
    delete p.ipHash;
    if (ipHash) p.ipHash = ipHash;
  
++  // Free to send: the same guest pressing Send twice, or trying again after a dropped connection (common on a phone abroad), must not put two copies of the trip in front of the
++  // crew. The same contact and the same trip within ten minutes is the one already sent: say so, without a second email and WITHOUT the guest key (it is in the first reply and the
++  // first email; handing it to whoever repeats a contact and a trip would let a stranger open someone's trip).
++  if (free && tripLink) {
++    const { data: same } = await sb.from("trip_builder_requests").select("ref,status,hold_until")
++      .eq(via === "email" ? "email" : "whatsapp", via === "email" ? email : whatsapp).eq("trip_link", tripLink).in("status", ["submitted", "checking", "ready"])
++      .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString()).limit(1);
++    const dup = Array.isArray(same) ? same[0] : null;
++    if (dup) return json({ ref: dup.ref, status: dup.status, duplicate: true, deposit: { amount: 0, perPerson: 0, people }, hold: dup.hold_until ? { until: dup.hold_until } : null });
++  }
 +  // A free trip is with the crew from the start, and starts its bed hold now; a paid deposit starts the hold when it lands (stripe-webhook).
 +  const holdUntil = free && start ? new Date(Date.now() + HOLD_HOURS * 3600_000).toISOString() : null;
    // Save first, with a fresh reference (retry on the unlikely clash).
@@ -1071,7 +1082,7 @@ index 1be07d3..20a7b50 100644
        name,
        contact_via: via,
        email: email || null,
-@@ -118,13 +128,22 @@ Deno.serve(async (req) => {
+@@ -118,13 +138,22 @@ Deno.serve(async (req) => {
        from_hostel: str(p.fromHostel, 60) || null,
        payload: p,
        deposit_amount: depositUsd,
@@ -1097,7 +1108,7 @@ index 1be07d3..20a7b50 100644
    // The guest's own key goes back to their browser and into their trip page link: it's how they change the trip after sending it.
    const guestKey = await signGuestKey(ref);
    const back = guestTripUrl(origin, ref, guestKey);
-@@ -135,7 +154,7 @@ Deno.serve(async (req) => {
+@@ -135,7 +164,7 @@ Deno.serve(async (req) => {
        line_items: [{
          price_data: {
            currency: "usd",
@@ -1106,7 +1117,7 @@ index 1be07d3..20a7b50 100644
            product_data: {
              name: "Mad Monkey trip deposit",
              description: `${route.slice(0, 200)} · ${days} days · ref ${ref}. Comes off your trip total; refunded if the crew can't make it work.`,
-@@ -166,7 +185,7 @@ Deno.serve(async (req) => {
+@@ -166,7 +195,7 @@ Deno.serve(async (req) => {
        status: "pending_payment",
        checkoutUrl: session.url,
        key: guestKey,
