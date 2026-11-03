@@ -217,7 +217,7 @@
     if (best.join() === now.join() || pathCost(best) >= pathCost(now) - 0.4) return null;          // not worth a shuffle: under about 25 minutes
     var st = JSON.parse(JSON.stringify(state)); st.items = best.map(function (k) { return JSON.parse(JSON.stringify(items[k])); }); st.legPick = {};
     var A = MM.plan(state).totals, B = MM.plan(st).totals;
-    return { state: st, order: best, savedH: Math.max(0, Math.round((pathCost(now) - pathCost(best)) * 10) / 10), savedUsd: A.total - B.total, before: A, after: B };
+    return { state: st, order: best, savedH: Math.max(0, Math.round((pathCost(now) - pathCost(best)) * 10) / 10), savedUsd: A.spend - B.spend, before: A, after: B };
   };
 
   /* ---------- what changed, in words ---------- */

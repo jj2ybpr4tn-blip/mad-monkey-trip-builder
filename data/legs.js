@@ -14,6 +14,8 @@
          ovn    — true if the journey is overnight (replaces a bed night)
          nights — nights spent on the move (slow boat = 2)
          mm     — Mad Monkey sells / arranges this leg (slug on madmonkeyhostels.com)
+         dows   — the weekdays a flight runs (0 = Sun), when it doesn't fly every day
+         at     — { airport: hour } when a flight leaves at a set time from that end (19.5 = 7:30pm)
    ============================================================ */
 (function (r) {
   var MM = r.MM = r.MM || {};
@@ -25,7 +27,7 @@
     MM.EDGES.push(e);
   }
   // flights: h = air time + 2h of airport faff; airport ↔ airport
-  function F(a, b, air, u, note) { E(a, b, 'flight', Math.round((air + 2) * 10) / 10, u, note || 'Direct flight (~' + air + ' hr air time)'); }
+  function F(a, b, air, u, note, o) { E(a, b, 'flight', Math.round((air + 2) * 10) / 10, u, note || 'Direct flight (~' + air + ' hr air time)', o); }
 
   /* ---------- Thailand ---------- */
   E('bangkok', 'chiang-mai', 'bus', 11.5, 22, 'Overnight VIP bus', { ovn: true });
@@ -38,6 +40,7 @@
     { mm: 'luang-prabang-to-vang-vieng-second-class-ticket' });
   E('chiang-mai', 'luang-prabang', 'boat', 54, 80, 'Shuttle to Chiang Khong, border, 2-day slow boat, night in Pakbeng', { ovn: true, nights: 2 });
   E('luang-prabang', 'hanoi', 'bus', 24, 40, 'Cross-border sleeper bus (long)', { ovn: true });
+  E('VTE', 'vang-vieng', 'train', 2.2, 15, 'Transfer to Vientiane station + high-speed train (~1 hr)');
 
   /* ---------- Vietnam ---------- */
   E('hanoi', 'hoi-an', 'bus', 17, 22, 'Sleeper bus', { ovn: true });
@@ -75,8 +78,11 @@
   F('BKK', 'CNX', 1.2, 38);   F('BKK', 'HKT', 1.4, 38);   F('BKK', 'HAN', 2.0, 75);   F('BKK', 'SGN', 1.7, 65);
   F('BKK', 'DAD', 1.9, 85);   F('BKK', 'PNH', 1.2, 70);   F('BKK', 'REP', 1.0, 60);   F('BKK', 'LPQ', 1.8, 125);
   F('BKK', 'DPS', 5.8, 150);  F('BKK', 'MNL', 3.6, 120);  F('CNX', 'LPQ', 0.9, 140);
+  F('BKK', 'VTE', 1.3, 115, 'Direct flight to Vientiane (~1h20 air time): THAI from Suvarnabhumi, Thai AirAsia from Don Mueang');
   F('HAN', 'DAD', 1.3, 45);   F('HAN', 'SGN', 2.0, 55);   F('HAN', 'PNH', 2.1, 110);  F('HAN', 'REP', 1.9, 105);
-  F('HAN', 'LPQ', 1.2, 110);  F('DAD', 'SGN', 1.4, 40);   F('SGN', 'PNH', 1.0, 65);   F('SGN', 'REP', 1.3, 75);
+  // Vietnam Airlines is the only direct one, and it doesn't fly Tuesdays or Sundays (Google Flights, 3 Nov 2026, Apr–May 2027 and Dec 2026)
+  F('HAN', 'LPQ', 1.1, 150, 'Direct flight, Vietnam Airlines (~1 hr air time): Mon, Wed, Thu, Fri and Sat', { dows: [1, 3, 4, 5, 6], at: { LPQ: 19.5, HAN: 13.2 } });
+  F('DAD', 'SGN', 1.4, 40);   F('SGN', 'PNH', 1.0, 65);   F('SGN', 'REP', 1.3, 75);
   F('SGN', 'DPS', 3.3, 140);  F('SGN', 'MNL', 2.7, 115);  F('PNH', 'REP', 1.0, 55);
   F('DPS', 'LOP', 0.8, 35);
   F('MNL', 'ENI', 1.3, 95);   F('MNL', 'CEB', 1.5, 55);   F('MNL', 'IAO', 1.9, 90);   F('MNL', 'TAG', 1.5, 65);

@@ -93,7 +93,7 @@ eq('squad leader with 3 mates: -50%', ai3.totals.squad, -425);
 eq('squad leader with 6 mates: free', ai6.totals.squad, -850);
 var ext = MM.plan(st([{ kind: 'allin', trip: 'vietnam' }, stop('saigon', 3)]));
 ok('ALL IN + DIY extension: days add, leg Hoi An → Saigon computed', ext.totals.days >= 17 && ext.legs.length === 1 && ext.legs[0].from === 'hoi-an');
-ok('ALL IN trip days are 13 nights + 1 for every trip', MM.ALL_IN.every(function (t) { return MM.plan(st([{ kind: 'allin', trip: t.id }])).totals.days === t.days; }));
+ok('an ALL IN trip on its own runs its real nights + the day you leave', MM.ALL_IN.every(function (t) { return MM.plan(st([{ kind: 'allin', trip: t.id }])).totals.days === MM.allInNights(t) + 1; }));
 ok('Wednesday ALL IN with a Saturday start warns', MM.plan(st([{ kind: 'allin', trip: 'vietnam' }], { start: '2026-11-21' })).warnings.some(function (w) { return /departs every Wed/.test(w.m); }));
 ok('Wednesday ALL IN with a Wednesday start does not', !MM.plan(st([{ kind: 'allin', trip: 'vietnam' }], { start: '2026-11-18' })).warnings.some(function (w) { return /departs every/.test(w.m); }));
 eq('next Wednesday departure from a Saturday', MM.util.isoDate(MM.nextDeparture(MM.ALL_IN[0], MM.util.parseDate('2026-11-21'))), '2026-11-25');
@@ -217,7 +217,7 @@ profiles.forEach(function (pp) {
   var f = fl[0], key = f.from + '|' + f.to + '|' + leg.date;
   MM.FARES[key] = { ok: true, min: f.e.u - 20, max: f.e.u + 60 };
   var cheap = MM.plan(s0);
-  ok('lowest real fare replaces the typical one in leg + total', cheap.legs[0].u === base.legs[0].u - 20 && cheap.totals.transport === base.totals.transport - 20 && cheap.legs[0].fare.min === f.e.u - 20 && cheap.legs[0].fare.max === f.e.u + 60);
+  ok('lowest real fare replaces the typical one in the leg and the flights (never in the trip total)', cheap.legs[0].u === base.legs[0].u - 20 && cheap.totals.flights === base.totals.flights - 20 && cheap.totals.transport === base.totals.transport && cheap.totals.total === base.totals.total && cheap.legs[0].fare.min === f.e.u - 20 && cheap.legs[0].fare.max === f.e.u + 60);
   var und = MM.plan(Object.assign({}, s0, { start: '' }));
   ok('no dates: typical fares only', !und.legs[0].fare && und.legs[0].u === base.legs[0].u);
   MM.FARES = {};
@@ -312,7 +312,7 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('crew summary: tours sit under their own stop with price and day', sum.stops[0].tours.length === 1 && sum.stops[0].tours[0].name === ids.hn.n && sum.stops[0].tours[0].usd === Math.round(ids.hn.usd) && sum.stops[0].tours[0].day > 0 && /^\d{4}-\d\d-\d\d$/.test(sum.stops[0].tours[0].date));
   ok('crew summary: travel between stops hangs off the stop it leaves', sum.stops[0].next && sum.stops[0].next.to === 'Hoi An' && sum.stops[1].next.to === 'Ho Chi Minh City' && sum.stops[2].next === null && sum.stops[0].next.usd > 0);
   ok('crew summary: dates run from the start date to the last day', sum.start === s.start && sum.end > sum.start && sum.stops[0].from === s.start && sum.datesLabel === 'Dates are fixed');
-  ok('crew summary: carries the guest\'s own budget and what is left', b.guestBudget === 900 && b.budgetLeft === 900 - b.total);
+  ok('crew summary: carries the guest\'s own budget and what is left, flights they book included', b.guestBudget === 900 && b.budgetLeft === 900 - pl.totals.spend);
   ok('crew summary survives a JSON round trip (it travels in the lead)', JSON.stringify(JSON.parse(JSON.stringify(sum))) === JSON.stringify(sum));
   ok('crew summary is small enough to email (under 12 KB for a 3-stop trip)', JSON.stringify(sum).length < 12000);
 
@@ -452,7 +452,7 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('every place pair prints a clean 24-hour arrival time, and "next day" agrees with the clock', (function () {
     var ids = Object.keys(MM.PLACES), badArr = [];
     ids.forEach(function (a) { ids.forEach(function (b) { if (a === b) return; MM.legOptions(a, b).forEach(function (o) {
-      var tot = Math.round(((o.ovn ? 19.5 : 8.5) + o.h) * 60 / 5) * 5, want = (function () { var m = tot % 1440, hh = Math.floor(m / 60), mm = m % 60; return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; })();
+      var tot = Math.round((o.dep + o.h) * 60 / 5) * 5, want = (function () { var m = tot % 1440, hh = Math.floor(m / 60), mm = m % 60; return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; })();
       if (!/^\d\d:\d\d$/.test(o.arrive) || o.arrive !== want || o.arriveNext !== (tot >= 1440)) badArr.push(a + '>' + b + ' ' + o.arrive + ' vs ' + want);
     }); }); });
     return badArr.length === 0; })());
@@ -528,6 +528,87 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
       return sm.stage.n === 3 && sm.stage.parent === 'MM-ABC234' && sm.stage.from.name === 'Ho Chi Minh City' && sm.stage.been.length === 3 && sm.stage.arrival.to === 'Phnom Penh' && /STAGE 3 OF THEIR JOURNEY/.test(txt) && /Already been to: Hanoi, Hoi An/.test(txt)
         && lp.stage.from === 'saigon' && lp.stage.parent === 'MM-ABC234' && bad.stage.parent === '' && bad.stage.n === 2 && plain.stage === null && sm.flags.some(function (f) { return /Only the new stops need checking/.test(f.text); }); })());
   })();
+})();
+
+/* ---------- meet-ups + Find your crew ---------- */
+(function () {
+  var A = st([stop('hanoi', 3), stop('hoi-an', 3)], { start: '2027-01-13' }), B = st([stop('hanoi', 4), stop('hoi-an', 3)], { start: '2027-01-12' });
+  var o = MM.overlap(A, B);
+  ok('meet-ups: two dated trips through the same towns overlap night by night', o.dated && o.ranges.length === 2 && o.ranges[0].p === 'hanoi' && o.ranges[0].nights === 3 && o.ranges[1].p === 'hoi-an', JSON.stringify(o.ranges.map(function (r) { return r.p + r.nights; })));
+  var u = MM.overlap(st([stop('hanoi', 3)]), B);
+  ok('meet-ups: without dates, just the towns both include (and no near misses to report)', !u.dated && u.shared[0] === 'hanoi' && u.ranges.length === 0 && Array.isArray(u.near) && !u.near.length);
+  var far = MM.overlap(st([stop('hanoi', 3)], { start: '2027-01-01' }), st([stop('hanoi', 3)], { start: '2027-01-05' }));
+  ok('meet-ups: the same town a day or two apart is a near miss', far.dated && !far.ranges.length && far.near.length === 1 && far.near[0].p === 'hanoi');
+
+  var me = function (o) { return MM.cleanCrew(Object.assign({ on: true, consent: true, adult: true, age: '22-25', gender: 'woman', want: { who: 'anyone', ages: 'near' } }, o || {})); };
+  ok('Find your crew: nothing unless they switched it on, agreed and said they are 18 or over', MM.cleanCrew({ on: true, age: '22-25', adult: true }) === null && MM.cleanCrew({ on: true, age: '22-25', consent: true }) === null && MM.cleanCrew({ on: false, age: '22-25', consent: true, adult: true }) === null && !!me());
+  ok('Find your crew: an age bracket we do not offer (under 18) is refused', MM.cleanCrew({ on: true, consent: true, adult: true, age: '16-17' }) === null && MM.cleanCrew({ on: true, consent: true, adult: true }) === null);
+  var junk = me({ gender: 'robot', life: ['gap-year', 'gap-year', 'astronaut', 'quit-job', 'remote', 'sabbatical'], vibes: ['party', 'nope', 'food', 'chill', 'surf'], home: '  United   Kingdom  ', about: '<b onmouseover=alert(1)>hi</b>\n' + 'x'.repeat(300), want: { who: 'women', ages: 'everyone', solo: 'yes' }, extra: 'dropped' });
+  ok('Find your crew: only known values survive, picks are capped at 3 and deduplicated', junk.gender === '' && junk.life.join() === 'gap-year,quit-job,remote' && junk.vibes.join() === 'party,food,chill' && !('extra' in junk), JSON.stringify(junk));
+  ok('Find your crew: free text is plain, single-line and short', junk.home === 'United Kingdom' && junk.about.indexOf('<') < 0 && junk.about.indexOf('\n') < 0 && junk.about.length === 140, JSON.stringify(junk.about.slice(0, 40)));
+  ok('Find your crew: "women only" counts for women; for anyone else it means anyone (and "solo" has to be a real true)', junk.want.who === 'anyone' && me({ want: { who: 'women' } }).want.who === 'women' && me({ gender: 'man', want: { who: 'women' } }).want.who === 'anyone' && junk.want.solo === false && junk.want.ages === 'near');
+
+  var T = function (id, who, party, crew, trip) { return { id: id, name: id, party: party, who: who, crew: crew, state: trip }; };
+  var feb = function (stops, start) { return st(stops.map(function (s) { return stop(s[0], s[1]); }), start ? { start: start } : null); };
+  var sophie = T('S', 's@x', 1, me({ want: { who: 'women', ages: 'near', solo: true }, vibes: ['party', 'islands'], life: ['gap-year'] }), feb([['dumaguete', 2], ['siquijor', 3], ['panglao', 3], ['siargao', 4]], '2027-02-08'));
+  var mia = T('M', 'm@x', 1, me({ vibes: ['party', 'surf'], life: ['quit-job'] }), feb([['siquijor', 3], ['panglao', 3], ['siargao', 4]], '2027-02-10'));
+  var tom = T('T', 't@x', 1, me({ gender: 'man' }), feb([['siquijor', 3], ['panglao', 3]], '2027-02-10'));
+  var pair = T('P', 'p@x', 2, me(), feb([['siquijor', 3]], '2027-02-10'));
+  var older = T('O', 'o@x', 1, me({ age: '36+' }), feb([['siquijor', 3]], '2027-02-10'));
+  var zoe = T('Z', 'z@x', 1, me({ age: '18-21' }), feb([['dumaguete', 2], ['siquijor', 3]]));
+  var again = T('S2', 's@x', 1, me({ want: { who: 'women', ages: 'near', solo: true } }), feb([['siquijor', 3]], '2027-02-10'));
+  var off = T('X', 'x@x', 1, null, feb([['siquijor', 3]], '2027-02-10'));
+  var P = MM.crewPairs([sophie, mia, tom, pair, older, zoe, again, off]);
+  var has = function (a, b) { return P.filter(function (p) { return (p.a === a && p.b === b) || (p.a === b && p.b === a); })[0]; };
+  var sm = has('S', 'M');
+  ok('Find your crew: two travellers in the same towns on the same nights match, with the nights they share', sm && sm.kind === 'together' && sm.nights === 10 && sm.ranges.map(function (r) { return r.p; }).join() === 'siquijor,panglao,siargao' && sm.vibes.join() === 'party', JSON.stringify(sm));
+  ok('Find your crew: the best match comes first', P[0] === sm);
+  ok('Find your crew: someone who asked for women only is never matched with a man', !has('S', 'T') && !!has('M', 'T'));
+  ok('Find your crew: "only people travelling solo" leaves out a pair', !has('S', 'P') && !!has('M', 'P'));
+  ok('Find your crew: "around my age" means the next bracket at most, both ways', !has('M', 'O') && !!has('S', 'Z'));
+  ok('Find your crew: without dates, two or more of the same stops is a "same stops" match', has('S', 'Z').kind === 'route' && has('S', 'Z').nights === 0 && !has('M', 'Z'));
+  ok('Find your crew: a later stage of their own trip never matches them, and someone who did not opt in never appears', !has('S', 'S2') && !P.some(function (p) { return p.a === 'X' || p.b === 'X'; }));
+  var spots = MM.crewSpots([sophie, mia, tom, pair, zoe, off]);
+  ok('Find your crew: hot spots count everyone opted in on a night (filters aside), busiest first, and skip trips without dates', spots[0].p === 'siquijor' && spots[0].peak === 4 && spots[0].nights === 3 && spots[0].ids.indexOf('Z') < 0 && spots[0].ids.indexOf('X') < 0, JSON.stringify(spots[0]));
+  ok('Find your crew: a broken trip is skipped, not a crash', MM.crewPairs([sophie, T('B', 'b@x', 1, me(), 'i=nonsense'), mia]).length === 1);
+})();
+
+/* ---------- 3 Nov 2026 fixes: the night before an ALL IN, flights the guest books, flights that don't fly every day, real ALL IN lengths + prices ---------- */
+(function () {
+  var D = MM.util.fmtDate, wm = function (pl, re) { return pl.warnings.filter(function (w) { return re.test(w.m); }); };
+  // A real guest's trip: Bangkok, Vang Vieng and Luang Prabang, then ALL IN Vietnam. She lands in Hanoi the day before it leaves.
+  var laosFirst = MM.plan(MM.decodeState('i=s.bangkok.3.95q1j+nkhob~s.vang-vieng.3.62yql+7xe1s~s.luang-prabang.3.dihfp+pm9em~a.vietnam~s.siem-reap.3.kt1zh+83ly2~s.koh-rong.3.annyf+4xpxk&d=2027-04-18&p=fast'));
+  var pre = laosFirst.days.filter(function (d) { return d.pre; }), day1 = laosFirst.days.filter(function (d) { return d.kind === 'block'; })[0];
+  ok('arriving the day before an ALL IN trip: that night goes in as its own free night, and the trip starts on its departure day', pre.length === 1 && D(pre[0].date) === 'Tue 27 Apr' && pre[0].loc === 'hanoi' && D(day1.date) === 'Wed 28 Apr' && day1.date.getUTCDay() === 3);
+  ok('... the guest is told it is free (subject to availability) and where to claim it, with no "shift it" warning', wm(laosFirst, /night before is free/).length === 1 && wm(laosFirst, new RegExp(MM.PRE_NIGHT_EMAIL.replace('.', '\\.'))).length === 1 && !wm(laosFirst, /shift it|departs every/).length);
+  ok('... the night before is not charged, and the trip is a day longer (31 days, home Tue 18 May)', laosFirst.totals.days === 31 && D(laosFirst.days[laosFirst.days.length - 1].date) === 'Tue 18 May' && laosFirst.totals.beds === MM.plan(MM.decodeState('i=s.bangkok.3.95q1j+nkhob~s.vang-vieng.3.62yql+7xe1s~s.luang-prabang.3.dihfp+pm9em~a.vietnam~s.siem-reap.3.kt1zh+83ly2~s.koh-rong.3.annyf+4xpxk&p=fast')).totals.beds);
+  ok('... and the flight into Hanoi lands on that night, with its date', pre[0].travel && pre[0].travel.to === 'hanoi' && pre[0].travel.date === '2027-04-27');
+  var first = MM.plan(st([{ kind: 'allin', trip: 'vietnam' }], { start: '2026-11-24' }));
+  ok('an ALL IN trip first, starting the day before it leaves: the first night is the free one', first.days[0].pre && D(first.days[1].date) === 'Wed 25 Nov' && first.days[1].kind === 'block');
+  ok('starting on the departure day itself: no extra night, no warning', (function () { var p0 = MM.plan(st([{ kind: 'allin', trip: 'vietnam' }], { start: '2026-11-25' })); return !p0.days.some(function (d) { return d.pre; }) && !wm(p0, /ALL IN/).length && p0.totals.days === 14; })());
+  var early = MM.plan(MM.decodeState('i=a.vietnam~s.hoi-an.2.l5apf~s.luang-prabang.1~a.laos~s.vang-vieng.1.0a6pp&d=2026-11-25&p=cheap&l=1:balanced'));
+  ok('two days early for an ALL IN: the warning says exactly what to add, and doesn\'t suggest moving an earlier ALL IN', wm(early, /ALL IN Laos departs every Sun, and you'd get to Luang Prabang on Fri 11 Dec\. To fix it, add 1 night in Luang Prabang to get there the day before the Sun 13 Dec departure/).length === 1 && !wm(early, /start your trip/).length, JSON.stringify(wm(early, /ALL IN Laos/)));
+  ok('ALL IN trips run their real nights: Vietnam 13, the Loop 7, Cambodia 14, Indonesia 12, Gili T + Lombok 7, Laos 9', ['vietnam:13', 'loop:7', 'cambodia:14', 'indonesia:12', 'gili-lombok:7', 'laos:9'].every(function (x) { var k = x.split(':'), t = MM.ALL_IN.filter(function (y) { return y.id === k[0]; })[0]; return t && MM.allInNights(t) === +k[1]; }));
+  ok('the Loop from Wed 25 Nov ends on Wed 2 Dec', (function () { var p0 = MM.plan(st([{ kind: 'allin', trip: 'loop' }], { start: '2026-11-25' })); return D(p0.days[p0.days.length - 1].date) === 'Wed 2 Dec'; })());
+  ok('an ALL IN departure is priced for its month (Cambodia $600 in Nov, $700 in Dec, $650 after, $650 with no date)', [['2026-11-26', 600], ['2026-12-03', 700], ['2027-01-07', 650], ['', 650]].every(function (x) { return MM.plan(st([{ kind: 'allin', trip: 'cambodia' }], { start: x[0] })).totals.allin === x[1]; }));
+
+  // Flights: never in the price. The guest books them; the builder shows them on their own.
+  var fs0 = st([stop('hanoi', 3), stop('hoi-an', 3)], { pref: 'fast' }), withFlight = MM.plan(fs0), L0 = withFlight.legs[0];
+  ok('flights are kept out of the total and shown on their own', withFlight.totals.flights > 0 && L0.flightU > 0 && withFlight.totals.transport === L0.u - L0.flightU && withFlight.totals.total === withFlight.totals.beds + withFlight.totals.acts + withFlight.totals.transport + withFlight.totals.fund && withFlight.totals.spend === withFlight.totals.total + withFlight.totals.flights);
+  var bus = MM.plan(st([stop('hanoi', 3), stop('hoi-an', 3)], { pref: 'cheap' }));
+  ok('... a trip with no flights has nothing extra to book', bus.totals.flights === 0 && bus.totals.spend === bus.totals.total);
+  var fsum = MM.crewSummary(fs0, withFlight, {}), ftext = MM.crewText(fsum, {});
+  ok('the crew\'s trip cost (the suggested price) leaves flights out and lists them as the guest\'s to book', fsum.budget.flights === withFlight.totals.flights && fsum.budget.tripCost === withFlight.totals.total - withFlight.totals.fund && MM.suggestBalance(fsum, 0) === fsum.budget.tripCost && /Flights +\$\d+ estimate, NOT included/.test(ftext) && /of it is a flight they book/.test(ftext));
+  ok('the trip sent to the crew carries the flights separately', MM.leadPayload(fs0, withFlight, {}).trip.breakdownUsd.flightsNotIncluded === withFlight.totals.flights);
+
+  // Flights that don't fly every day.
+  var lpTue = MM.plan(st([stop('luang-prabang', 2), stop('hanoi', 2)], { start: '2027-04-25', pref: 'fast' })), lpMon = MM.plan(st([stop('luang-prabang', 1), stop('hanoi', 2)], { start: '2027-04-25', pref: 'fast' }));
+  ok('the direct Luang Prabang → Hanoi flight: a Tuesday gets a warning with the nearest days it flies', lpTue.legs[0].date === '2027-04-27' && wm(lpTue, /The direct Luang Prabang → Hanoi flight only runs Mon, Wed, Thu, Fri and Sat, and you'd fly on Tue 27 Apr\. Fly on Mon 26 Apr or Wed 28 Apr/).length === 1);
+  ok('... a Monday is fine', lpMon.legs[0].date === '2027-04-26' && !wm(lpMon, /direct .* flight only runs/).length);
+  ok('... and it leaves Luang Prabang in the evening, so you land in Hanoi at night', lpMon.legs[0].chosen.dep > 17 && lpMon.legs[0].chosen.arrive >= '21:00');
+  var bv = MM.route('bangkok', 'vang-vieng', 'balanced');
+  ok('Bangkok → Vang Vieng flies to Vientiane (1h20) and takes the train up, not a flight to Luang Prabang', bv && bv.steps.some(function (s) { return s.e.m === 'flight' && [s.from, s.to].sort().join() === 'BKK,VTE'; }) && !bv.steps.some(function (s) { return s.from === 'LPQ' || s.to === 'LPQ'; }));
+  ok('Nacpan island hopping and the sunset cruise run every day', !MM.ACTS['tour-m-island-hopping'].dows && !MM.ACTS['sunset-cruise'].dows && Math.round(MM.ACTS['sunset-cruise'].usd) === 16);
 })();
 
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

@@ -68,7 +68,7 @@
   /* ============================================================
      GRAPH + ROUTING
      ============================================================ */
-  var AIRPORT_COUNTRY = { BKK: 'TH', CNX: 'TH', HKT: 'TH', HAN: 'VN', DAD: 'VN', SGN: 'VN', PNH: 'KH', REP: 'KH', SIHA: 'KH', LPQ: 'LA',
+  var AIRPORT_COUNTRY = { BKK: 'TH', CNX: 'TH', HKT: 'TH', HAN: 'VN', DAD: 'VN', SGN: 'VN', PNH: 'KH', REP: 'KH', SIHA: 'KH', LPQ: 'LA', VTE: 'LA',
     DPS: 'ID', LOP: 'ID', MNL: 'PH', ENI: 'PH', CEB: 'PH', IAO: 'PH', TAG: 'PH', DGT: 'PH' };
   var TV = { cheap: 1.5, balanced: 6, fast: 25 };            // $ you'd pay to save an hour
   var BED_CREDIT = 6;                                       // an overnight bus saves a bed night
@@ -84,6 +84,9 @@
     return { adj: adj, edges: edges };
   }
   function countryOf(node) { return P()[node] ? P()[node].c : AIRPORT_COUNTRY[node] || null; }
+  var AIRPORT_NAME = { BKK: 'Bangkok', CNX: 'Chiang Mai', HKT: 'Phuket', HAN: 'Hanoi', DAD: 'Da Nang', SGN: 'Ho Chi Minh City', PNH: 'Phnom Penh', REP: 'Siem Reap', SIHA: 'Sihanoukville',
+    LPQ: 'Luang Prabang', VTE: 'Vientiane', DPS: 'Bali', LOP: 'Lombok', MNL: 'Manila', ENI: 'El Nido', CEB: 'Cebu', IAO: 'Siargao', TAG: 'Bohol', DGT: 'Dumaguete' };
+  function nodeName(node) { return P()[node] ? P()[node].n : AIRPORT_NAME[node] || node; }
   function weight(e, pref) { return e.u + TV[pref] * (e.h + HOP) - (e.ovn ? BED_CREDIT : 0); }
 
   var routeCache = {};
@@ -131,11 +134,14 @@
     var seen = {}, out = [];
     ['balanced', 'cheap', 'fast'].forEach(function (pref) {
       var rt = route(a, b, pref); if (!rt || seen[rt.sig]) return; seen[rt.sig] = 1;
-      var d = describe(rt, a, b);
-      var dep = rt.ovn ? 19.5 : 8.5, tot = Math.round((dep + rt.h) * 60 / 5) * 5, arrDays = Math.floor(tot / 1440), arrH = (tot % 1440) / 60;   // whole 5-minute steps, so 23:58 rolls over to 00:00 the next day
+      var d = describe(rt, a, b), dep = rt.ovn ? 19.5 : 8.5, before = 0, flightU = 0;
+      // A flight that leaves at a set time sets the clock for the whole journey: be at the airport an hour and a half before it.
+      for (var si = 0; si < rt.steps.length; si++) { var st = rt.steps[si]; if (st.e.at && st.e.at[st.from] != null) { dep = Math.max(0, st.e.at[st.from] - 1.5 - before); break; } before += st.e.h + HOP; }
+      rt.steps.forEach(function (s) { if (s.e.m === 'flight') flightU += s.e.u; });
+      var tot = Math.round((dep + rt.h) * 60 / 5) * 5, arrDays = Math.floor(tot / 1440), arrH = (tot % 1440) / 60;   // whole 5-minute steps, so 23:58 rolls over to 00:00 the next day
       var hh = Math.floor(arrH), mm2 = tot % 60;
       var arrive = (hh < 10 ? '0' : '') + hh + ':' + (mm2 < 10 ? '0' : '') + mm2;
-      out.push({ key: pref, label: PREF_LABEL[pref], route: rt, h: rt.h, u: rt.u, ovn: rt.ovn, nights: rt.nights, main: d.main, modeLabel: d.label, mm: d.mm,
+      out.push({ key: pref, label: PREF_LABEL[pref], route: rt, h: rt.h, u: rt.u, flightU: Math.round(flightU), dep: dep, ovn: rt.ovn, nights: rt.nights, main: d.main, modeLabel: d.label, mm: d.mm,
         arrive: arrive, arriveNext: arrDays > 0, odd: rt.nights < 2 && ((arrH < 5.5) || (!rt.ovn && arrH >= 22.5)) });
     });
     // collapse labels when only one distinct route exists
@@ -164,6 +170,11 @@
   function blockPlaces(trip) { return trip.stops.map(function (s) { return s.p; }); }
   function blockFirst(trip) { return trip.stops[0].p; }
   function blockLast(trip) { return trip.stops[trip.stops.length - 1].p; }
+  // How long an ALL IN trip really runs: the nights from its departure to its end date. A trip sold as "7-Day" that ends on the same weekday a week later is 7 nights.
+  function allInNights(trip) { return trip.nights != null ? trip.nights : trip.days - 1; }
+  // What a departure costs: a few trips are dearer in some months (Cambodia in December). Without a date, the usual price.
+  function allInPrice(trip, date) { var k = date ? isoDate(date).slice(0, 7) : ''; return k && trip.prices && trip.prices[k] != null ? trip.prices[k] : trip.usd; }
+  MM.allInNights = allInNights; MM.allInPrice = allInPrice;
 
   function defaultState() { return { items: [], start: '', pref: 'balanced', legPick: {}, fund: 18, crew: 0, budget: 0 }; }
   MM.defaultState = defaultState;
@@ -254,7 +265,13 @@
     var timeline = [];                     // {t:'bed'|'epic'|'move'|'block', seg, ...}
     if (originLeg && originLeg.nights > 0) for (var om = 0; om < originLeg.nights; om++) timeline.push({ t: 'move', si: -1, leg: originLeg, m: om, of: originLeg.nights });
     segs.forEach(function (s, si) {
-      if (s.kind === 'allin') { for (var k = 0; k < s.trip.days - 1; k++) timeline.push({ t: 'block', si: si, k: k, trip: s.trip }); }
+      if (s.kind === 'allin') {
+        // Getting there the day before it leaves is how it's meant to be done: that night is free (subject to availability), so it goes in as its own night.
+        var reach = start ? addDays(start, timeline.length) : null;
+        if (reach && s.trip.status === 'live' && (s.trip.dep - reach.getUTCDay() + 7) % 7 === 1) { s.pre = true; timeline.push({ t: 'pre', si: si, trip: s.trip }); }
+        s.departs = start ? addDays(start, timeline.length) : null; s.usd = allInPrice(s.trip, s.departs);
+        for (var k = 0; k < allInNights(s.trip); k++) timeline.push({ t: 'block', si: si, k: k, trip: s.trip });
+      }
       else {
         var hasEpic = s.epics.length > 0, k1 = hasEpic ? Math.ceil(s.n / 2) : s.n, k2 = s.n - k1;
         for (var a1 = 0; a1 < k1; a1++) timeline.push({ t: 'bed', si: si, first: a1 === 0 });
@@ -295,10 +312,15 @@
         day.loc = null; day.travel = tn.leg; day.slots = { am: false, pm: false, eve: false };
         day.title = tn.of > 1 ? 'On the move · night ' + (tn.m + 1) + ' of ' + tn.of : 'Overnight journey';
         day.moveTo = tn.leg.to;
+      } else if (tn.t === 'pre') {
+        day.kind = 'stay'; day.pre = true; day.loc = tn.trip.stops[0].p; day.title = P()[day.loc].n + ' · the night before ALL IN ' + tn.trip.n; day.slots = { am: false, pm: false, eve: false };
+        day.note = 'The night before the trip is free (subject to availability). Claim it at ' + MM.PRE_NIGHT_EMAIL + '.';
       } else if (tn.t === 'block') {
         day.loc = tn.trip.stops[0].p; day.title = 'ALL IN ' + tn.trip.n + ' · day ' + (tn.k + 1); day.slots = { am: false, pm: false, eve: false };
         day.blockTrip = tn.trip;
       }
+      // the same-day journey into an ALL IN trip belongs to the day they arrive (the night before, if they have one)
+      if ((tn.t === 'pre' || (tn.t === 'block' && tn.k === 0 && !seg.pre)) && !(timeline[k - 1] && timeline[k - 1].t === 'move')) { var into = tn.si > 0 ? legBetween[tn.si - 1] : originLeg; if (into) day.travel = into; }
       out.days.push(day);
     });
     // leg for same-day travel that falls on a stay day already attached (day.travel). Overnight leg shows on the move/arrival day.
@@ -385,19 +407,26 @@
       if (l.chosen.h >= 18 && !l.chosen.ovn) out.warnings.push({ t: 'info', m: P()[l.from].n + ' → ' + P()[l.to].n + ' is a very long journey. Consider the flight option.' });
     });
     out.unscheduled.forEach(function (u) { out.warnings.push({ t: 'warn', p: u.p, m: u.act.n + ' at ' + P()[u.p].n + ' doesn\'t fit: ' + u.why + '.' }); });
-    // ALL IN departure day
+    // ALL IN departure day: arriving on it, or the day before (the free night), is right. Otherwise say exactly what to change.
     segs.forEach(function (s, si) {
       if (s.kind !== 'allin') return;
-      var startDay = 0; timeline.forEach(function (tn, k) { if (tn.t === 'block' && tn.si === si && tn.k === 0) startDay = k; });
-      var dd = out.days[startDay];
-      if (dd && dd.date && dd.date.getUTCDay() !== s.trip.dep && s.trip.status === 'live') out.warnings.push({ t: 'warn', m: 'ALL IN ' + s.trip.n + ' departs every ' + DOWN[s.trip.dep] + '. Your start is a ' + DOWN[dd.date.getUTCDay()] + ': shift it to line up.' });
+      var here = P()[s.first].n, dd = s.departs;
+      if (s.pre) out.warnings.push({ t: 'info', m: 'You get to ' + here + ' the day before ALL IN ' + s.trip.n + ' leaves (' + fmtDate(dd) + '), so the night before is free (subject to availability). Claim it at ' + MM.PRE_NIGHT_EMAIL + '.' });
+      else if (dd && dd.getUTCDay() !== s.trip.dep && s.trip.status === 'live') {
+        var wait = (s.trip.dep - dd.getUTCDay() + 7) % 7, late = 7 - wait, prev = si > 0 && segs[si - 1].kind === 'stop' ? segs[si - 1] : null;
+        var nights = function (n) { return n + (n === 1 ? ' night' : ' nights'); }, days = function (n) { return n + (n === 1 ? ' day' : ' days'); };
+        // only suggest moving the start date when nothing comes before this trip: an earlier ALL IN has its own departure day to keep
+        var later = (prev ? 'add ' + nights(wait - 1) + ' in ' + P()[prev.p].n : si === 0 ? 'start your trip ' + days(wait - 1) + ' later' : 'add ' + nights(wait - 1) + ' before it') + ' to get there the day before the ' + fmtDate(addDays(dd, wait)) + ' departure (that night is free)';
+        var sooner = prev && prev.n > late ? 'take ' + nights(late) + ' off ' + P()[prev.p].n : si === 0 ? 'start your trip ' + days(late) + ' earlier' : '';
+        out.warnings.push({ t: 'warn', m: 'ALL IN ' + s.trip.n + ' departs every ' + DOWN[s.trip.dep] + ', and you\'d get to ' + here + ' on ' + fmtDate(dd) + '. To fix it, ' + later + (sooner ? ', or ' + sooner + ' to make the ' + fmtDate(addDays(dd, -late)) + ' one' : '') + '.' });
+      }
       if (s.trip.status === 'soon') out.warnings.push({ t: 'info', m: 'ALL IN ' + s.trip.n + ' is launching soon. Pop your details in and you\'re first on the list.' });
     });
 
     /* ---- 7. totals ---- */
     var beds = 0, acts = 0, transport = 0, allin = 0, payDay = 0, estAny = false, bedNights = 0, coveredBed = 0, stopCount = {};
     segs.forEach(function (s, si) {
-      if (s.kind === 'allin') { allin += s.trip.usd; blockPlaces(s.trip).forEach(function (p) { stopCount[p] = 1; }); return; }
+      if (s.kind === 'allin') { allin += s.usd; blockPlaces(s.trip).forEach(function (p) { stopCount[p] = 1; }); return; }
       stopCount[s.p] = 1;
       var covered = 0; s.inline.forEach(function (a) { if (a.multi && a.multi.covers) covered += Math.max(0, a.multi.d - 1); });
       var billable = Math.max(0, s.n - covered);
@@ -407,6 +436,7 @@
     });
     // dated flights: once the guest has dates and a live fare feed has answered, price each flight at the lowest fare found for its day
     out.days.forEach(function (d) { if (d.travel && d.date && !d.travel.date) d.travel.date = d.date.toISOString().slice(0, 10); });
+    out.legs.forEach(function (l) { l.flightU = l.chosen.flightU || 0; });
     if (MM.FARES) out.legs.forEach(function (l) {
       if (!l.date) return;
       var delta = 0, lo = 0, hi = 0, got = 0, fl = 0;
@@ -415,17 +445,29 @@
         var f = !s.e.live && MM.FARES[s.from + '|' + s.to + '|' + l.date];
         if (f && f.min != null) { got++; delta += f.min - s.e.u; lo += f.min; hi += f.max; }
       });
-      if (got) { l.u = Math.max(0, Math.round(l.u + delta)); l.chosen.u = l.u; l.chosen.fare = l.fare = { min: Math.round(lo), max: Math.round(hi), n: got, of: fl, date: l.date }; }
+      if (got) { l.u = Math.max(0, Math.round(l.u + delta)); l.chosen.u = l.u; l.flightU = l.chosen.flightU = Math.max(0, Math.round(l.flightU + delta)); l.chosen.fare = l.fare = { min: Math.round(lo), max: Math.round(hi), n: got, of: fl, date: l.date }; }
     });
-    out.legs.forEach(function (l) { transport += l.u; });
+    // Flights are never in the price: the guest books them and we suggest the best ones. Everything else on a leg (transfers, buses, boats, trains) is.
+    var flights = 0;
+    out.legs.forEach(function (l) { transport += l.u - l.flightU; flights += l.flightU; });
+    // a flight that doesn't fly every day: say so when the day they'd fly has none
+    out.legs.forEach(function (l) {
+      var d = parseDate(l.date); if (!d) return;
+      l.chosen.route.steps.forEach(function (s) {
+        if (!s.e.dows || s.e.dows.indexOf(d.getUTCDay()) > -1) return;
+        var near = function (dir) { for (var i = 1; i < 7; i++) { var x = addDays(d, dir * i); if (s.e.dows.indexOf(x.getUTCDay()) > -1) return x; } return d; };
+        var runs = s.e.dows.map(function (n) { return DOWN[n]; }), runsTxt = runs.length > 1 ? runs.slice(0, -1).join(', ') + ' and ' + runs[runs.length - 1] : runs[0];
+        out.warnings.push({ t: 'warn', m: 'The direct ' + nodeName(s.from) + ' → ' + nodeName(s.to) + ' flight only runs ' + runsTxt + ', and you\'d fly on ' + fmtDate(d) + '. Fly on ' + fmtDate(near(-1)) + ' or ' + fmtDate(near(1)) + ' instead, or expect a connection that takes longer and costs more.' });
+      });
+    });
     var blockDays = 0;
-    segs.forEach(function (s) { if (s.kind === 'allin') blockDays += s.trip.days - 1; });
+    segs.forEach(function (s) { if (s.kind === 'allin') blockDays += allInNights(s.trip); });
     var diyDays = Math.max(0, N - blockDays);
     var fund = Math.round(diyDays * (state.fund || 0) + blockDays * (state.fund || 0) * 0.4);
     var squad = 0, mates = state.crew || 0;
     if (allin) squad = mates >= 6 ? -allin : mates >= 3 ? -Math.round(allin * 0.5) : 0;
     // squad perk applies per ALL IN block (leader's own ticket) — only the first block is eligible
-    if (allin && squad) { var first = segs.filter(function (s) { return s.kind === 'allin'; })[0]; squad = mates >= 6 ? -first.trip.usd : -Math.round(first.trip.usd * 0.5); }
+    if (allin && squad) { var first = segs.filter(function (s) { return s.kind === 'allin'; })[0]; squad = mates >= 6 ? -first.usd : -Math.round(first.usd * 0.5); }
     var total = Math.round(beds + acts + transport + allin + squad + fund);
     // distance + countries + places
     var seq = []; segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (st) { seq.push(st.p); }); else seq.push(s.p); });
@@ -434,9 +476,11 @@
     var ctry = {}; dedup.forEach(function (p) { ctry[P()[p].c] = 1; });
     out.places = dedup; out.countries = Object.keys(ctry); out.km = Math.round(km);
     out.stops = segs; out.segs = segs;
-    out.totals = { nights: N, days: N ? N + 1 : 0, bedNights: bedNights, coveredBed: coveredBed, beds: Math.round(beds), acts: Math.round(acts), transport: Math.round(transport), allin: allin, squad: squad,
-      fund: fund, total: total, payOnDay: payDay, est: estAny, stops: Object.keys(stopCount).length, overnightLegs: out.legs.filter(function (l) { return l.ovn; }).length,
-      diy: Math.round(beds + acts + transport + fund), mates: mates, budget: +state.budget || 0, budgetLeft: (+state.budget || 0) - total };
+    // total = what the trip costs without flights (the price is built from it). spend = that plus the flights they book themselves, for anything that compares what the traveller pays.
+    flights = Math.round(flights);
+    out.totals = { nights: N, days: N ? N + 1 : 0, bedNights: bedNights, coveredBed: coveredBed, beds: Math.round(beds), acts: Math.round(acts), transport: Math.round(transport), flights: flights, allin: allin, squad: squad,
+      fund: fund, total: total, spend: total + flights, payOnDay: payDay, est: estAny, stops: Object.keys(stopCount).length, overnightLegs: out.legs.filter(function (l) { return l.ovn; }).length,
+      diy: Math.round(beds + acts + transport + fund), mates: mates, budget: +state.budget || 0, budgetLeft: (+state.budget || 0) - (total + flights) };
     out.match = matchAllIn(out, state);
     return out;
   }
@@ -673,7 +717,7 @@
         score += (avg - 2) * 3; if (avg >= 2.6) why.push('prime season in ' + MONTHN[month]);
       }
       // budget
-      var st = isAllIn ? null : plan(toState(stops, prof)), perDay = isAllIn ? tpl.usd / tpl.days : st.totals.total / st.totals.days;
+      var st = isAllIn ? null : plan(toState(stops, prof)), perDay = isAllIn ? tpl.usd / tpl.days : st.totals.spend / st.totals.days;
       if (prof.budget === 'cheap' && perDay > 55) score -= 3; if (prof.budget === 'cheap' && perDay < 40) score += 1;
       if (isAllIn) { score += 1.5; if (tpl.status === 'soon') score -= 0.5; if (prof.crew === 'crew' || prof.crew === 'solo') score += 0.5; }
       return { cand: cand, isAllIn: isAllIn, score: score, why: why, state: isAllIn ? { items: [{ kind: 'allin', trip: tpl.id }] } : toState(stops, prof), days: fitted.days, o: o };
@@ -715,7 +759,7 @@
           var up = { cheap: 'mid', mid: 'splash' }[prof.budget || 'mid'];
           if (up) {
             var rescue = generate(Object.assign({}, prof, { budget: up })).map(function (r) { r.misses = mustMisses(r.state, musts0); return r; }).filter(function (r) { return !r.misses.length; })[0];
-            if (rescue) { rescue.why = ['includes all your must-dos', 'a bit over your budget: about ' + MM.money(Math.round(plan(rescue.state).totals.total / Math.max(1, plan(rescue.state).totals.days)), 'USD') + ' a day'].concat(rescue.why.filter(function (w) { return !/must-do|a day|within|inside/.test(w); })); rescue.overBudget = true; res.unshift(rescue); res = res.slice(0, 3); }
+            if (rescue) { rescue.why = ['includes all your must-dos', 'a bit over your budget: about ' + MM.money(Math.round(plan(rescue.state).totals.spend / Math.max(1, plan(rescue.state).totals.days)), 'USD') + ' a day'].concat(rescue.why.filter(function (w) { return !/must-do|a day|within|inside/.test(w); })); rescue.overBudget = true; res.unshift(rescue); res = res.slice(0, 3); }
           }
         }
       }
@@ -838,12 +882,12 @@
       var stt = toState(stops, prof); stt.fund = fund; var pl = plan(stt);
       var cs = {}; stops.forEach(function (s) { cs[P()[s.p].c] = 1; });
       var coveredN = allow ? allow.filter(function (c) { return stops.some(function (s) { return P()[s.p].c === c; }); }).length : 0;
-      var why = [allow ? (coveredN === allow.length ? 'covers ' + allow.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + ') : 'only reaches ' + coveredN + ' of your ' + allow.length + ' countries') : 'built from scratch for you', 'about ' + MM.money(Math.round(pl.totals.total / pl.totals.days), 'USD') + ' a day' + (pl.totals.total / pl.totals.days > perDay * 1.12 ? ', above your budget' : ', inside your budget')];
+      var why = [allow ? (coveredN === allow.length ? 'covers ' + allow.map(function (c) { return MM.COUNTRIES[c].n; }).join(' + ') : 'only reaches ' + coveredN + ' of your ' + allow.length + ' countries') : 'built from scratch for you', 'about ' + MM.money(Math.round(pl.totals.spend / pl.totals.days), 'USD') + ' a day' + (pl.totals.total / pl.totals.days > perDay * 1.12 ? ', above your budget' : ', inside your budget')];
       if (prof.start && stops[0].p === prof.start) why.push('starts where you land');
       var mh = musts.filter(function (k) { return stops.some(function (s) { return mustHit(s.p, k); }); }).length; if (mh) why.push(mh + ' of your must-dos');
       if (month != null) { var av = stops.reduce(function (a, s) { return a + seasonOf(s.p, month); }, 0) / stops.length; if (av >= 2.5) why.push('prime season in ' + MONTHN[month]); }
       return { cand: { tpl: { id: 'custom-' + i, n: stops.map(function (s) { return P()[s.p].n; }).join(' → '), pitch: 'Picked by scoring every Mad Monkey for your vibe, budget and days, then routing the real buses, boats and flights between them.' } },
-        isAllIn: false, generated: true, score: 100 - i, why: why, state: stt, days: pl.totals.days, o: {}, misses: mustMisses(stt, musts), perDay: pl.totals.total / pl.totals.days, over: pl.totals.total / pl.totals.days > perDay * 1.12 };
+        isAllIn: false, generated: true, score: 100 - i, why: why, state: stt, days: pl.totals.days, o: {}, misses: mustMisses(stt, musts), perDay: pl.totals.spend / pl.totals.days, over: pl.totals.spend / pl.totals.days > perDay * 1.12 };
     });
     // The search ranks on its own rough estimate; the plan has the real total. Keep the routes that really fit the money.
     var fits = built.filter(function (r) { return !r.over; }), over = built.filter(function (r) { return r.over; });
@@ -901,7 +945,7 @@
       if (x.kind === 'place') st.items.splice(x.after + 1, 0, { kind: 'stop', p: x.p, n: P()[x.p].min, acts: [] });
       else st.items[x.seg].acts = st.items[x.seg].acts.concat([x.act]);
       st.legPick = {};
-      var t = plan(st).totals; x.dDays = t.days - base.days; x.dCost = t.total - base.total;
+      var t = plan(st).totals; x.dDays = t.days - base.days; x.dCost = t.spend - base.spend;
     });
     return out.filter(function (x) { return !off[x.k]; }).sort(function (a, b) { return a.rank - b.rank; });
   }
@@ -917,10 +961,12 @@
     pl.days.forEach(function (d) { if (d.date && d.loc && d.kind !== 'depart') out.push({ iso: d.date.toISOString().slice(0, 10), p: d.loc, date: d.date }); });
     return { pl: pl, nights: out };
   }
-  function overlap(a, b) {
-    var A = nightsAt(a), B = nightsAt(b), res = { dated: false, ranges: [], shared: [] };
+  function overlap(a, b) { return cross(nightsAt(a), nightsAt(b), !!a.start && !!b.start); }
+  // A and B are nightsAt() results, worked out once per trip (Find your crew compares every pair of travellers).
+  function cross(A, B, dated) {
+    var res = { dated: false, ranges: [], shared: [], near: [] };
     A.pl.places.forEach(function (p) { if (B.pl.places.indexOf(p) > -1) res.shared.push(p); });
-    if (!a.start || !b.start) return res;
+    if (!dated) return res;
     res.dated = true;
     var bAt = {}; B.nights.forEach(function (n) { bAt[n.iso] = n.p; });
     A.nights.forEach(function (n) {
@@ -931,7 +977,6 @@
     });
     res.ranges.forEach(function (r) { r.label = fmtDate(r.from) + (r.nights > 1 ? ' – ' + fmtDate(r.to) : ''); });
     // near misses: same town within 3 days of each other, for a "shift a day and you'd meet" nudge
-    res.near = [];
     if (!res.ranges.length) A.nights.forEach(function (n) {
       B.nights.forEach(function (m) {
         var gap = Math.abs(n.date - m.date) / 86400000;
@@ -941,6 +986,84 @@
     return res;
   }
   MM.overlap = overlap;
+
+  /* ============================================================
+     FIND YOUR CREW — strangers whose trips cross
+     A guest who ticks "Find your crew" when they send a trip tells us a little about themselves and who they'd like to meet. The crew sees every
+     pair of those travellers who are in the same town on the same nights AND fit each other's wishes, and a real person makes each introduction,
+     only once both have said yes. Nothing here contacts anyone. docs/FIND-YOUR-CREW.md
+     ============================================================ */
+  var FIND = MM.FIND = {
+    AGES: [['18-21', '18–21'], ['22-25', '22–25'], ['26-29', '26–29'], ['30-35', '30–35'], ['36+', '36+']],
+    GENDERS: [['woman', 'A woman'], ['man', 'A man'], ['nonbinary', 'Non-binary'], ['', 'Prefer not to say']],
+    LIFE: [['gap-year', 'Gap year'], ['uni-break', 'Between uni years'], ['graduated', 'Just graduated'], ['career-break', 'Career break'], ['quit-job', 'Quit my job'], ['sabbatical', 'Sabbatical'], ['remote', 'Working remotely']],
+    WHO: [['anyone', 'Anyone'], ['women', 'Women only']],
+    AGEPREF: [['near', 'Around my age'], ['any', 'Any age (18+)']],
+    PICKS: 3
+  };
+  function keysOf(list) { return list.map(function (x) { return x[0]; }); }
+  function plainText(s, n) { return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n); }
+  // Whatever arrives, only known values survive. null unless they switched it on, said they're 18 or over and agreed to be introduced.
+  // "Women only" is honoured for women only; anyone else asking for it is matched with anyone.
+  function cleanCrew(x) {
+    if (!x || typeof x !== 'object' || x.on !== true || x.consent !== true || x.adult !== true) return null;
+    if (keysOf(FIND.AGES).indexOf(x.age) < 0) return null;
+    var gender = keysOf(FIND.GENDERS).indexOf(x.gender) > -1 ? x.gender : '', w = x.want && typeof x.want === 'object' ? x.want : {};
+    var pick = function (arr, allowed) { return (Array.isArray(arr) ? arr : []).filter(function (k, i, a) { return allowed.indexOf(k) > -1 && a.indexOf(k) === i; }).slice(0, FIND.PICKS); };
+    return { on: true, age: x.age, gender: gender, home: plainText(x.home, 40), life: pick(x.life, keysOf(FIND.LIFE)), vibes: pick(x.vibes, MM.VIBES.map(function (v) { return v.k; })),
+      about: plainText(x.about, 140), want: { who: w.who === 'women' && gender === 'woman' ? 'women' : 'anyone', ages: w.ages === 'any' ? 'any' : 'near', solo: w.solo === true }, consent: true, adult: true };
+  }
+  // Does traveller b fit what traveller a asked for? ("around my age" = the same age bracket or the next one either side)
+  function crewFits(a, b) {
+    var wa = a.crew.want, ages = keysOf(FIND.AGES);
+    if (wa.who === 'women' && b.crew.gender !== 'woman') return false;
+    if (wa.ages === 'near' && Math.abs(ages.indexOf(a.crew.age) - ages.indexOf(b.crew.age)) > 1) return false;
+    return !(wa.solo && (b.party || 1) > 1);
+  }
+  function crewTrips(travellers) {
+    return (travellers || []).map(function (t) {
+      if (!t || !t.crew || !t.crew.on) return null;
+      var s = typeof t.state === 'string' ? decodeState(t.state) : t.state, at;
+      try { at = s && s.items && s.items.length ? nightsAt(s) : null; } catch (e) { at = null; }
+      return at ? { t: t, s: s, at: at } : null;
+    }).filter(Boolean);
+  }
+  // Every pair of opted-in travellers who fit each other's wishes and whose trips cross, best first:
+  //   together = the same town on the same nights · near = the same town a day to three apart · route = two or more of the same stops, dates not set yet.
+  // travellers: [{ id, name, party, who (the same string for the same person, e.g. their email, so a second stage of their own trip never matches them), state, crew: cleanCrew(...) }]
+  function crewPairs(travellers) {
+    var T = crewTrips(travellers), out = [];
+    var both = function (x, y) { return x.filter(function (k) { return y.indexOf(k) > -1; }); };
+    for (var i = 0; i < T.length; i++) for (var j = i + 1; j < T.length; j++) {
+      var A = T[i], B = T[j];
+      if (A.t.who && A.t.who === B.t.who) continue;
+      if (!crewFits(A.t, B.t) || !crewFits(B.t, A.t)) continue;
+      var ov = cross(A.at, B.at, !!A.s.start && !!B.s.start), nights = ov.ranges.reduce(function (n, r) { return n + r.nights; }, 0);
+      var kind = nights ? 'together' : ov.dated ? (ov.near.length ? 'near' : '') : ov.shared.length >= 2 ? 'route' : '';
+      if (!kind) continue;
+      var vibes = both(A.t.crew.vibes, B.t.crew.vibes), life = both(A.t.crew.life, B.t.crew.life);
+      out.push({ a: A.t.id, b: B.t.id, kind: kind, nights: nights, ranges: ov.ranges, near: ov.near, shared: ov.shared, vibes: vibes, life: life,
+        score: nights * 10 + (kind === 'near' ? 4 : kind === 'route' ? 2 : 0) + vibes.length * 3 + life.length * 2 });
+    }
+    return out.sort(function (x, y) { return y.score - x.score; });
+  }
+  // Where opted-in travellers stack up: a town, a run of nights with two or more of them there, who, and the most on any one night. Good nights for a meet-up at the hostel bar.
+  function crewSpots(travellers) {
+    var at = {};
+    crewTrips(travellers).forEach(function (x) {
+      if (!x.s.start) return;
+      x.at.nights.forEach(function (n) { var k = n.p + '|' + n.iso; at[k] = at[k] || { p: n.p, date: n.date, ids: [] }; if (at[k].ids.indexOf(x.t.id) < 0) at[k].ids.push(x.t.id); });
+    });
+    var nights = Object.keys(at).map(function (k) { return at[k]; }).filter(function (n) { return n.ids.length >= 2; }).sort(function (a, b) { return a.p < b.p ? -1 : a.p > b.p ? 1 : a.date - b.date; }), out = [];
+    nights.forEach(function (n) {
+      var last = out[out.length - 1];
+      if (last && last.p === n.p && n.date - last.to === 86400000) { last.to = n.date; last.nights++; last.peak = Math.max(last.peak, n.ids.length); n.ids.forEach(function (id) { if (last.ids.indexOf(id) < 0) last.ids.push(id); }); }
+      else out.push({ p: n.p, from: n.date, to: n.date, nights: 1, peak: n.ids.length, ids: n.ids.slice() });
+    });
+    out.forEach(function (s) { s.label = fmtDate(s.from) + (s.nights > 1 ? ' – ' + fmtDate(s.to) : ''); });
+    return out.sort(function (a, b) { return b.peak - a.peak || a.from - b.from; });
+  }
+  MM.cleanCrew = cleanCrew; MM.crewFits = crewFits; MM.crewPairs = crewPairs; MM.crewSpots = crewSpots;
 
 
   /* ============================================================
@@ -1117,12 +1240,12 @@
     var t = pl.totals, L = [];
     L.push('MY MAD MONKEY TRIP');
     L.push(routeLine(pl));
-    L.push(t.days + ' days · ' + t.stops + (t.stops === 1 ? ' stop · ' : ' stops · ') + pl.countries.length + (pl.countries.length === 1 ? ' country · ~' : ' countries · ~') + MM.money(t.total, cur) + ' est.');
+    L.push(t.days + ' days · ' + t.stops + (t.stops === 1 ? ' stop · ' : ' stops · ') + pl.countries.length + (pl.countries.length === 1 ? ' country · ~' : ' countries · ~') + MM.money(t.total, cur) + ' est.' + (t.flights ? ' (plus ~' + MM.money(t.flights, cur) + ' of flights I book myself)' : ''));
     L.push('');
     pl.days.forEach(function (d) {
       if (d.kind === 'depart') { L.push('Day ' + d.n + (d.dateLabel ? ' (' + d.dateLabel + ')' : '') + ': check out + onward travel'); return; }
       var s = 'Day ' + d.n + (d.dateLabel ? ' (' + d.dateLabel + ')' : '') + ': ' + d.title;
-      if (d.travel && d.kind === 'stay') s += ' [' + d.travel.chosen.modeLabel + ', ~' + hoursLabel(d.travel.chosen.h) + ']';
+      if (d.travel && (d.kind === 'stay' || d.kind === 'block')) s += ' [' + d.travel.chosen.modeLabel + ', ~' + hoursLabel(d.travel.chosen.h) + ']';
       if (d.kind === 'move') s += ' [' + d.travel.chosen.modeLabel + ' to ' + P()[d.travel.to].n + ']';
       var a = (d.acts || []).map(function (x) { return MM.ACTS[x.id].n; });
       if (a.length) s += ' · ' + a.join(', ');
@@ -1136,7 +1259,7 @@
     var out = {
       v: 1, createdAt: new Date().toISOString(), source: (meta && meta.source) || 'trip-builder', ref: (meta && meta.ref) || '', fromHostel: (meta && meta.fromHostel) || '',
       contact: contact, trip: { link: (meta && meta.link) || '', state: encodeState(state), route: routeLine(pl), days: pl.totals.days, nights: pl.totals.nights, countries: pl.countries,
-        stops: pl.places, start: state.start || '', estTotalUsd: pl.totals.total, breakdownUsd: { beds: pl.totals.beds, activities: pl.totals.acts, transport: pl.totals.transport, allIn: pl.totals.allin, squadDiscount: pl.totals.squad, spendFund: pl.totals.fund },
+        stops: pl.places, start: state.start || '', estTotalUsd: pl.totals.total, breakdownUsd: { beds: pl.totals.beds, activities: pl.totals.acts, transport: pl.totals.transport, flightsNotIncluded: pl.totals.flights, allIn: pl.totals.allin, squadDiscount: pl.totals.squad, spendFund: pl.totals.fund },
         allInBlocks: (state.items || []).filter(function (i) { return i.kind === 'allin'; }).map(function (i) { return i.trip; }), allInMatch: m ? m.trip.id : '', crewMates: state.crew || 0,
         urgency: urgencyOf(state) },
       itinerary: planText(pl, state, 'USD')

@@ -165,7 +165,7 @@
     if (act === 'docfix') {
       var d = diagnose(), f = d.findings[+b.getAttribute('data-n')]; if (!f || !f.fix) return;
       var before = MM.plan(A.state).totals; A.state = Object.assign(MM.defaultState(), MM.applyFix(A.state, f.fix)); A.auto = false; u.persist(); u.refresh();
-      var after = MM.plan(A.state).totals; u.track('doctor_fix', { id: f.id }); u.toast('Done. ' + (after.total === before.total ? 'Same cost' : (after.total > before.total ? '+' : '−') + money(Math.abs(after.total - before.total))) + ', ' + plural(after.days, 'day') + ' now.');
+      var after = MM.plan(A.state).totals; u.track('doctor_fix', { id: f.id }); u.toast('Done. ' + (after.spend === before.spend ? 'Same cost' : (after.spend > before.spend ? '+' : '−') + money(Math.abs(after.spend - before.spend))) + ', ' + plural(after.days, 'day') + ' now.');
     } else if (act === 'maplist') { e.preventDefault(); X.openList(); }
     else if (act === 'listadd') { var pid = b.getAttribute('data-p'); u.addStop(pid); var box = document.getElementById('hlist'); if (box) box.innerHTML = listHTML(); u.toast(P[pid].n + ' added'); }
     else if (act === 'gtab') { A.open.gc = b.getAttribute('data-c'); u.refresh(); }

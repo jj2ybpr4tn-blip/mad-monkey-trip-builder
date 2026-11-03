@@ -122,7 +122,7 @@ function legsHTML(pl) {
 }
 function costHTML(pl) {
   const T = pl.totals, fundOnly = Math.max(0, T.total - T.beds - T.transport - T.acts - (T.allin || 0));
-  return `<div class="seo__tw"><table class="seo__t"><tbody><tr><td>Dorm beds</td><td>${usd(T.beds)}</td></tr><tr><td>Transport between stops</td><td>${usd(T.transport)}</td></tr><tr><td>Activities listed above</td><td>${usd(T.acts)}</td></tr>${T.allin ? `<tr><td>ALL IN trips</td><td>${usd(T.allin)}</td></tr>` : ''}<tr><td>Food and fun fund</td><td>${usd(fundOnly)}</td></tr><tr class="tot"><td>Estimated total, per person</td><td>~${usd(T.total)}</td></tr></tbody></table></div><p class="fine">Estimates, not quotes. Flights to and from the region aren't included.</p>`;
+  return `<div class="seo__tw"><table class="seo__t"><tbody><tr><td>Dorm beds</td><td>${usd(T.beds)}</td></tr><tr><td>Transport between stops${T.flights ? ' (no flights)' : ''}</td><td>${usd(T.transport)}</td></tr><tr><td>Activities listed above</td><td>${usd(T.acts)}</td></tr>${T.allin ? `<tr><td>ALL IN trips</td><td>${usd(T.allin)}</td></tr>` : ''}<tr><td>Food and fun fund</td><td>${usd(fundOnly)}</td></tr><tr class="tot"><td>Estimated total, per person</td><td>~${usd(T.total)}</td></tr>${T.flights ? `<tr><td>Flights between stops (not included)</td><td>~${usd(T.flights)}</td></tr>` : ''}</tbody></table></div><p class="fine">Estimates, not quotes. Flights aren't included, between stops or to and from the region: you book them, and the crew suggests the best ones.</p>`;
 }
 function dayByDay(pl) {
   return `<ol class="seo__days">${pl.days.filter((d) => d.kind !== 'depart').map((d) => {
@@ -174,7 +174,7 @@ trips.forEach((t) => {
   const pl = MM.plan(t.state), T = pl.totals, cs = pl.countries, places = pl.places, route = MM.routeLine(pl), m = monthsLine(places), p = `/trips/${t.slug}/`;
   const faq = [
     [`How many days does this trip take?`, `${T.days} days (${T.nights} nights) as planned: ${route}. You can add or remove nights in the builder.`],
-    [`How much does this trip cost?`, `About ${usd(T.total)} per person including dorm beds, transport between stops, the activities listed and a daily food and fun fund. Flights to and from the region aren't included. These are estimates and the crew checks them before you pay.`],
+    [`How much does this trip cost?`, `About ${usd(T.total)} per person including dorm beds, transport between stops, the activities listed and a daily food and fun fund. Flights aren't included${T.flights ? ` (the ones between stops come to about ${usd(T.flights)}, and you book them yourself)` : ''}, and nor are flights to and from the region. These are estimates and the crew checks them before you pay.`],
     [`When is the best time to go?`, m.text],
     [`Is it safe to do this trip solo?`, `Yes. Staying in Mad Monkey hostels means you're meeting other travellers from the first night, and the crew can help you with transport and plans on the way. Read the know-before-you-go notes below, especially if you plan to ride a scooter.`],
     [`Can I change the route?`, `Yes. Open it in the builder and add, remove or reorder stops, change the nights and pick different activities. A real person on the crew checks the final trip before you pay.`]];

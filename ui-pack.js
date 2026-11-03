@@ -40,7 +40,7 @@
 
     // 1. where you sleep
     h += '<section class="pack__sec"><h2 class="disp">Where you\'re sleeping</h2><div class="pack__stays">' + pl.segs.map(function (sg, i) {
-      if (sg.kind === 'allin') return '<div class="stay"><span class="stay__n">' + (i + 1) + '</span><div><b>ALL IN ' + esc(sg.trip.n) + '</b><p>' + sg.trip.days + ' days, beds and activities included. Your crew leader sends the meeting point.</p></div></div>';
+      if (sg.kind === 'allin') return '<div class="stay"><span class="stay__n">' + (i + 1) + '</span><div><b>ALL IN ' + esc(sg.trip.n) + '</b><p>' + sg.trip.days + ' days, beds and activities included. Your crew leader sends the meeting point.' + (sg.pre ? ' The night before in ' + esc(P[sg.first].n) + ' is free, subject to availability: claim it at ' + esc(MM.PRE_NIGHT_EMAIL) + '.' : '') + '</p></div></div>';
       var hi = hostelInfo(sg.p), d0 = pl.days.filter(function (d) { return d.si === i && d.loc === sg.p; })[0], dl = pl.days.filter(function (d) { return d.si === i && d.loc === sg.p; }).slice(-1)[0];
       var when = d0 && d0.date ? fmtD(d0.date) + ' to ' + fmtD(U.addDays(dl.date, 1)) : plural(sg.n, 'night');
       return '<div class="stay"><span class="stay__n">' + (i + 1) + '</span><div><b>Mad Monkey ' + esc(P[sg.p].n) + '</b><p>' + esc(MM.COUNTRIES[P[sg.p].c].n) + ' · ' + esc(when) + ' · ' + plural(sg.n, 'night') + '</p>' +
@@ -61,7 +61,7 @@
 
     // 3. day by day
     h += '<section class="pack__sec"><h2 class="disp">Day by day</h2><ol class="days">' + pl.days.map(function (d) {
-      var acts = (d.acts || []).map(function (x) { var a = MM.ACTS[x.id]; return a ? esc(a.n) + ' <i>(' + x.part + ')</i>' : ''; }).filter(Boolean).join(' · '), tr = d.travel && (d.kind === 'stay' || d.kind === 'move') ? 'Travel: ' + esc(P[d.travel.from].n) + ' to ' + esc(P[d.travel.to].n) + ', ' + esc(d.travel.chosen.modeLabel.toLowerCase()) + ', ' + U.hoursLabel(d.travel.h) : '';
+      var acts = (d.acts || []).map(function (x) { var a = MM.ACTS[x.id]; return a ? esc(a.n) + ' <i>(' + x.part + ')</i>' : ''; }).filter(Boolean).join(' · '), tr = d.travel && (d.kind === 'stay' || d.kind === 'move' || d.kind === 'block') ? 'Travel: ' + esc(P[d.travel.from].n) + ' to ' + esc(P[d.travel.to].n) + ', ' + esc(d.travel.chosen.modeLabel.toLowerCase()) + ', ' + U.hoursLabel(d.travel.h) + (d.travel.flightU ? ' (the flight is yours to book)' : '') : '';
       return '<li><span class="days__n">' + d.n + '</span><div><b>' + (d.date ? fmtD(d.date) + ' · ' : '') + esc(d.title || (d.loc ? P[d.loc].n : '')) + '</b>' + (tr ? '<p>' + tr + '</p>' : '') + (acts ? '<p>' + acts + '</p>' : '') + (d.note ? '<p class="days__note">' + esc(d.note) + '</p>' : '') + (d.notes && d.notes.length ? '<p class="days__note">' + d.notes.map(esc).join(' · ') + '</p>' : '') + '</div></li>';
     }).join('') + '</ol></section>';
 
@@ -82,7 +82,7 @@
 
     // 6. packing + costs
     h += '<section class="pack__sec"><h2 class="disp">Packing list</h2><div class="pack__pk">' + MM.packing(pl).map(function (g) { return '<div><b>' + esc(g.g) + '</b><ul class="chk">' + g.items.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul></div>'; }).join('') + '</div></section>';
-    h += '<section class="pack__sec"><h2 class="disp">What it adds up to</h2><table class="pack__t"><tbody><tr><td>Beds</td><td>' + money(T.beds, A.cur) + '</td></tr><tr><td>Transport</td><td>' + money(T.transport, A.cur) + '</td></tr><tr><td>Activities</td><td>' + money(T.acts, A.cur) + '</td></tr>' + (T.allin ? '<tr><td>ALL IN trips</td><td>' + money(T.allin, A.cur) + '</td></tr>' : '') + '<tr><td>Food + fun fund</td><td>' + money(T.fund, A.cur) + '</td></tr>' + (T.squad ? '<tr><td>Squad Leader</td><td>-' + money(-T.squad, A.cur) + '</td></tr>' : '') + '<tr class="tot"><td>Estimated total, per person</td><td>~' + money(T.total, A.cur) + '</td></tr></tbody></table><p class="fine">Estimates, not quotes. Flights to and from the region aren\'t included.</p></section>';
+    h += '<section class="pack__sec"><h2 class="disp">What it adds up to</h2><table class="pack__t"><tbody><tr><td>Beds</td><td>' + money(T.beds, A.cur) + '</td></tr><tr><td>' + (T.flights ? 'Transport (no flights)' : 'Transport') + '</td><td>' + money(T.transport, A.cur) + '</td></tr><tr><td>Activities</td><td>' + money(T.acts, A.cur) + '</td></tr>' + (T.allin ? '<tr><td>ALL IN trips</td><td>' + money(T.allin, A.cur) + '</td></tr>' : '') + '<tr><td>Food + fun fund</td><td>' + money(T.fund, A.cur) + '</td></tr>' + (T.squad ? '<tr><td>Squad Leader</td><td>-' + money(-T.squad, A.cur) + '</td></tr>' : '') + '<tr class="tot"><td>Estimated total, per person</td><td>~' + money(T.total, A.cur) + '</td></tr>' + (T.flights ? '<tr><td>Flights between stops (not included)</td><td>~' + money(T.flights, A.cur) + '</td></tr>' : '') + '</tbody></table><p class="fine">Estimates, not quotes. Flights aren\'t included, between stops or to and from the region: you book them, and we\'ll suggest the best ones.</p></section>';
     h += '<footer class="pack__ft"><b>Questions? The crew is a message away.</b><p>' + (contact ? esc(contact) : 'Reply to your confirmation message and a real person answers.') + '</p>' + A.appCard() + '</footer></article>';
     root.innerHTML = h;
     $('#packprint').addEventListener('click', function () { u.track('pack_print'); window.print(); });

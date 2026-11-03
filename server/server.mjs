@@ -14,6 +14,7 @@
      • GET  /api/live        spots left + price overrides the crew maintains
      • GET  /api/fares       ?from=BKK&to=CNX&date=YYYY-MM-DD  lowest + highest real fare for that day (needs AMADEUS_CLIENT_ID/SECRET)
      • GET  /api/reviews     approved guest quotes per hostel
+     • /api/admin/crew…      Find your crew: opted-in travellers whose trips cross, for the crew to introduce (docs/FIND-YOUR-CREW.md)
      • GET  /api/flow        "where guests go next" from real data
      • POST /api/event       anonymous funnel events
      • /admin                the crew console (token login)
@@ -69,7 +70,7 @@ function store(name, init) {
   stores.push(s); return s;
 }
 const leads = store('leads', []), groups = store('groups', {}), events = store('events', []), live = store('live', { updated: null, notice: '', spots: {}, legs: {}, acts: {}, hostels: {} }),
-  reviews = store('reviews', []), flowRows = store('flow', { rows: [] }), shares = store('shares', {}), waitlist = store('waitlist', []);
+  reviews = store('reviews', []), flowRows = store('flow', { rows: [] }), shares = store('shares', {}), waitlist = store('waitlist', []), intros = store('intros', {});
 const OG_DIR = path.join(DATA, 'og'); fs.mkdirSync(OG_DIR, { recursive: true });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stores.forEach((s) => s.flush()); process.exit(0); });
 
@@ -160,7 +161,29 @@ function holdSheet(tripState) {
   } catch { return null; }
 }
 const publicStatus = (l) => ({ ref: l.ref, status: l.status === 'declined' ? 'declined' : l.status, note: l.publicNote || '', payLink: (l.status === 'ready' || l.status === 'approved') ? (l.payLink || '') : '',
-  hold: l.hold && l.hold.status === 'active' ? { until: l.hold.until } : null });
+  hold: l.hold && l.hold.status === 'active' ? { until: l.hold.until } : null, findCrew: !!(l.findCrew && l.findCrew.on) });
+
+/* ---------- Find your crew: who opted in, whose trips cross, and where the crew is with each introduction ---------- */
+const INTRO = ['new', 'asked', 'yes', 'introduced', 'no'];
+const pairKey = (a, b) => [a, b].sort().join('|');
+const placeN = (id) => (MM.PLACES[id] ? MM.PLACES[id].n : id);
+function crewBoard() {
+  const today = new Date().toISOString().slice(0, 10);
+  const list = leads.get().filter((l) => l.findCrew && l.findCrew.on && l.status !== 'declined').filter((l) => {     // trips that have finished drop off
+    const d = MM.util.parseDate(l.trip.start); return !d || MM.util.isoDate(MM.util.addDays(d, Math.max(0, (+l.trip.days || 1) - 1))) >= today;
+  });
+  const T = list.map((l) => ({ id: l.ref, name: l.contact.name, party: l.contact.partySize, who: String(l.contact.email || l.contact.whatsapp || l.ref).toLowerCase(), state: l.trip.state, crew: l.findCrew }));
+  const iso = (d) => MM.util.isoDate(d), I = intros.get();
+  return {
+    travellers: list.map((l) => ({ ref: l.ref, name: l.contact.name, partySize: l.contact.partySize, via: l.contact.via, email: l.contact.email, whatsapp: l.contact.whatsapp, status: l.status,
+      route: l.trip.route, start: l.trip.start, days: l.trip.days, stops: l.trip.stops, link: l.trip.link, crew: l.findCrew, sample: !!(l.attribution && l.attribution.source === 'demo-seed'), at: l.createdAt })),
+    pairs: MM.crewPairs(T).map((p) => ({ a: p.a, b: p.b, key: pairKey(p.a, p.b), kind: p.kind, nights: p.nights, vibes: p.vibes, life: p.life, score: p.score,
+      ranges: p.ranges.map((r) => ({ place: placeN(r.p), from: iso(r.from), label: r.label, nights: r.nights })), near: p.near.map((n) => ({ place: placeN(n.p), gap: n.gap, a: n.a, b: n.b })),
+      shared: p.shared.map(placeN), intro: I[pairKey(p.a, p.b)] || { status: 'new' } })),
+    spots: MM.crewSpots(T).map((s) => ({ place: placeN(s.p), from: iso(s.from), label: s.label, nights: s.nights, peak: s.peak, ids: s.ids })),
+    labels: { ages: MM.FIND.AGES, genders: MM.FIND.GENDERS, life: MM.FIND.LIFE, who: MM.FIND.WHO, agepref: MM.FIND.AGEPREF, vibes: MM.VIBES.map((v) => [v.k, v.n]), intro: INTRO }
+  };
+}
 const mmFlows = () => {
   const m = {}; const add = (a, b, n, src) => { if (a === b || !MM.PLACES[a] || !MM.PLACES[b]) return; const k = a + '>' + b + '|' + src; m[k] = m[k] || { a, b, n: 0, src }; m[k].n += n; };
   leads.get().forEach((l) => { if (l.status === 'declined') return; const ps = ((l.trip && l.trip.stops) || []).filter((p, i, arr) => i === 0 || p !== arr[i - 1]); for (let i = 1; i < ps.length; i++) add(ps[i - 1], ps[i], 1, 'planning'); });
@@ -201,10 +224,12 @@ async function api(req, res, url) {
       attribution: { ref: clip(b.ref, 40), fromHostel: clip(b.fromHostel, 40), source: clip(b.source, 40) },
       itinerary: clip(b.itinerary, 20000),
       hold: wantHold ? { requested: true, hours: HOLD_HOURS, until: new Date(Date.now() + HOLD_HOURS * 3600000).toISOString(), status: 'active' } : { requested: false },
-      sheet: holdSheet(t.state), publicNote: '', payLink: '', notes: [], history: [{ at: now(), event: 'submitted' }]
+      sheet: holdSheet(t.state), publicNote: '', payLink: '', notes: [], history: [{ at: now(), event: 'submitted' }],
+      findCrew: MM.cleanCrew(b.findCrew)
     };
+    if (rec.findCrew) rec.history.push({ at: now(), event: 'find your crew: on' });
     leads.get().unshift(rec); leads.save();
-    notify(`New trip for review ${ref}: ${rec.contact.name} (${rec.contact.via === 'email' ? 'email ' + rec.contact.email : 'WhatsApp ' + rec.contact.whatsapp}) · ${rec.trip.route} · ${rec.trip.days} days · ~$${rec.trip.estTotalUsd}${wantHold ? ' · BED HOLD requested' : ''}${rec.trip.start ? ' · starts ' + rec.trip.start : ''}`);
+    notify(`New trip for review ${ref}: ${rec.contact.name} (${rec.contact.via === 'email' ? 'email ' + rec.contact.email : 'WhatsApp ' + rec.contact.whatsapp}) · ${rec.trip.route} · ${rec.trip.days} days · ~$${rec.trip.estTotalUsd}${wantHold ? ' · BED HOLD requested' : ''}${rec.trip.start ? ' · starts ' + rec.trip.start : ''}${rec.findCrew ? ' · FIND YOUR CREW' : ''}`);
     return J(200, { ref, status: 'submitted', hold: rec.hold.requested ? { until: rec.hold.until } : null });
   }
   if (p === '/status' && m === 'GET') {
@@ -323,8 +348,18 @@ async function api(req, res, url) {
       if (typeof b.payLink === 'string') l.payLink = /^https:\/\//.test(b.payLink) ? safeUrl(b.payLink, 600) : '';
       if (typeof b.note === 'string' && b.note.trim()) l.notes.push({ at: now(), text: clip(b.note, 1500) });
       if (b.releaseHold && l.hold && l.hold.status === 'active') { l.hold.status = 'released'; l.history.push({ at: now(), event: 'hold released' }); }
+      if (b.findCrewOff && l.findCrew && l.findCrew.on) { l.findCrew.on = false; l.history.push({ at: now(), event: 'find your crew: switched off' }); }
       if (b.extendHoldHours && l.hold && l.hold.requested) { const h = Math.max(1, Math.min(168, +b.extendHoldHours)); l.hold.until = new Date(Math.max(Date.now(), Date.parse(l.hold.until)) + h * 3600000).toISOString(); l.hold.status = 'active'; l.history.push({ at: now(), event: `hold extended ${h}h` }); }
       leads.save(); return J(200, l);
+    }
+    if (ap === '/crew' && m === 'GET') return J(200, crewBoard());
+    if (ap === '/crew/intro' && m === 'PATCH') {
+      const b = await readBody(req, 4096), A = leads.get().find((x) => x.ref === b.a), B = leads.get().find((x) => x.ref === b.b);
+      if (!A || !B || A === B || !INTRO.includes(b.status)) return J(400, { error: 'two trips and a status are needed' });
+      const key = pairKey(A.ref, B.ref), was = (intros.get()[key] || {}).status || 'new', by = clip(b.by, 40).trim();
+      intros.get()[key] = { status: b.status, at: now(), by };
+      if (was !== b.status) [[A, B], [B, A]].forEach(([x, y]) => x.history.push({ at: now(), event: 'find your crew: ' + b.status + ' with ' + y.ref + (by ? ' (' + by + ')' : '') }));
+      intros.save(); leads.save(); return J(200, intros.get()[key]);
     }
     if (ap === '/waitlist' && m === 'GET') return J(200, waitlist.get());
     let wm = ap.match(/^\/waitlist\/([a-z0-9]+)$/);
@@ -396,7 +431,8 @@ function serveStatic(req, res, url) {
   const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
   const headers = { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': rel === 'index.html' ? 'no-cache' : 'public, max-age=300' };
   if (rel === 'config.js') {                                                  // switch the API on when served from here
-    let src = fs.readFileSync(file, 'utf8').replace(/API_BASE:\s*'[^']*'/, "API_BASE: '/api'");
+    // this server stores Find your crew, so the send form offers it
+    let src = fs.readFileSync(file, 'utf8').replace(/API_BASE:\s*'[^']*'/, "API_BASE: '/api'").replace(/FIND_CREW:\s*(true|false)/, 'FIND_CREW: true');
     // photos mirrored to assets/photos (npm run mirror-photos) are used automatically
     if (fs.existsSync(path.join(ROOT, 'assets', 'photos', 'hostel'))) src = src.replace(/PHOTO_BASE:\s*'[^']*'/, "PHOTO_BASE: '/assets/photos'");
     res.writeHead(200, { ...headers, 'Cache-Control': 'no-cache' }); return res.end(src);
@@ -425,7 +461,7 @@ function sharePage(req, res, code, ext) {
   try {
     const pl = MM.plan(MM.decodeState(sh.state)), t = pl.totals;
     title = MM.routeLine(pl) + ' · ' + t.days + ' days';
-    desc = t.days + ' days · ' + pl.countries.length + (pl.countries.length === 1 ? ' country' : ' countries') + ' · about $' + Math.round(t.total).toLocaleString('en-GB') + ' each. Every bus, boat and bed between Mad Monkey hostels. Open it, change it, make it yours.';
+    desc = t.days + ' days · ' + pl.countries.length + (pl.countries.length === 1 ? ' country' : ' countries') + ' · about $' + Math.round(t.total).toLocaleString('en-GB') + ' each' + (t.flights ? ', plus flights you book yourself' : '') + '. Every bus, boat and bed between Mad Monkey hostels. Open it, change it, make it yours.';
   } catch { /* keep the defaults */ }
   sh.views = (sh.views || 0) + 1; shares.save();
   const base = publicBase(req), target = '/#/build/' + sh.state, img = base + '/t/' + code + '.' + (sh.img || 'jpg');

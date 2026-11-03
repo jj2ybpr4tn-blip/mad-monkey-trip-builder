@@ -4,6 +4,11 @@
               madmonkeyhostels.com/all-in-trips + the trip PDFs, Oct 2026).
               Thailand and Laos are live, and every "from" price matches the ALL IN site
               (Cambodia $650, Indonesia $700, Laos $400): the ALL IN site is the source of truth.
+              days   = how the trip is sold ("14-Day"). nights = nights from the departure to the
+                       end date on the ALL IN site's date list; the planner uses nights, so a
+                       trip sold as "7-Day" that ends a week later on the same weekday is 7 nights.
+              prices = the price of a departure in that month where it isn't usd.
+              until  = the last month the ALL IN site sells dates for. Checked 3 Nov 2026.
    SPECIALS — one featured partner trip on the home page (empty right now, see below).
    CLASSICS — DIY routes we recommend when nobody has a packaged trip for it.
               Used by the quiz matcher. EDITORIAL.
@@ -32,45 +37,47 @@
   MM.INCLUDED = ['Dorm beds at Mad Monkey', 'All scheduled transport: transfers, buses, island boats', 'Every activity in the itinerary',
     'Loads of free drinks', 'A free pre-night: arrive the night before and it\'s on us', '24/7 local crew', 'A crew of up to 20'];
   MM.NOT_INCLUDED = ['Flights', 'Travel insurance', 'Personal spending', 'Upgrades + add-ons'];
+  // The free night before an ALL IN trip is subject to availability, and the guest claims it here (ALL IN site, Nov 2026).
+  MM.PRE_NIGHT_EMAIL = 'cs@madmonkeyhostels.com';
   MM.SQUAD = [{ mates: 3, perk: '50% off', long: 'Rally 3 mates and the Squad Leader gets 50% off.' },
               { mates: 6, perk: 'free', long: 'Rally 6 mates and the Squad Leader goes free.' }];
 
   MM.ALL_IN = [
     { id: 'vietnam', nStops: 5, n: 'Vietnam', tag: 'Hanoi → Lan Ha Bay → Ha Giang Loop → Ninh Binh → Hoi An', kicker: 'Northern + Central', days: 14, usd: 850,
-      dep: 3, until: 'Apr 2027', status: 'live', col: 'lime', max: 20, meals: '11 breakfasts · 7 lunches · 5 dinners',
+      dep: 3, nights: 13, until: 'May 2027', status: 'live', col: 'lime', max: 20, meals: '11 breakfasts · 7 lunches · 5 dinners',
       pitch: 'Beer Street in Hanoi, an overnight cruise through Lan Ha Bay, the Loop at altitude, Ninh Binh\'s water caves, then Hoi An. Every bucket-list moment, one crew.',
       hl: ['Ma Pi Leng Pass', 'Ninh Binh', 'Bamboo boats', 'Train Street'], img: ['ninh-binh-day-trip-hoa-lu-trang-an-mua-cave', 'hanoi'],
       stops: [S('hanoi', 4, ['Lan Ha', 'Ha Giang Loop · 4 days, Easy', 'Ninh Binh', 'Street food + Train', 'White Party']), S('hoi-an', 4, ['Cooking class', 'Sunset river', 'Basket', 'bike tour'])] },
     { id: 'loop', nStops: 2, n: 'Ha Giang Loop', tag: 'Hanoi → Ha Giang Loop', kicker: 'Short + spicy', days: 7, usd: 310,
-      dep: 3, until: 'Apr 2027', status: 'live', col: 'pink', max: 20, meals: '7 breakfasts · 3 lunches · 4 dinners',
+      dep: 3, nights: 7, until: 'May 2027', status: 'live', col: 'pink', max: 20, meals: '7 breakfasts · 3 lunches · 4 dinners',
       pitch: 'Street food in Hanoi, then four days through towering peaks, epic passes and homestay dinners on the legendary Loop.',
       hl: ['Train Street', 'Khau Lan Waterfall', 'Ma Pi Leng Pass', 'Ancient villages'], img: ['the-ha-giang-loop-tour-4d-3n-easy-rider', 'hanoi'],
       stops: [S('hanoi', 3, ['Ha Giang Loop · 4 days, Easy', 'Street food + Train', 'Hanoi pub crawl'])] },
     { id: 'cambodia', nStops: 4, n: 'Cambodia', tag: 'Phnom Penh → Siem Reap → Koh Rong → Koh Sdach', kicker: 'Coast to coast', days: 14, usd: 650,
-      dep: 4, until: 'Apr 2027', status: 'live', col: 'yellow', max: 20, meals: '1 breakfast · 3 lunches · 5 dinners',
+      dep: 4, nights: 14, until: 'May 2027', prices: { '2026-11': 600, '2026-12': 700 }, status: 'live', col: 'yellow', max: 20, meals: '1 breakfast · 3 lunches · 5 dinners',
       pitch: 'Phnom Penh\'s history and nightlife, Angkor Wat, a beach party and sunrise rave on Koh Rong, then the hidden oasis of Koh Sdach.',
       hl: ['Angkor Wat', 'Beach fire show', 'Koh Rong', 'Koh Sdach'], img: ['sunrise-angkor-wat-temple-tour', 'koh-rong'],
       stops: [S('phnom-penh', 3, ['S21', 'Sunset river', 'Khmer family', 'Pool party']), S('siem-reap', 4, ['Sunrise Angkor', 'Pub Street', 'floating village', 'pizza']),
               S('koh-rong', 3, ['volleyball', 'fire show']), S('koh-sdach', 3, ['E-bike', 'sunset cruise', 'Snorkelling'])] },
     { id: 'indonesia', nStops: 4, n: 'Indonesia', tag: 'Uluwatu → Nusa Lembongan → Gili T → Kuta Lombok', kicker: 'Island hopping', days: 12, usd: 700,
-      dep: 6, until: 'Apr 2027', status: 'live', col: 'orange', max: 20, meals: '4 breakfasts · 5 lunches · 5 dinners',
+      dep: 6, nights: 12, until: 'May 2027', prices: { '2026-11': 650, '2026-12': 750 }, status: 'live', col: 'orange', max: 20, meals: '4 breakfasts · 5 lunches · 5 dinners',
       pitch: 'Cliffside Uluwatu and a Mt Batur sunrise, manta rays off Nusa Penida, a car-free party island on Gili T, then surf camp in Lombok.',
       hl: ['Mt Batur sunrise', 'Snorkel with turtles', 'Foam party', 'Surf camp'], img: ['mt-batur-sunrise-trekking', 'gili-trawangan-boat-party'],
       stops: [S('uluwatu', 2, ['Mt Batur']), S('nusa-lembongan', 3, ['Nusa Penida', 'Snorkelling (three']), S('gili-trawangan', 3, ['Boat party', 'Foam party', 'Snorkelling adventure']),
               S('kuta-lombok', 3, ['Surf lesson', 'Lombok family'])] },
     { id: 'gili-lombok', nStops: 2, n: 'Gili T + Lombok', tag: 'Gili Trawangan → Kuta Lombok', kicker: 'Short + spicy', days: 7, usd: 450,
-      dep: 4, until: 'Apr 2027', status: 'live', col: 'cyan', max: 20, meals: '4 breakfasts · 5 dinners',
+      dep: 4, nights: 7, until: 'May 2027', status: 'live', col: 'cyan', max: 20, meals: '4 breakfasts · 5 dinners',
       pitch: 'The 7-day sun-and-surf escape: boat parties and snorkelling on car-free Gili T, then your first waves at surf camp in Lombok.',
       hl: ['Boat party', 'Foam party', 'Snorkelling', 'Surf camp'], img: ['gili-trawangan-boat-party', 'surf-camp'],
       stops: [S('gili-trawangan', 3, ['Boat party', 'Foam party', 'Snorkelling adventure']), S('kuta-lombok', 3, ['Surf lesson', 'Secret Gili'])] },
     { id: 'thailand', nStops: 3, n: 'Thailand', tag: 'Bangkok → Chiang Mai → Pai', kicker: 'Temples + jungle', days: 11, usd: 340,
-      dep: 2, until: '', status: 'live', col: 'pink', max: 20, meals: 'Welcome BBQ in Chiang Mai + elephant-day lunch',
+      dep: 2, nights: 10, until: '', status: 'live', col: 'pink', max: 20, meals: 'Welcome BBQ in Chiang Mai + elephant-day lunch',
       pitch: 'Temples, jungle, waterfalls and legendary Mad Monkey nights, from the chaos of Bangkok to the mountains of Pai. 10 nights of beds, every intercity transfer, every activity.',
       hl: ['Elephant sanctuary', 'Bamboo rafting', 'Lod Cave', 'Tipsy tubing'], img: ['karaoke-night-bkk', 'chiang-mai'],
       stops: [S('bangkok', 2, ['Old Town', 'Bangkok pub crawl', 'Beats']), S('chiang-mai', 3, ['Elephant', 'Day Party', 'Ultimate Pub Crawl', 'Grand Canyon']),
               S('pai', 3, ['Tipsy tubing', 'Lod Cave', 'Sunset at Pai']), S('chiang-mai', 1, ['Game Night'])] },
     { id: 'laos', nStops: 4, n: 'Laos', tag: 'Luang Prabang → Nong Khiaw → Muang Ngoi → Vang Vieng', kicker: 'Waterfalls + karsts', days: 10, usd: 400,
-      dep: 0, until: '', status: 'live', col: 'cyan', max: 20, meals: 'Lunch on the Kuang Si + Vang Vieng tours',
+      dep: 0, nights: 9, until: 'May 2027', status: 'live', col: 'cyan', max: 20, meals: 'Lunch on the Kuang Si + Vang Vieng tours',
       pitch: 'Golden temples and Kuang Si falls, a mountain camp and river villages around Nong Khiaw, then caves, kayaking, ziplines and a sunset paramotor in Vang Vieng.',
       hl: ['Kuang Si Falls', 'Nong Khiaw viewpoint', 'Sunset paramotor', 'Tipsy tubing'], img: ['kuang-si-waterfall', 'vang-vieng-tipsy-tubing'],
       stops: [S('luang-prabang', 4, ['Kuang Si', 'Nong Khiaw', 'Stories of', 'Jewellery', 'Night market']), S('vang-vieng', 3, ['paramotor', 'Blue Lagoons', 'Zipline', 'Tipsy tubing', 'pub crawl'])] }
