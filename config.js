@@ -60,6 +60,14 @@ window.MM_CONFIG = {
   // a box that goes nowhere. Demo mode (no LEAD_ENDPOINT) always shows it.
   FIND_CREW: false,
 
+  // "Where next?" at hostel check-in (docs/WHERE-NEXT.md): a guest ticks the ALL IN trips they'd like details on, and the crew's list (#/wherenext-crew)
+  // shows who to message. WHERENEXT_ENDPOINT gets each answer ({ hostel, booking, checkout, name, trips, at }). Blank = demo mode: answers stay on this
+  // device and the crew's list shows sample guests.
+  WHERENEXT_ENDPOINT: '',
+  // The check-in system's own address (host names, comma separated), so "Next" can send the guest back to finish checking in. Any other "back" link is
+  // ignored, so the page can't be used to send someone to a stranger's site.
+  WHERENEXT_RETURN: '',
+
   // Optional. Keeps the pound / euro / dollar / baht conversions fresh: a feed that answers { rates: { GBP: 0.75, ... } } per US dollar, e.g.
   // 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP,EUR,AUD,CAD,THB,IDR,PHP'. Each visitor's browser asks at most once every 12 hours (so that
   // service sees their address). Blank = the built-in rates (22 Oct 2026), which is what the live site uses. Prices are always charged in US dollars.
