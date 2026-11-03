@@ -1167,6 +1167,48 @@
   };
 
   /* ============================================================
+     WHERE NEXT? — the check-in page (#/wherenext) and the crew's list (#/wherenext-crew)
+     The ALL IN trips a guest checking in at a hostel could do next, most likely first: a trip that starts here, then
+     the nearest start, nudged by where Mad Monkey guests go next from here. Each has its first departure after they check
+     out (the same day when it starts here, a day later when they have to get there) and that month's price. A trip
+     whose dates aren't on sale yet is left out.
+     ============================================================ */
+  var WN_COL = { vietnam: 'pink', loop: 'cyan', cambodia: 'lime', indonesia: 'orange', 'gili-lombok': 'yellow', laos: 'purple', thailand: 'blue' };
+  function soldTo(until) { var m = /^([A-Z][a-z]{2})[a-z]* (\d{4})$/.exec(String(until || '')), i = m ? MONTHN.indexOf(m[1]) : -1; return i < 0 ? null : new Date(Date.UTC(+m[2], i + 1, 0)); }
+  function whereNext(hostel, checkout, now) {
+    var out = parseDate(checkout), today = parseDate(isoDate(now || new Date())), base = out && out > today ? out : today, W = flow(), here = P()[hostel];
+    return MM.ALL_IN.filter(function (t) { return t.status === 'live'; }).map(function (t) {
+      var first = t.stops[0].p, dep = nextDeparture(t, first === hostel ? base : addDays(base, 1)), end = soldTo(t.until);
+      if (end && dep > end) return null;
+      var later = t.stops.slice(1).some(function (s) { return s.p === hostel; }), after = out ? Math.round((dep - out) / 86400000) : null;
+      // nearest start first (a trip that starts here beats everything); a trip they're already part-way along goes down; real guest flows nudge it
+      var score = (first === hostel ? 1000 : 0) - (here && P()[first] ? hav(here.ll, P()[first].ll) : 5000) + 60 * ((W[hostel + '>' + first] || {}).w || 0) - (later ? 800 : 0);
+      return { id: t.id, n: 'ALL IN ' + t.n, kicker: t.kicker, days: t.days, route: t.tag, usd: allInPrice(t, dep), dep: isoDate(dep), depLabel: fmtDate(dep), after: after,
+        when: after == null ? 'every ' + DOWN[t.dep] : after === 0 ? 'the day you check out' : after === 1 ? 'the day after you check out' : after + ' days after you check out',
+        col: WN_COL[t.id] || 'lime', img: t.img, score: score };
+    }).filter(Boolean).sort(function (a, b) { return b.score - a.score || (a.dep < b.dep ? -1 : 1); });
+  }
+  // Links in messages leave the site, so they're absolute, and tagged so a booking can be traced back to check-in.
+  function whereNextUrl(id) {
+    var u = id === 'builder' ? MM.ALLIN_URL + '/trip-builder/' : MM.allInUrl(id);
+    if (!/^https?:\/\//.test(u)) u = MM.ALLIN_URL.replace(/\/$/, '') + '/' + u.replace(/^(\.\.?\/)+/, '');
+    return u + (u.indexOf('?') < 0 ? '?' : '&') + 'utm_source=checkin&utm_medium=where-next';
+  }
+  function andList(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+  // The crew's message to a guest who ticked trips at check-in: the next departure of each after they check out. Flights are never included, so it says so.
+  //   g: { name, hostel, checkout }   ticked: trip ids, 'builder' for "somewhere else"   crew: who signs it
+  function whereNextMsg(g, ticked, crew) {
+    var picks = whereNext(g.hostel, g.checkout).filter(function (x) { return (ticked || []).indexOf(x.id) > -1; }), own = (ticked || []).indexOf('builder') > -1;
+    var first = String(g.name || '').trim().split(/\s+/)[0] || 'there', at = P()[g.hostel] ? 'Mad Monkey ' + P()[g.hostel].n : 'Mad Monkey', out = parseDate(g.checkout);
+    var h = 'Hi ' + first + ', it\'s ' + (crew || 'the crew') + ' from Mad Monkey. ';
+    if (!picks.length) return h + 'You said at check-in at ' + at + ' that you\'re not sure where you\'re heading next. You can plan your next leg here, and we\'ll check it for you: ' + whereNextUrl('builder');
+    return h + 'You ticked ' + andList(picks.map(function (x) { return x.n; })) + ' when you checked in at ' + at + ', so here ' + (picks.length > 1 ? 'are the next ones' : 'is the next one') + (out ? ' after you check out on ' + fmtDate(out) : '') + ':\n' +
+      picks.map(function (x) { return x.n + ': ' + x.depLabel + ', ' + x.days + ' days, from $' + x.usd + '. ' + whereNextUrl(x.id); }).join('\n') +
+      '\n$' + MM.DEPOSIT + ' holds your spot. Flights to get there aren\'t included.' + (own ? ' Heading somewhere else too? Plan it here: ' + whereNextUrl('builder') : '') + ' Want me to save you a place?';
+  }
+  MM.whereNext = whereNext; MM.whereNextUrl = whereNextUrl; MM.whereNextMsg = whereNextMsg; MM.WN_COL = WN_COL;
+
+  /* ============================================================
      WHY THIS LEG — plain-English comparison
      ============================================================ */
   MM.explainLeg = function (leg) {

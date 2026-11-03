@@ -1,0 +1,79 @@
+/* ============================================================
+   WHERE NEXT? (ui-wherenext.js): the check-in step, styled after the ALL IN trip guide:
+   black page, a neon strip, Bungee headings, and trip rows with a photo, a days badge, a bone body and a black price block,
+   each trip in its own colour with the hard offset shadow.
+   ============================================================ */
+body[data-view="wherenext"]{background:var(--black)}
+body[data-view="wherenext"] .hdr__nav,body[data-view="wherenext"] .humanbar,body[data-view="wherenext"] .foot{display:none}
+.wn{background:var(--black);color:var(--paper);min-height:100vh;padding-bottom:var(--s-4)}
+.wn__strip{background:var(--lime);color:var(--black);font-weight:900;font-size:12px;letter-spacing:.18em;text-transform:uppercase;white-space:nowrap;overflow:hidden;padding:7px 0}
+.wn__strip span{display:inline-block;padding-left:var(--s-4)}
+.wn__wrap{max-width:720px;margin:0 auto;padding:var(--s-5) var(--s-4) 0}
+.wn__demo{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;max-width:720px;margin:0 auto;padding:10px var(--s-4);font-size:13px;font-weight:700;color:var(--paper);border-bottom:1px solid #333}
+.wn__demo label{display:flex;gap:6px;align-items:center} .wn__demo .select,.wn__demo .input{width:auto;padding:6px 32px 6px 10px;font-size:13px;box-shadow:none}
+.wn__demo .input{padding:5px 8px} .wn__demo a{color:var(--lime);display:inline-block;padding:12px 0}
+.wn__brand{display:flex;align-items:center;gap:14px;margin-bottom:var(--s-5)}
+.wn__logo{font-family:var(--f-sticker);font-size:22px;line-height:.9;color:var(--paper);background:var(--black);border:var(--bw) solid var(--paper);padding:6px 8px 4px;box-shadow:4px 4px 0 var(--pink);transform:rotate(-4deg)}
+.wn__at{font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim-on-black);line-height:1.5}
+.wn__over{font-size:12px;font-weight:900;letter-spacing:.24em;text-transform:uppercase;color:var(--lime);margin:0 0 var(--s-2)}
+.wn__h{font-family:var(--f-sticker);font-weight:400;text-transform:uppercase;font-size:clamp(40px,11vw,76px);line-height:.95;margin:0 0 var(--s-3);color:var(--paper)}
+.wn__h em{display:block;font-style:normal;color:var(--lime);font-size:.42em;line-height:1.1;margin-top:var(--s-2)}
+.wn__lead{font-size:16px;font-weight:500;line-height:1.55;color:var(--paper);margin:0 0 var(--s-5);max-width:560px} .wn__lead b{color:var(--lime)}
+.wn__list{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.wn__fine{font-size:12.5px;font-weight:500;color:var(--ink-dim-on-black);line-height:1.5;margin:var(--s-4) 0 0} .wn__fine a{color:var(--lime)}
+
+/* a trip: photo + days | name, route, next departure | price, in the trip's colour */
+.wnt{--c:var(--lime);position:relative;display:grid;grid-template-columns:120px minmax(0,1fr) 104px;min-height:112px;background:var(--bone);color:var(--black);border:var(--bw) solid var(--black);box-shadow:6px 6px 0 var(--c);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
+.wnt--pink{--c:var(--pink)} .wnt--cyan{--c:var(--cyan)} .wnt--lime{--c:var(--lime)} .wnt--orange{--c:var(--orange)} .wnt--yellow{--c:var(--yellow)} .wnt--purple{--c:var(--purple)} .wnt--blue{--c:var(--blue)}
+/* purple is too dark for black text: white on it, and a lighter purple for its text on black */
+.wnt--purple .wnt__days,.wnt--purple .wnt__tag{color:var(--paper)} .wnt--purple .wnt__p i{color:#d68cff}
+.wnt:hover{transform:translate(-2px,-2px);box-shadow:8px 8px 0 var(--c)}
+.wnt:focus-within{outline:3px solid var(--paper);outline-offset:3px}
+.wnt--on{outline:4px solid var(--lime);outline-offset:3px}
+.wnt--on:focus-within{outline-color:var(--lime)}
+.wnt__pic{position:relative;border-right:var(--bw) solid var(--black);overflow:hidden;background:#222}
+.wnt__pic .photo,.wnt__pic .wnt__img{position:absolute;inset:0;width:100%;height:100%;margin:0;border:0;aspect-ratio:auto}
+.wnt__pic img{width:100%;height:100%;object-fit:cover;display:block}
+.wnt__days{position:absolute;left:8px;top:8px;background:var(--c);color:var(--black);border:2px solid var(--black);font-weight:900;font-size:9px;letter-spacing:.12em;text-transform:uppercase;text-align:center;padding:2px 6px 3px;line-height:1.1}
+.wnt__days b{display:block;font-family:var(--f-sticker);font-weight:400;font-size:20px;letter-spacing:0;line-height:1}
+.wnt__b{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:12px 14px;min-width:0}
+.wnt__tag{background:var(--c);color:var(--black);border:2px solid var(--black);font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:1px 7px}
+.wnt__n{font-family:var(--f-sticker);text-transform:uppercase;font-size:24px;line-height:1.05;margin-top:2px;overflow-wrap:anywhere}
+.wnt__r{font-size:13px;font-weight:700;line-height:1.35}
+.wnt__next{font-size:12.5px;font-weight:500;color:var(--ink-dim);line-height:1.4} .wnt__next b{color:var(--black);font-weight:900}
+.wnt__p{background:var(--black);color:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-left:var(--bw) solid var(--black)}
+.wnt__p i{font-style:normal;font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--c)}
+.wnt__p b{font-family:var(--f-sticker);font-weight:400;font-size:24px;line-height:1}
+.wnt__tick{position:absolute;right:-12px;top:-12px;width:30px;height:30px;border:var(--bw) solid var(--black);background:var(--paper);border-radius:50%;display:none}
+.wnt--on .wnt__tick{display:block;background:var(--lime)}
+.wnt--on .wnt__tick::after{content:'';position:absolute;left:8px;top:3px;width:7px;height:13px;border:solid var(--black);border-width:0 3px 3px 0;transform:rotate(45deg)}
+.wnt--own{grid-template-columns:minmax(0,1fr);min-height:0;background:var(--black);color:var(--paper);border:var(--bw) dashed var(--paper);box-shadow:none}
+.wnt--own:hover{box-shadow:none}
+.wnt--own .wnt__tag{--c:var(--paper)} .wnt--own .wnt__r{color:var(--ink-dim-on-black);font-weight:500}
+
+/* Not interested + Next, always in reach */
+.wn__bar{position:sticky;bottom:0;z-index:5;background:var(--black);border-top:1px solid #333;margin-top:var(--s-5);padding:12px var(--s-4) calc(12px + env(safe-area-inset-bottom))}
+.wn__btns{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;max-width:720px;margin:0 auto}
+.wn__err{max-width:720px;margin:0 auto 8px;background:var(--pink);color:var(--black);border:2px solid var(--black);padding:6px 10px;font-weight:700;font-size:14px} .wn__err[hidden]{display:none}
+.wn .btn{justify-content:center;width:100%;border-radius:0}
+.wn__no{background:var(--black);color:var(--paper);border-color:var(--paper);box-shadow:4px 4px 0 #444}
+.wn__go{background:var(--lime);color:var(--black);box-shadow:4px 4px 0 var(--pink)}
+.wn--done .wn__wrap{padding-top:var(--s-6)} .wn--done .btn{width:auto}
+
+@media (max-width:560px){
+  .wnt{grid-template-columns:96px minmax(0,1fr);grid-template-rows:1fr auto}
+  .wnt__pic{grid-row:1 / 3}
+  .wnt__p{flex-direction:row;gap:8px;justify-content:flex-start;border-left:0;border-top:var(--bw) solid var(--black);padding:6px 14px}
+  .wnt__p b{font-size:20px}
+  .wnt__n{font-size:21px}
+  .wnt--own{grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
+}
+@media (prefers-reduced-motion:reduce){.wnt{transition:none}}
+
+/* the crew's list (#/wherenext-crew), on the crew pages' styles (crew.css) */
+.wnc__tools{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;margin:0 0 var(--s-4)}
+.wnc__tools label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.wnc__tools .select{width:auto;min-width:180px} .wnc__tools .cfind__me{margin:0;flex:1 1 220px}
+.wnc__trips{list-style:none;margin:var(--s-2) 0 var(--s-3);padding:0;display:flex;flex-direction:column;gap:6px}
+.wnc__trips li{border-left:8px solid var(--c, var(--lime));color:var(--black);background:var(--bone);padding:6px 10px;font-size:14px;font-weight:500}
+.wnc__trips .wnt--own{--c:var(--black);border-style:solid}

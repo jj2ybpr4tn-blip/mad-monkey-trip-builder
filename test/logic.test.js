@@ -626,4 +626,26 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('Nacpan island hopping and the sunset cruise run every day', !MM.ACTS['tour-m-island-hopping'].dows && !MM.ACTS['sunset-cruise'].dows && Math.round(MM.ACTS['sunset-cruise'].usd) === 16);
 })();
 
+/* ---------- Where next? at check-in: which trips, in what order, which departure, and the crew's message ---------- */
+(function () {
+  var NOW = new Date('2026-12-05T08:00:00Z'), W = function (h, out) { return MM.whereNext(h, out, NOW); };
+  var ha = W('hanoi', '2026-12-09'), ids = ha.map(function (t) { return t.id; });
+  ok('Where next: every live ALL IN is offered, and none that isn\'t live', ids.length === MM.ALL_IN.filter(function (t) { return t.status === 'live'; }).length && ids.indexOf('thailand') < 0, ids.join());
+  ok('Where next: trips that start at this hostel come first (Hanoi: Vietnam and the Loop), then the nearest start', ids.slice(0, 2).sort().join() === 'loop,vietnam' && ids[2] === 'laos', ids.join());
+  var vn = ha.filter(function (t) { return t.id === 'vietnam'; })[0], laos = ha.filter(function (t) { return t.id === 'laos'; })[0];
+  ok('Where next: a trip from here can leave the day they check out (Wed 9 Dec)', vn.dep === '2026-12-09' && vn.after === 0 && vn.when === 'the day you check out', JSON.stringify(vn));
+  ok('Where next: a trip somewhere else leaves a day later at the earliest, on its own weekday (Laos: Sun 13 Dec)', laos.dep === '2026-12-13' && laos.after === 4 && laos.when === '4 days after you check out' && laos.usd === 400);
+  var kh = MM.whereNext('hanoi', '2026-11-25', new Date('2026-11-20T08:00:00Z')).filter(function (t) { return t.id === 'cambodia'; })[0];
+  ok('Where next: the price is that departure month\'s (Cambodia from $600 in November, $700 in December)', kh.usd === 600 && ha.filter(function (t) { return t.id === 'cambodia'; })[0].usd === 700, kh.dep + ' ' + kh.usd);
+  ok('Where next: a check-out date already gone counts from today, and no date says "every <day>"', W('hanoi', '2026-11-01')[0].dep >= '2026-12-05' && /^every (Sun|Mon|Tue|Wed|Thu|Fri|Sat)$/.test(W('hanoi', '')[0].when), W('hanoi', '')[0].when);
+  ok('Where next: dates not on sale yet are left out (after May 2027)', W('hanoi', '2027-06-10').length === 0);
+  ok('Where next: from Bangkok the nearest starts lead (Cambodia, then Laos)', W('bangkok', '2026-12-09').slice(0, 2).map(function (t) { return t.id; }).join() === 'cambodia,laos');
+  var m = MM.whereNextMsg({ name: 'Sam Lee', hostel: 'hanoi', checkout: '2026-12-09' }, ['laos', 'loop', 'made-up'], 'Ewan');
+  ok('Where next message: signed, first name, the hostel, each ticked trip with its next date and price, and nothing they didn\'t tick', /^Hi Sam, it's Ewan from Mad Monkey\. /.test(m) && /checked in at Mad Monkey Hanoi/.test(m) && /ALL IN Laos: Sun 13 Dec, 10 days, from \$400\./.test(m) && /ALL IN Ha Giang Loop: Wed 9 Dec/.test(m) && !/Vietnam:|made-up/.test(m), m);
+  ok('Where next message: flights are never included, and it says so; $99 holds the spot', /Flights to get there aren't included\./.test(m) && /\$99 holds your spot/.test(m));
+  ok('Where next message: links are absolute and tagged as coming from check-in', /https:\/\/madmonkeyhostels\.com\/all-in-trips\/laos\?utm_source=checkin&utm_medium=where-next/.test(m) && /all-in-trips\/vietnam-7\?utm_source=checkin/.test(m));
+  var own = MM.whereNextMsg({ name: '', hostel: 'bangkok', checkout: '' }, ['builder'], '');
+  ok('Where next message: "plan my own" only sends the trip builder, signed by the crew', /^Hi there, it's the crew from Mad Monkey/.test(own) && /all-in-trips\/trip-builder\/\?utm_source=checkin/.test(own) && !/holds your spot/.test(own), own);
+})();
+
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

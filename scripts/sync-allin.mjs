@@ -22,7 +22,7 @@ if (!target) { console.error('usage: node scripts/sync-allin.mjs <path to mm-squ
 const DEST = path.join(path.resolve(target), 'public', 'trip-builder');
 if (!fs.existsSync(DEST)) { console.error('No public/trip-builder in ' + target); process.exit(2); }
 
-const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'styles.css', 'crew.css'];
+const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-wherenext.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'styles.css', 'crew.css', 'wherenext.css'];
 const withThumbs = WITH_THUMBS_FLAG || fs.existsSync(path.join(DEST, 'assets', 'photos', 's'));
 const DATA = fs.readdirSync(path.join(ROOT, 'data')).filter((f) => f.endsWith('.js')).map((f) => 'data/' + f);
 const changes = [];

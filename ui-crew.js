@@ -364,6 +364,9 @@
     });
   }
 
+  // the same admin call and password for the other crew-only pages (the Where next? list, ui-wherenext.js)
+  A.crewApi = { call: call, pw: pw, setPw: setPw, endpoint: endpoint };
+
   window.addEventListener('hashchange', function () { setTimeout(bar, 60); });
   setTimeout(bar, 300);
 })();
