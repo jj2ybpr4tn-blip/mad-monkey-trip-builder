@@ -152,7 +152,7 @@
     opts = opts || {}; var pl = MM.plan(state), out = { findings: [], stats: {}, score: 100, label: '', plan: pl };
     if (!pl.totals.days || pl.segs.length === 0) return out;
     var T = pl.totals, legs = pl.legs, F = out.findings, stops = pl.segs;
-    function cost(fix) { var p2 = MM.plan(MM.applyFix(state, fix)).totals; return { dCost: Math.round(p2.total - T.total), dDays: p2.days - T.days }; }
+    function cost(fix) { var p2 = MM.plan(MM.applyFix(state, fix)).totals; return { dCost: Math.round(p2.spend - T.spend), dDays: p2.days - T.days }; }
     function add(f) { if (f.fix) { var c = cost(f.fix); f.fix.dCost = c.dCost; f.fix.dDays = c.dDays; } F.push(f); }
 
     var transitH = legs.reduce(function (a, l) { return a + l.h; }, 0), ovnLegs = legs.filter(function (l) { return l.ovn; });

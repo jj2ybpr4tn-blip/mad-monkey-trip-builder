@@ -113,6 +113,36 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
     const l2 = (await j('/api/admin/leads', { headers: adm })).b.find((x) => x.ref === ref); ok('assignee: saved and logged in the history', l2.assignee === 'Kyle' && l2.history.some((h) => /assigned to Kyle/.test(h.event))); }
   { await j('/api/admin/live', { method: 'PUT', headers: { ...adm, 'content-type': 'application/json' }, body: JSON.stringify({ notice: '', spots: {}, legs: {}, acts: {}, hostels: { hanoi: { addr: '1 Test Street', checkin: 'from 2pm', phone: '+84 1', directions: 'Taxi from the station' }, narnia: { addr: 'x' } } }) });
     const L = (await j('/api/live')).b; ok('hostel details: saved for real hostels only, public for trip packs', L.hostels.hanoi && L.hostels.hanoi.addr === '1 Test Street' && !L.hostels.narnia); }
+  /* Find your crew: stored cleaned, matched for the crew, introductions tracked, switched off on request */
+  { const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10), d0 = day(60), d2 = day(62);
+    const fc = (o) => ({ on: true, consent: true, adult: true, age: '22-25', gender: 'woman', home: 'UK', vibes: ['party'], want: { who: 'anyone', ages: 'near' }, ...o });
+    const crewLead = (name, email, state, start, f) => lead({ contact: { name, email, via: 'email', partySize: 1, consent: true }, trip: { state, route: 'x', days: 6, start, stops: [] }, hold: { requested: false }, findCrew: f });
+    const so = await post('/api/leads', crewLead('Sophie', 'sophie@example.com', 'i=s.siquijor.3~s.panglao.3&d=' + d0, d0, fc({ want: { who: 'women', ages: 'near', solo: true }, about: '<script>x</script> Gap year', home: 'UK', extra: 1 })));
+    const mi = await post('/api/leads', crewLead('Mia', 'mia@example.com', 'i=s.siquijor.3~s.panglao.3&d=' + d0, d0, fc({ home: 'Ireland' })));
+    const to = await post('/api/leads', crewLead('Tom', 'tom@example.com', 'i=s.panglao.3&d=' + d2, d2, fc({ gender: 'man' })));
+    ok('find your crew: trips with it ticked are accepted', so.s === 200 && mi.s === 200 && to.s === 200, [so.s, mi.s, to.s].join());
+    const all = (await j('/api/admin/leads', { headers: adm })).b, S = all.find((x) => x.ref === so.b.ref);
+    ok('find your crew: stored cleaned (known values only, plain text) and logged', S.findCrew && S.findCrew.on && S.findCrew.want.who === 'women' && !('extra' in S.findCrew) && S.findCrew.about.indexOf('<') < 0 && S.history.some((h) => h.event === 'find your crew: on'), JSON.stringify(S.findCrew));
+    ok('find your crew: a trip without it ticked stores nothing', all.find((x) => x.ref === l.b.ref).findCrew === null);
+    ok('find your crew: the guest\'s trip page knows it is on', (await j('/api/status?ref=' + so.b.ref)).b.findCrew === true && (await j('/api/status?ref=' + l.b.ref)).b.findCrew === false);
+    ok('find your crew: the send form offers it when this server is behind it', /FIND_CREW:\s*true/.test(await (await fetch(B + '/config.js')).text()));
+    ok('find your crew: the crew board needs the token', (await j('/api/admin/crew')).s === 401);
+    let board = (await j('/api/admin/crew', { headers: adm })).b;
+    const pairOf = (a, b) => board.pairs.find((p) => (p.a === a && p.b === b) || (p.a === b && p.b === a));
+    ok('find your crew: only travellers who ticked it are on the board', board.travellers.length === 3 && board.travellers.every((t) => [so.b.ref, mi.b.ref, to.b.ref].includes(t.ref)));
+    const sm = pairOf(so.b.ref, mi.b.ref);
+    ok('find your crew: two of them in the same towns on the same nights are a match, with place names and dates', sm && sm.kind === 'together' && sm.nights === 6 && sm.ranges[0].place === 'Siquijor' && /\d/.test(sm.ranges[0].label) && sm.intro.status === 'new', JSON.stringify(sm));
+    ok('find your crew: "women only" keeps a man out of her matches, not out of everyone\'s', !pairOf(so.b.ref, to.b.ref) && !!pairOf(mi.b.ref, to.b.ref));
+    ok('find your crew: hot spots show where they stack up', board.spots.some((x) => x.place === 'Panglao' && x.peak === 3));
+    const intro = (body) => j('/api/admin/crew/intro', { method: 'PATCH', headers: { 'content-type': 'application/json', ...adm }, body: JSON.stringify(body) });
+    ok('find your crew: an introduction needs two real trips and a known status', (await intro({ a: so.b.ref, b: mi.b.ref, status: 'married' })).s === 400 && (await intro({ a: so.b.ref, b: 'MM-ZZZZZZ', status: 'asked' })).s === 400 && (await intro({ a: so.b.ref, b: so.b.ref, status: 'asked' })).s === 400);
+    ok('find your crew: the crew can record where an introduction is', (await intro({ b: so.b.ref, a: mi.b.ref, status: 'asked', by: 'Ewan' })).s === 200);
+    board = (await j('/api/admin/crew', { headers: adm })).b;
+    ok('find your crew: ... and it shows on the match, whichever way round it was saved, and in both trips\' history', pairOf(so.b.ref, mi.b.ref).intro.status === 'asked' && pairOf(so.b.ref, mi.b.ref).intro.by === 'Ewan' &&
+      (await j('/api/admin/leads', { headers: adm })).b.filter((x) => x.ref === so.b.ref || x.ref === mi.b.ref).every((x) => x.history.some((h) => /find your crew: asked with MM-/.test(h.event))));
+    await j('/api/admin/leads/' + to.b.ref, { method: 'PATCH', headers: { 'content-type': 'application/json', ...adm }, body: JSON.stringify({ findCrewOff: true }) });
+    board = (await j('/api/admin/crew', { headers: adm })).b;
+    ok('find your crew: switched off on request, they drop out of every match', board.travellers.length === 2 && !board.pairs.some((p) => p.a === to.b.ref || p.b === to.b.ref) && (await j('/api/status?ref=' + to.b.ref)).b.findCrew === false); }
   /* events + funnel + limits */
   await post('/api/event', { n: 'door', p: { door: 'quiz' }, s: 'abc' }); await post('/api/event', { n: 'view', s: 'abc' });
   const fu = (await j('/api/admin/funnel', { headers: adm })).b; ok('funnel counts events, sessions and doors', fu.byName.door === 1 && fu.sessions.view === 1 && fu.doors.quiz === 1);

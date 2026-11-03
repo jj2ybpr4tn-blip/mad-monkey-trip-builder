@@ -1,5 +1,6 @@
 /* Layout lint: finds the layout defects a person notices on a phone, on whatever screen is showing.
    Run it in a browser tab (resize to phone width first):   await import('/test/ui-lint.js?' + Date.now()); __lint()
+   A pop-up (the send form, the share sheet) lives outside the page: __lint('#modal-root') checks that instead.
    Reports, for visible elements only:
      squeezed  text squeezed into a column so narrow it wraps a word per line
      overlap   two buttons / links / fields drawn on top of each other
@@ -11,10 +12,10 @@
   function vis(el) { var r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0'; }
   function path(el) { var s = el.tagName.toLowerCase(); if (el.id) s += '#' + el.id; else if (el.className && typeof el.className === 'string') s += '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.'); var t = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24); return s + (t ? ' "' + t + '"' : ''); }
   function inFixed(el) { for (var e = el; e && e !== document.body; e = e.parentElement) if (getComputedStyle(e).position === 'fixed') return true; return false; }
-  window.__lint = function () {
+  window.__lint = function (scope) {
     var vw = document.documentElement.clientWidth, out = { squeezed: [], overlap: [], tiny: [], overflow: [], clipped: [], contrast: [] }, seen = {};
     function add(k, el, extra) { var key = k + path(el); if (seen[key]) return; seen[key] = 1; out[k].push(path(el) + (extra ? ' (' + extra + ')' : '')); }
-    var all = Array.prototype.slice.call(document.querySelectorAll('#app *, .mbar *, .hdr *'));
+    var all = Array.prototype.slice.call(document.querySelectorAll(scope ? scope + ' *' : '#app *, .mbar *, .hdr *'));
     all.forEach(function (el) {
       if (!vis(el) || el.closest('svg') || el.closest('[aria-hidden="true"]')) return;
       var r = el.getBoundingClientRect(), cs = getComputedStyle(el);

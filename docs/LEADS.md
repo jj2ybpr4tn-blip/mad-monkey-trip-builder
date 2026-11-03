@@ -51,7 +51,8 @@ The guest lands on `#/trip/<ref>` after sending. With `STATUS_ENDPOINT` set, it 
     "crewMates": 0,                                // mates the Squad Leader says they're rallying
     "urgency": "hot | warm | cool | planning"      // from start date: ≤14d hot, ≤60d warm
   },
-  "itinerary": "MY MAD MONKEY TRIP\nHanoi → …"     // plain-text day-by-day, ready to paste into WhatsApp / a CRM note
+  "itinerary": "MY MAD MONKEY TRIP\nHanoi → …",    // plain-text day-by-day, ready to paste into WhatsApp / a CRM note
+  "findCrew": { "on": true, "age": "22-25", … }      // only when they ticked "Find your crew": see FIND-YOUR-CREW.md
 }
 ```
 

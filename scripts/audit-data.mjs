@@ -44,7 +44,7 @@ ids.forEach((id) => {
 /* ---------- transport graph ---------- */
 const nodeLL = {};
 ids.forEach((id) => { nodeLL[id] = P[id].ll; P[id].ap.forEach((a) => { if (!nodeLL[a[0]]) nodeLL[a[0]] = P[id].ll; }); });
-nodeLL.SIHA = [10.63, 103.5]; nodeLL.CEB = [10.31, 123.89]; nodeLL.DAD = [16.06, 108.2];       // hubs that aren't a hostel
+nodeLL.SIHA = [10.63, 103.5]; nodeLL.CEB = [10.31, 123.89]; nodeLL.DAD = [16.06, 108.2]; nodeLL.VTE = [17.99, 102.56];       // hubs that aren't a hostel
 const MODES = { flight: [150, 900], bus: [12, 75], train: [20, 110], boat: [8, 70], van: [14, 75], taxi: [6, 80] };
 const seenEdge = {};
 MM.EDGES.forEach((e, i) => {
@@ -56,6 +56,8 @@ MM.EDGES.forEach((e, i) => {
   if (!(e.u >= 0)) err(w + 'price must not be negative');
   if (e.nights && !e.ovn) err(w + 'nights without overnight');
   if (e.ovn && e.h < 5) err(w + 'overnight but only ' + e.h + ' hours');
+  if (e.dows && !(Array.isArray(e.dows) && e.dows.length && e.dows.every((d) => d >= 0 && d <= 6))) err(w + 'weekdays it runs look wrong: ' + e.dows);
+  if (e.at) Object.keys(e.at).forEach((k) => { if (k !== e.a && k !== e.b) err(w + 'leaves at a set time from ' + k + ', which is not either end'); if (!(e.at[k] >= 0 && e.at[k] < 24)) err(w + 'departure hour ' + e.at[k]); });
   if (!e.note) warn(w + 'no note');
   const k = [e.a, e.b].sort().join('|') + '|' + e.m + (e.ovn ? '|ovn' : '');
   if (seenEdge[k]) warn(w + 'duplicate of another leg'); seenEdge[k] = 1;
@@ -118,7 +120,9 @@ MM.ALL_IN.forEach((t) => {
   if (!(t.usd > 0 && t.usd < 3000)) err(w + 'price ' + t.usd);
   if (!(t.dep >= 0 && t.dep <= 6)) err(w + 'departure weekday ' + t.dep);
   if (!['live', 'soon'].includes(t.status)) err(w + 'status ' + t.status);
-  if (nights != null && nights > t.days - 1) warn(w + 'stops add up to ' + nights + ' nights but it is only sold as ' + t.days + ' days');            // the stops are the hostel stays; days with partners or on the road aren't listed, so fewer is fine
+  if (nights != null && nights > MM.allInNights(t)) warn(w + 'stops add up to ' + nights + ' nights but it only runs ' + MM.allInNights(t));            // the stops are the hostel stays; days with partners or on the road aren't listed, so fewer is fine
+  if (!(t.nights >= 1 && t.nights <= 30)) err(w + 'nights ' + t.nights + ' (the nights from departure to the end date on the ALL IN site)');
+  Object.keys(t.prices || {}).forEach((k) => { if (!/^\d{4}-\d{2}$/.test(k) || !(t.prices[k] > 0 && t.prices[k] < 3000)) err(w + 'price for ' + k + ': ' + t.prices[k]); });
   if (t.nStops && t.nStops < new Set(t.stops.map((s) => s.p)).size) warn(w + 'nStops says ' + t.nStops + ' but ' + new Set(t.stops.map((s) => s.p)).size + ' different places are listed');
   if (!MM.allInUrl(t.id)) err(w + 'no details link');
 });

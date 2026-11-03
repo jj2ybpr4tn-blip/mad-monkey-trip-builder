@@ -387,6 +387,7 @@ main{flex:1;display:flex;flex-direction:column}
 .cost:nth-child(2) i u{background:var(--pink)} .cost:nth-child(3) i u{background:var(--cyan)} .cost:nth-child(4) i u{background:var(--yellow)} .cost:nth-child(5) i u{background:var(--orange)} .cost:nth-child(6) i u{background:var(--blue)}
 .cost b{text-align:right;font-weight:900}
 .costs__tot{display:flex;justify-content:space-between;border-top:var(--bw) solid var(--black);padding-top:var(--s-2);font-weight:900;font-size:16px;text-transform:uppercase}
+.costs__out{margin-top:var(--s-3);color:var(--ink-dim)} .costs__out b{font-weight:700}
 .fine{font-size:12px;font-weight:500;color:var(--ink-dim);line-height:1.45}
 
 .cta{display:flex;flex-direction:column;gap:var(--s-3)}
@@ -419,6 +420,16 @@ main{flex:1;display:flex;flex-direction:column}
 .modal__x:hover{background:var(--black);color:var(--paper)}
 .modal__bd{padding:0 var(--s-5) var(--s-5);display:flex;flex-direction:column;gap:var(--s-4)}
 .form2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-4)} .form2 .full{grid-column:1/-1}
+/* Find your crew, on the send form: off until ticked, then a few quick questions */
+.fcrew{border:var(--bw) solid var(--black);background:var(--bone);padding:12px 14px;display:flex;flex-direction:column;gap:var(--s-3)}
+.fcrew__on b{font-weight:900}
+.fcrew__body .form2{gap:var(--s-3)}
+.fcrew .lbl{font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.fcrew .lbl small,.fcrew label small{font-weight:500;font-size:11.5px;letter-spacing:.02em;text-transform:none}
+.fcrew__chips{display:flex;flex-wrap:wrap;gap:6px}
+.fcrew__chips .chip{font-size:12.5px;padding:6px 12px;min-height:32px}
+.fcrew__solo{align-self:end;padding-bottom:10px}
+.fcrew__note{margin-top:var(--s-3)}
 .chk{display:flex;gap:10px;align-items:flex-start;font-size:13px;font-weight:500;line-height:1.4}
 .chk input{width:22px;height:22px;flex:none;accent-color:var(--pink);margin-top:1px}
 .leadcard{background:var(--black);color:var(--paper);padding:var(--s-4);border:var(--bw) solid var(--black);box-shadow:6px 6px 0 var(--lime);font-size:13px;line-height:1.5}
@@ -771,7 +782,7 @@ body[data-view="pack"]{background:var(--bone)}
 .legs{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--s-3)} .legs li{border-left:6px solid var(--cyan);padding-left:var(--s-3);break-inside:avoid} .legs b{font-weight:900;text-transform:uppercase} .legs__d{font-size:12.5px;font-weight:700;color:var(--ink-dim);margin-left:6px} .legs__s{font-size:12.5px!important;color:var(--ink-dim)} .legs__w{font-size:12.5px!important;font-weight:700;background:#fff3cc;padding:4px 8px;border:2px solid var(--black)}
 .days{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--s-2)} .days li{display:grid;grid-template-columns:34px 1fr;gap:var(--s-3);break-inside:avoid;border-bottom:1px dashed #bbb;padding-bottom:6px} .days__n{font-weight:900;font-size:20px;color:var(--ink-dim)} .days b{font-weight:900;text-transform:uppercase;font-size:13.5px} .days p{font-size:13.5px;margin:1px 0} .days i{color:var(--ink-dim);font-style:normal} .days__note{color:var(--ink-dim)}
 .pack__pk{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s-4)} .pack__pk b{font-weight:900;text-transform:uppercase;font-size:13px}
-.chk{list-style:none;padding:0;margin:6px 0 0;display:flex;flex-direction:column;gap:5px} .chk li{position:relative;padding-left:24px;font-size:13.5px} .chk li:before{content:"";position:absolute;left:0;top:3px;width:14px;height:14px;border:2px solid var(--black)}
+ul.chk{list-style:none;padding:0;margin:6px 0 0;display:flex;flex-direction:column;gap:5px} .chk li{position:relative;padding-left:24px;font-size:13.5px} .chk li:before{content:"";position:absolute;left:0;top:3px;width:14px;height:14px;border:2px solid var(--black)}
 .pack__t{width:100%;border-collapse:collapse;font-size:14.5px} .pack__t td{padding:7px 0;border-bottom:1px solid #ddd} .pack__t td:last-child{text-align:right;font-weight:700} .pack__t .tot td{font-weight:900;font-size:17px;border-bottom:3px solid var(--black)}
 .pack__ft{border-top:var(--bw) solid var(--black);padding-top:var(--s-4);display:flex;flex-direction:column;gap:var(--s-2)}
 .appcard{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-3);background:var(--lime);border:var(--bw) solid var(--black);padding:var(--s-3) var(--s-4);margin-top:var(--s-3)} .appcard b{display:block;font-weight:900;text-transform:uppercase;font-size:17px} .appcard p{font-size:13.5px}

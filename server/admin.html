@@ -35,6 +35,10 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
 .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px} .tools input,.tools select{width:auto;flex:1 1 140px;padding:7px 9px;font-size:13px}
 .wait{font-weight:800;font-size:12px} .wait.ok{color:#2b6b00} .wait.warn{color:#8a5a00} .wait.bad{color:#b0005f}
 .tpl{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.pair__hd{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px} .pair__hd h3{font-size:20px;margin-right:4px}
+.k-together{background:var(--lime)} .k-near{background:var(--yellow)} .k-route{background:var(--paper)} .i-asked{background:var(--cyan)} .i-yes{background:var(--lime)} .i-introduced{background:#7dff7d} .i-no{background:#ddd}
+.who{border:2px solid var(--black);padding:10px 12px;background:#faf7ee} .who p{margin:6px 0} .who q{font-style:italic}
+.acts select{width:auto}
 </style>
 </head>
 <body>
@@ -58,10 +62,10 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
   }
   function fmtLeft(ms) { if (ms == null) return ''; if (ms <= 0) return 'expired'; var h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000); return h + 'h ' + m + 'm left'; }
   function shell(inner) {
-    var tabs = [['reviews', 'Reviews + holds'], ['live', 'Live prices + spots'], ['quotes', 'Guest reviews'], ['waitlist', 'Waitlist'], ['hostels', 'Hostel details'], ['flow', 'Where guests go'], ['funnel', 'Funnel']];
+    var tabs = [['reviews', 'Reviews + holds'], ['crew', 'Find your crew'], ['live', 'Live prices + spots'], ['quotes', 'Guest reviews'], ['waitlist', 'Waitlist'], ['hostels', 'Hostel details'], ['flow', 'Where guests go'], ['funnel', 'Funnel']];
     app.innerHTML = '<header><div><img src="/assets/logo/mad-monkey-white.png" alt="Mad Monkey"> &nbsp;<b>Crew console</b></div><button class="btn" id="out">Sign out</button></header><nav>' + tabs.map(function (t) { return '<button data-t="' + t[0] + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</nav><main>' + inner + '</main>';
     document.getElementById('out').onclick = function () { sessionStorage.removeItem('mm-admin'); TOKEN = ''; login(); };
-    Array.prototype.forEach.call(app.querySelectorAll('nav button'), function (b) { b.onclick = function () { tab = b.getAttribute('data-t'); render(); }; });
+    Array.prototype.forEach.call(app.querySelectorAll('nav button'), function (b) { b.onclick = function () { tab = b.getAttribute('data-t'); CREWFOCUS = ''; render(); }; });
   }
 
   var WHO = localStorage.getItem('mm-who') || '', FQ = '', FS = 'open', FM = false;
@@ -93,7 +97,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
     var h = '<div class="card"><span class="stat"><b class="big">' + open + '</b><span>Open</span></span><span class="stat"><b class="big">' + holds + '</b><span>Beds held now</span></span><span class="stat"><b class="big">' + leads.length + '</b><span>All time</span></span>' + (function () { var m = 0; leads.forEach(function (l) { var w = waitMs(l); if (w != null && w > m) m = w; }); return m ? '<span class="stat"><b class="big">' + (m < 36e5 ? Math.round(m / 6e4) + 'm' : m < 48 * 36e5 ? Math.round(m / 36e5) + 'h' : Math.round(m / 864e5) + 'd') + '</b><span>Longest wait</span></span>' : ''; })() + '</div><div class="grid"><div class="card"><h2 style="font-size:22px;margin-bottom:8px">Trips for review</h2>' +
       '<div class="tools"><input id="fq" placeholder="Search name, ref, trip…" value="' + esc(FQ) + '"><select id="fs">' + [['open', 'Open'], ['all', 'Everything'], ['submitted', 'New'], ['checking', 'Checking'], ['ready', 'Ready'], ['approved', 'Approved'], ['declined', 'Declined']].map(function (o) { return '<option value="' + o[0] + '"' + (FS === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select><input id="who" placeholder="I\'m… (your name)" value="' + esc(WHO) + '"><label style="margin:0;display:flex;gap:6px;align-items:center;white-space:nowrap"><input id="fm" type="checkbox"' + (FM ? ' checked' : '') + ' style="width:auto"> Mine only</label><button class="btn" id="csv">Export CSV</button></div>' +
       (visible().length ? '<table><tr><th>Ref</th><th>Guest</th><th>Trip</th><th>Status</th><th>Waiting</th><th>Crew</th><th>Hold</th></tr>' + visible().map(function (l) {
-        return '<tr class="row' + (sel === l.ref ? ' sel' : '') + '" data-ref="' + l.ref + '"><td><b>' + l.ref + '</b><div class="muted">' + new Date(l.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</div></td><td>' + esc(l.contact.name) + '<div class="muted">' + l.contact.partySize + ' pax</div></td><td>' + esc(l.trip.route) + '<div class="muted">' + l.trip.days + ' days' + (l.trip.start ? ' · ' + l.trip.start : '') + ' · ~$' + l.trip.estTotalUsd + '</div></td><td><span class="pill s-' + l.status + '">' + l.status + '</span></td><td>' + waitHTML(l) + '</td><td>' + (l.assignee ? esc(l.assignee) : '<span class="muted">·</span>') + '</td><td>' + (l.hold && l.hold.requested ? '<span class="pill">' + (l.hold.status === 'active' ? fmtLeft(l.holdLeftMs) : l.hold.status) + '</span>' : '<span class="muted">no</span>') + '</td></tr>';
+        return '<tr class="row' + (sel === l.ref ? ' sel' : '') + '" data-ref="' + l.ref + '"><td><b>' + l.ref + '</b><div class="muted">' + new Date(l.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</div></td><td>' + esc(l.contact.name) + (l.findCrew && l.findCrew.on ? ' <span class="pill k-together">crew</span>' : '') + '<div class="muted">' + l.contact.partySize + ' pax</div></td><td>' + esc(l.trip.route) + '<div class="muted">' + l.trip.days + ' days' + (l.trip.start ? ' · ' + l.trip.start : '') + ' · ~$' + l.trip.estTotalUsd + '</div></td><td><span class="pill s-' + l.status + '">' + l.status + '</span></td><td>' + waitHTML(l) + '</td><td>' + (l.assignee ? esc(l.assignee) : '<span class="muted">·</span>') + '</td><td>' + (l.hold && l.hold.requested ? '<span class="pill">' + (l.hold.status === 'active' ? fmtLeft(l.holdLeftMs) : l.hold.status) + '</span>' : '<span class="muted">no</span>') + '</td></tr>';
       }).join('') + '</table>' : '<p class="muted">' + (leads.length ? 'Nothing matches those filters.' : 'Nothing yet. Requests from "Hold my beds + get it checked" land here.') + '</p>') + '</div><div id="detail"></div></div>';
     shell(h);
     Array.prototype.forEach.call(app.querySelectorAll('tr.row'), function (r) { r.onclick = function () { sel = r.getAttribute('data-ref'); renderReviews(); }; });
@@ -102,7 +106,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
     document.getElementById('fs').onchange = function (e) { FS = e.target.value; renderReviews(); };
     document.getElementById('fm').onchange = function (e) { FM = e.target.checked; renderReviews(); };
     document.getElementById('who').onchange = function (e) { WHO = e.target.value.trim(); localStorage.setItem('mm-who', WHO); toast('Saved: you are ' + (WHO || 'nobody')); };
-    document.getElementById('csv').onclick = function () { download('trip-requests.csv', csv([['ref', 'created', 'status', 'assignee', 'name', 'contact by', 'email', 'whatsapp', 'party', 'route', 'days', 'start', 'est total usd', 'hold']].concat(leads.map(function (l) { return [l.ref, l.createdAt, l.status, l.assignee || '', l.contact.name, l.contact.via || '', l.contact.email || '', l.contact.whatsapp || '', l.contact.partySize, l.trip.route, l.trip.days, l.trip.start || '', l.trip.estTotalUsd, l.hold && l.hold.requested ? l.hold.status : 'none']; })))); };
+    document.getElementById('csv').onclick = function () { download('trip-requests.csv', csv([['ref', 'created', 'status', 'assignee', 'name', 'contact by', 'email', 'whatsapp', 'party', 'route', 'days', 'start', 'est total usd', 'hold', 'find your crew']].concat(leads.map(function (l) { return [l.ref, l.createdAt, l.status, l.assignee || '', l.contact.name, l.contact.via || '', l.contact.email || '', l.contact.whatsapp || '', l.contact.partySize, l.trip.route, l.trip.days, l.trip.start || '', l.trip.estTotalUsd, l.hold && l.hold.requested ? l.hold.status : 'none', l.findCrew && l.findCrew.on ? 'yes' : '']; })))); };
     if (sel) detail(leads.filter(function (l) { return l.ref === sel; })[0]);
   }
   function detail(l) {
@@ -110,7 +114,8 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
     var sheet = s ? '<table><tr><th>Hostel</th><th>Check in</th><th>Check out</th><th>Nights</th></tr>' + s.map(function (r) { return '<tr><td><b>' + esc(r.place) + '</b></td><td>' + r.checkIn + '</td><td>' + r.checkOut + '</td><td>' + r.nights + '</td></tr>'; }).join('') + '</table><p class="muted">For ' + l.contact.partySize + ' guest' + (l.contact.partySize > 1 ? 's' : '') + '. Dorm beds unless they said otherwise.</p>' : '<p class="muted">No dates, so nothing to hold yet.</p>';
     d.innerHTML = '<div class="card"><h2 style="font-size:24px">' + l.ref + ' · ' + esc(l.contact.name) + '</h2><p class="muted"><b>Contact by ' + (l.contact.via === 'email' || !l.contact.whatsapp ? 'email' : 'WhatsApp') + ':</b> ' + (l.contact.whatsapp ? '<a href="https://wa.me/' + l.contact.whatsapp.replace(/[^0-9]/g, '') + '" target="_blank" rel="noopener">WhatsApp ' + esc(l.contact.whatsapp) + '</a>' : '') + (l.contact.whatsapp && l.contact.email ? ' · ' : '') + (l.contact.email ? '<a href="mailto:' + esc(l.contact.email) + '">' + esc(l.contact.email) + '</a>' : '') + (l.contact.from ? ' · from ' + esc(l.contact.from) : '') + '</p>' +
       '<p><b>' + esc(l.trip.route) + '</b><br>' + l.trip.days + ' days · ~$' + l.trip.estTotalUsd + ' est. · ' + esc(l.trip.urgency) + (l.trip.allInMatch ? ' · looks like ALL IN ' + esc(l.trip.allInMatch) : '') + (l.attribution.ref ? ' · ref ' + esc(l.attribution.ref) : '') + (l.attribution.fromHostel ? ' · from ' + esc(l.attribution.fromHostel) : '') + '</p>' +
-      (l.contact.notes ? '<p><b>Guest notes:</b> ' + esc(l.contact.notes) + '</p>' : '') + '<div class="acts">' + (safeHref(l.trip.link) ? '<a class="btn l" href="' + safeHref(l.trip.link) + '" target="_blank" rel="noopener noreferrer">Open their trip</a>' : '<span class="muted">No usable trip link</span>') + '</div>' +
+      (l.contact.notes ? '<p><b>Guest notes:</b> ' + esc(l.contact.notes) + '</p>' : '') +
+      (l.findCrew && l.findCrew.on ? '<p><b>Find your crew: on.</b> They\'d like to be introduced to travellers on a similar route. <button class="btn" id="gocrew">See their matches</button></p>' : '') + '<div class="acts">' + (safeHref(l.trip.link) ? '<a class="btn l" href="' + safeHref(l.trip.link) + '" target="_blank" rel="noopener noreferrer">Open their trip</a>' : '<span class="muted">No usable trip link</span>') + '</div>' +
       '<label>Looking after it</label><div class="row2"><input id="asg" list="crewnames" value="' + esc(l.assignee || '') + '" placeholder="crew member"><div class="acts" style="margin:0"><button class="btn" id="asgsave">Assign</button>' + (WHO ? '<button class="btn l" id="take">Take it</button>' : '') + '</div></div><datalist id="crewnames">' + Object.keys(leads.reduce(function (a, x) { if (x.assignee) a[x.assignee] = 1; if (WHO) a[WHO] = 1; return a; }, {})).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
       '<div class="tpl"><label>Reply to the guest (' + ((l.contact.via === 'email' || !l.contact.whatsapp) ? 'they chose email' : 'they chose WhatsApp') + ')</label><select id="tpl">' + Object.keys(TPL).map(function (k) { return '<option value="' + k + '">' + TPL[k][0] + '</option>'; }).join('') + '</select><textarea id="msg">' + esc(tplText('got', l)) + '</textarea><div class="acts" style="margin:0"><button class="btn" id="cpmsg">Copy</button><a class="btn l" id="opmsg" target="_blank" rel="noopener">' + ((l.contact.via === 'email' || !l.contact.whatsapp) ? 'Open in email' : 'Open in WhatsApp') + '</a></div></div>' +
       '<div class="hold' + (l.hold && l.hold.status === 'active' ? '' : ' off') + '"><b>Bed hold:</b> ' + (l.hold && l.hold.requested ? l.hold.status + (l.hold.status === 'active' ? ' · ' + fmtLeft(l.holdLeftMs) + ' (until ' + new Date(l.hold.until).toLocaleString('en-GB') + ')' : '') : 'not requested') + '</div>' + sheet +
@@ -128,7 +133,87 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
     function patch(body, msg) { api('/leads/' + l.ref, { method: 'PATCH', body: body }).then(function () { toast(msg || 'Saved'); load(); }); }
     Array.prototype.forEach.call(d.querySelectorAll('[data-a]'), function (b) { b.onclick = function () { patch({ status: b.getAttribute('data-a'), publicNote: document.getElementById('pn').value, payLink: document.getElementById('pl').value, note: document.getElementById('in').value }, 'Status updated'); }; });
     document.getElementById('save').onclick = function () { patch({ publicNote: document.getElementById('pn').value, payLink: document.getElementById('pl').value, note: document.getElementById('in').value }); };
+    if (document.getElementById('gocrew')) document.getElementById('gocrew').onclick = function () { tab = 'crew'; CREWFOCUS = l.ref; render(); };
     if (document.getElementById('ext')) { document.getElementById('ext').onclick = function () { patch({ extendHoldHours: 24 }, 'Hold extended'); }; document.getElementById('rel').onclick = function () { patch({ releaseHold: true }, 'Hold released'); }; }
+  }
+
+  /* ---------- Find your crew ----------
+     Travellers who ticked "Find your crew" when they sent a trip, and every pair of them whose trips cross and who fit each other's wishes.
+     A person makes each introduction: ask each of them first (the buttons open their chosen channel with the message written), and only introduce
+     them once both have said yes. docs/FIND-YOUR-CREW.md */
+  var CREWFOCUS = '', IST = { new: 'Not asked yet', asked: 'Asked them both', yes: 'Both said yes', introduced: 'Introduced', no: 'Not now' };
+  function renderCrew() {
+    api('/crew').then(function (D) {
+      var L = D.labels, by = {}; D.travellers.forEach(function (t) { by[t.ref] = t; });
+      var lab = function (list, k) { for (var i = 0; i < list.length; i++) if (list[i][0] === k) return list[i][1]; return ''; };
+      var labs = function (list, ks) { return (ks || []).map(function (k) { return lab(list, k); }).filter(Boolean); };
+      var first = function (t) { return String(t.name || '').trim().split(/\s+/)[0]; };
+      var plural = function (n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); };
+      function facts(t) { var c = t.crew; return [lab(L.ages, c.age), c.gender ? lab(L.genders, c.gender).replace(/^A /, '').toLowerCase() : '', c.home ? 'from ' + c.home : '', t.partySize > 1 ? t.partySize + ' travelling together' : 'travelling solo'].filter(Boolean).join(' · '); }
+      function wants(c) { return [c.want.who === 'women' ? 'women only' : 'anyone', c.want.ages === 'any' ? 'any age' : 'around their age', c.want.solo ? 'solo travellers only' : ''].filter(Boolean).join(', '); }
+      function where(p) {
+        if (p.kind === 'together') return p.ranges.map(function (r) { return r.place + ' (' + r.label + ')'; }).join(', ');
+        if (p.kind === 'near') return p.near.map(function (n) { return n.place + ' (' + n.a + ' and ' + n.b + ')'; }).join(', ');
+        return p.shared.join(', ');
+      }
+      function kind(p) { return p.kind === 'together' ? plural(p.nights, 'night') + ' together' : p.kind === 'near' ? 'Near miss' : 'Same stops, no dates yet'; }
+      // The message to one of them, asking first. Nothing about the other person beyond what they agreed to share.
+      function askText(me, them, p) {
+        var c = them.crew, bits = [lab(L.ages, c.age), c.home ? 'from ' + c.home : '', them.partySize > 1 ? 'travelling with ' + (them.partySize - 1) + ' more' : 'travelling solo'].filter(Boolean).join(', ');
+        var at = p.kind === 'together' ? 'is in ' + where(p) + ', the same nights as you' : p.kind === 'near' ? 'is in the same place as you a day or two apart: ' + where(p) : 'is planning the same stops as you (' + where(p) + ') and hasn\'t picked dates yet';
+        return 'Hi ' + first(me) + ', it\'s ' + (WHO || 'the crew') + ' from Mad Monkey. You ticked Find your crew when you sent your trip (' + me.ref + '). ' + first(them) + ' (' + bits + ') ' + at + '.' +
+          (c.about ? ' In their words: "' + c.about + '"' : '') + ' Want me to introduce you? I\'ll only share what you told us for Find your crew, and only if you both say yes.';
+      }
+      // Once both have said yes: the message for a WhatsApp group with the two of them.
+      function introText(a, b, p) {
+        return 'Hi ' + first(a) + ' and ' + first(b) + '! It\'s ' + (WHO || 'the crew') + ' from Mad Monkey. You both said yes, so meet your crew: ' + (p.kind === 'together' ? 'you\'re both in ' + where(p) + '.' : 'your trips cross in ' + where(p) + '.') +
+          (a.crew.about ? ' ' + first(a) + ': "' + a.crew.about + '"' : '') + (b.crew.about ? ' ' + first(b) + ': "' + b.crew.about + '"' : '') + ' Say hi, and see you at the bar!';
+      }
+      function reach(t, text) { return t.via === 'email' || !t.whatsapp ? 'mailto:' + encodeURIComponent(t.email || '') + '?subject=' + encodeURIComponent('Find your crew · Mad Monkey') + '&body=' + encodeURIComponent(text) : 'https://wa.me/' + String(t.whatsapp).replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent(text); }
+      function person(t) {
+        var c = t.crew, chips = labs(L.life, c.life).concat(labs(L.vibes, c.vibes));
+        return '<div class="who"><b>' + esc(t.name) + '</b> <span class="muted">' + esc(t.ref) + '</span>' + (t.sample ? ' <span class="pill">sample</span>' : '') + '<div class="muted">' + esc(facts(t)) + '</div>' +
+          (chips.length ? '<div class="muted">' + esc(chips.join(' · ')) + '</div>' : '') + (c.about ? '<p><q>' + esc(c.about) + '</q></p>' : '') +
+          '<div class="muted">Wants to meet ' + esc(wants(c)) + '</div><div class="muted">' + esc(t.route) + (t.start ? ' · from ' + esc(t.start) : '') + ' · ' + esc(t.days) + ' days</div></div>';
+      }
+      var pairs = D.pairs.filter(function (p) { return by[p.a] && by[p.b] && (!CREWFOCUS || p.a === CREWFOCUS || p.b === CREWFOCUS); });
+      var cnt = function (st) { return D.pairs.filter(function (p) { return st.indexOf(p.intro.status) > -1; }).length; };
+      var h = '<div class="card"><span class="stat"><b class="big">' + D.travellers.length + '</b><span>Opted in</span></span><span class="stat"><b class="big">' + D.pairs.length + '</b><span>Matches</span></span>' +
+        '<span class="stat"><b class="big">' + cnt(['asked', 'yes']) + '</b><span>Being introduced</span></span><span class="stat"><b class="big">' + cnt(['introduced']) + '</b><span>Introduced</span></span>' +
+        '<div class="tools" style="margin-top:12px"><input id="who2" placeholder="I\'m… (your name: it signs the messages)" value="' + esc(WHO) + '"></div>' +
+        '<p class="muted">Travellers who ticked <b>Find your crew</b> when they sent a trip. A match is two of them in the same town on the same nights (or a day or two apart) who fit what each other asked for. Ask each of them first, and only introduce them once both have said yes. Trips that have finished drop off.</p></div>';
+      h += '<div class="card"><h2 style="font-size:22px;margin-bottom:8px">Matches' + (CREWFOCUS ? ' for ' + esc((by[CREWFOCUS] || {}).name || CREWFOCUS) + ' <button class="btn" id="crewall">Show everyone</button>' : '') + '</h2>' +
+        (pairs.length ? pairs.map(function (p, i) {
+          var a = by[p.a], b = by[p.b], both = labs(L.vibes, p.vibes).concat(labs(L.life, p.life));
+          return '<div class="card" style="box-shadow:none;margin-bottom:12px"><div class="pair__hd"><h3>' + esc(first(a)) + ' + ' + esc(first(b)) + '</h3><span class="pill k-' + esc(p.kind) + '">' + esc(kind(p)) + '</span><span class="pill i-' + esc(p.intro.status) + '">' + esc(IST[p.intro.status] || p.intro.status) + '</span>' +
+            (p.intro.by ? '<span class="muted">' + esc(p.intro.by) + ', ' + new Date(p.intro.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</span>' : '') + '</div>' +
+            '<p><b>Where:</b> ' + esc(where(p)) + '</p>' + (both.length ? '<p class="muted">Both: ' + esc(both.join(' · ')) + '</p>' : '') +
+            '<div class="row2">' + person(a) + person(b) + '</div>' +
+            '<div class="acts"><select data-ist="' + i + '" aria-label="Where the introduction is">' + L.intro.map(function (k) { return '<option value="' + esc(k) + '"' + (p.intro.status === k ? ' selected' : '') + '>' + esc(IST[k]) + '</option>'; }).join('') + '</select><button class="btn p" data-isave="' + i + '">Save</button>' +
+            '<a class="btn" target="_blank" rel="noopener" href="' + esc(reach(a, askText(a, b, p))) + '">Ask ' + esc(first(a)) + '</a><a class="btn" target="_blank" rel="noopener" href="' + esc(reach(b, askText(b, a, p))) + '">Ask ' + esc(first(b)) + '</a>' +
+            '<button class="btn l" data-icopy="' + i + '">Copy the intro</button></div></div>';
+        }).join('') : '<p class="muted">' + (D.travellers.length ? 'No matches yet. Nobody else is on the same route at the same time (or they asked for different people).' : 'Nobody has ticked Find your crew yet. It\'s on the send form ("Hold my beds + get it checked"). To try it with sample travellers, run <code>node scripts/seed-crew-demo.mjs</code>.') + '</p>') + '</div>';
+      h += '<div class="card"><h2 style="font-size:22px;margin-bottom:6px">Hot spots</h2><p class="muted">Where opted-in travellers stack up, whatever they asked for. Good nights for a Find your crew meet-up at the hostel bar.</p>' +
+        (D.spots.length ? '<table><tr><th>Where</th><th>When</th><th>Who</th><th>Most on one night</th></tr>' + D.spots.map(function (s) { return '<tr><td><b>' + esc(s.place) + '</b></td><td>' + esc(s.label) + ' <span class="muted">' + esc(plural(s.nights, 'night')) + '</span></td><td>' + s.ids.map(function (id) { return esc(by[id] ? by[id].name : id); }).join(', ') + '</td><td><b>' + esc(s.peak) + '</b></td></tr>'; }).join('') + '</table>' : '<p class="muted">None yet.</p>') + '</div>';
+      h += '<div class="card"><h2 style="font-size:22px;margin-bottom:8px">Everyone who opted in</h2>' + (D.travellers.length ? '<table><tr><th>Ref</th><th>Traveller</th><th>Wants to meet</th><th>Trip</th><th></th></tr>' + D.travellers.map(function (t) {
+          return '<tr><td><b>' + esc(t.ref) + '</b></td><td>' + esc(t.name) + (t.sample ? ' <span class="pill">sample</span>' : '') + '<div class="muted">' + esc(facts(t)) + '</div></td><td>' + esc(wants(t.crew)) + '</td><td>' + esc(t.route) + '<div class="muted">' + (t.start ? esc(t.start) + ' · ' : 'no dates · ') + esc(t.days) + ' days</div></td><td><button class="btn" data-off="' + esc(t.ref) + '">Switch off</button></td></tr>';
+        }).join('') + '</table><p class="muted">Switch someone off when they ask to stop. They drop out of every match.</p>' : '<p class="muted">Nobody yet.</p>') + '</div>';
+      shell(h);
+      if (document.getElementById('crewall')) document.getElementById('crewall').onclick = function () { CREWFOCUS = ''; renderCrew(); };
+      document.getElementById('who2').onchange = function (e) { WHO = e.target.value.trim(); localStorage.setItem('mm-who', WHO); toast('Saved: you are ' + (WHO || 'nobody')); renderCrew(); };
+      Array.prototype.forEach.call(app.querySelectorAll('[data-isave]'), function (b) { b.onclick = function () {
+        var p = pairs[+b.getAttribute('data-isave')], st = app.querySelector('[data-ist="' + b.getAttribute('data-isave') + '"]').value;
+        api('/crew/intro', { method: 'PATCH', body: { a: p.a, b: p.b, status: st, by: WHO } }).then(function () { toast('Saved: ' + IST[st]); renderCrew(); });
+      }; });
+      Array.prototype.forEach.call(app.querySelectorAll('[data-icopy]'), function (b) { b.onclick = function () {
+        var p = pairs[+b.getAttribute('data-icopy')], text = introText(by[p.a], by[p.b], p);
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () { toast('Copied. Paste it into a WhatsApp group with both of them.'); }, function () { window.prompt('Copy the intro', text); });
+      }; });
+      Array.prototype.forEach.call(app.querySelectorAll('[data-off]'), function (b) { b.onclick = function () {
+        var t = by[b.getAttribute('data-off')]; if (!t || !window.confirm('Switch Find your crew off for ' + t.name + '? They drop out of every match.')) return;
+        api('/leads/' + t.ref, { method: 'PATCH', body: { findCrewOff: true } }).then(function () { toast('Switched off'); renderCrew(); });
+      }; });
+    });
   }
 
   /* ---------- waitlist ---------- */
@@ -217,7 +302,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
   }
 
   function load() { api('/leads').then(function (d) { leads = d; if (tab === 'reviews') renderReviews(); }); }
-  function render() { if (tab === 'reviews') { shell('<div class="card">Loading…</div>'); load(); } else if (tab === 'live') renderLive(); else if (tab === 'quotes') renderQuotes(); else if (tab === 'waitlist') renderWaitlist(); else if (tab === 'hostels') renderHostels(); else if (tab === 'flow') renderFlow(); else renderFunnel(); }
+  function render() { if (tab === 'reviews') { shell('<div class="card">Loading…</div>'); load(); } else if (tab === 'crew') renderCrew(); else if (tab === 'live') renderLive(); else if (tab === 'quotes') renderQuotes(); else if (tab === 'waitlist') renderWaitlist(); else if (tab === 'hostels') renderHostels(); else if (tab === 'flow') renderFlow(); else renderFunnel(); }
   function start() {
     if (!TOKEN) return login();
     Object.keys(window.MM.PLACES).forEach(function (id) { PLACES[id] = window.MM.PLACES[id].n; });

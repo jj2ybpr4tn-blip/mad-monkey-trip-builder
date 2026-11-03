@@ -36,12 +36,12 @@
     var cantFit = {}; (pl.unscheduled || []).forEach(function (u) { cantFit[u.act.id + '@' + u.seg] = true; });
 
     var stops = segs.map(function (s, si) {
-      var ds = bySeg[si], stay = ds.filter(function (d) { return d.kind === 'stay' || d.kind === 'epic' || d.kind === 'block'; });
+      var ds = bySeg[si], stay = ds.filter(function (d) { return (d.kind === 'stay' && !d.pre) || d.kind === 'epic' || d.kind === 'block'; }), pre = ds.filter(function (d) { return d.pre; })[0];
       var from = stay.length && stay[0].date ? iso(stay[0].date) : '', last = stay.length ? stay[stay.length - 1] : null;
       var to = last && last.date ? iso(U.addDays(last.date, 1)) : '';
       if (s.kind === 'allin') {
-        return { kind: 'allin', id: s.trip.id, name: 'ALL IN ' + s.trip.n, nights: s.trip.days - 1, days: s.trip.days, usd: s.trip.usd, from: from, to: to,
-          route: s.trip.tag, departs: DOWN[s.trip.dep], status: s.trip.status, tours: [], next: null };
+        return { kind: 'allin', id: s.trip.id, name: 'ALL IN ' + s.trip.n, nights: MM.allInNights(s.trip), days: s.trip.days, usd: s.usd, from: from, to: to,
+          route: s.trip.tag, departs: DOWN[s.trip.dep], status: s.trip.status, nightBefore: pre && pre.date ? iso(pre.date) : '', nightBeforeAt: pre ? P()[pre.loc].n : '', tours: [], next: null };
       }
       var pl1 = P()[s.p], covered = 0;
       s.inline.forEach(function (a) { if (a.multi && a.multi.covers) covered += Math.max(0, a.multi.d - 1); });
@@ -57,13 +57,14 @@
 
     pl.legs.forEach(function (l) {
       var c = l.chosen, s = stops[l.index]; if (!s) return;
-      s.next = { to: P()[l.to].n, mode: c.modeLabel, hours: U.hoursLabel(c.h), usd: Math.round(l.u), overnight: !!c.ovn, date: l.date || '', pref: PREFS[c.key] || '',
+      s.next = { to: P()[l.to].n, mode: c.modeLabel, hours: U.hoursLabel(c.h), usd: Math.round(l.u), flightUsd: Math.round(l.flightU || 0), overnight: !!c.ovn, date: l.date || '', pref: PREFS[c.key] || '',
         lastMinuteFare: l.fare ? { min: l.fare.min, max: l.fare.max } : null, note: l.border || '' };
     });
 
     // Straight from the plan's own total so it matches the builder's headline figure (the parts are each rounded, so they can differ by a dollar).
+    // Flights are never in it: the guest books them, so they're listed for the crew to suggest, not to charge.
     var tripCost = T.total - T.fund;
-    var budget = { beds: T.beds, tours: T.acts, transport: T.transport, allIn: T.allin, squadDiscount: T.squad, tripCost: tripCost,
+    var budget = { beds: T.beds, tours: T.acts, transport: T.transport, flights: T.flights || 0, allIn: T.allin, squadDiscount: T.squad, tripCost: tripCost,
       spendPerDay: +state.fund || 0, spendFund: T.fund, total: T.total, people: people, tripCostAllPeople: tripCost * people, totalAllPeople: T.total * people,
       toursPaidOnTheDay: T.payOnDay, hasEstimates: !!T.est, guestBudget: T.budget || 0, budgetLeft: T.budget ? T.budgetLeft : null };
 
@@ -145,7 +146,10 @@
     sum.stops.forEach(function (s, i) {
       var when = s.from ? ' · ' + nice(s.from) + ' to ' + nice(s.to) : '';
       L.push('');
-      if (s.kind === 'allin') { L.push((i + 1) + '. ' + s.name.toUpperCase() + ' · ' + s.days + ' days · ' + usd(s.usd) + when); if (s.route) L.push('   ' + s.route); }
+      if (s.kind === 'allin') {
+        L.push((i + 1) + '. ' + s.name.toUpperCase() + ' · ' + s.days + ' days · ' + usd(s.usd) + when); if (s.route) L.push('   ' + s.route);
+        if (s.nightBefore) L.push('   Night before: ' + nice(s.nightBefore) + ' in ' + s.nightBeforeAt + ', free subject to availability (they claim it at ' + MM.PRE_NIGHT_EMAIL + ')');
+      }
       else {
         L.push((i + 1) + '. ' + s.name.toUpperCase() + ' (' + s.country + ') · ' + s.nights + (s.nights === 1 ? ' night' : ' nights') + when);
         L.push('   Bed from ' + usd(s.bedUsd) + ' a night' + (s.partner ? ' (partner hostel, price is an estimate)' : ''));
@@ -154,15 +158,16 @@
           L.push('   - ' + t.name + ' · ' + (t.payOnDay ? 'pay on the day' : usd(t.usd) + (t.est ? ' (est.)' : '')) + (t.date ? ' · ' + nice(t.date) : t.day ? ' · day ' + t.day : '') + (t.fits ? '' : ' · DOES NOT FIT, needs another night'));
         });
       }
-      if (s.next) L.push('   Then: ' + s.next.mode + ' to ' + s.next.to + ' · ' + s.next.hours + ' · ' + usd(s.next.usd) + (s.next.overnight ? ' · overnight' : '') + (s.next.date ? ' · ' + nice(s.next.date) : ''));
+      if (s.next) L.push('   Then: ' + s.next.mode + ' to ' + s.next.to + ' · ' + s.next.hours + ' · ' + usd(s.next.usd) + (s.next.flightUsd ? ' (' + usd(s.next.flightUsd) + ' of it is a flight they book, not in the price)' : '') + (s.next.overnight ? ' · overnight' : '') + (s.next.date ? ' · ' + nice(s.next.date) : ''));
     });
     rule('MONEY (per person, US dollars)');
     L.push('Beds             ' + usd(b.beds));
     L.push('Tours            ' + usd(b.tours));
-    L.push('Travel           ' + usd(b.transport));
+    L.push('Travel           ' + usd(b.transport) + (b.flights ? ' (no flights)' : ''));
     if (b.allIn) L.push('ALL IN trip      ' + usd(b.allIn));
     if (b.squadDiscount) L.push('Squad discount   -' + usd(-b.squadDiscount));
     L.push('Trip cost        ' + usd(b.tripCost) + (b.people > 1 ? '  (x' + b.people + ' = ' + usd(b.tripCostAllPeople) + ')' : ''));
+    if (b.flights) L.push('Flights          ' + usd(b.flights) + ' estimate, NOT included: they book these, we suggest the best ones');
     L.push('Spending money   ' + usd(b.spendFund) + ' (' + usd(b.spendPerDay) + ' a day, their own, not charged)');
     L.push('Estimated total  ' + usd(b.total) + (b.people > 1 ? '  (x' + b.people + ' = ' + usd(b.totalAllPeople) + ')' : ''));
     if (b.guestBudget) L.push('Their budget     ' + usd(b.guestBudget) + (b.budgetLeft >= 0 ? ' (' + usd(b.budgetLeft) + ' to spare)' : ' (over by ' + usd(-b.budgetLeft) + ')'));

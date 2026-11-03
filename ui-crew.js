@@ -114,16 +114,17 @@
     h += s.stops.map(function (p, i) {
       var date = p.from ? day(p.from) + ' to ' + day(p.to) : '';
       var head = p.kind === 'allin' ? esc(p.name) + ' <small>· ' + num(p.days) + ' days · ' + usd(p.usd) + '</small>' : esc(p.name) + (p.country ? ' <small>· ' + esc(p.country) + '</small>' : '');
-      var sub = p.kind === 'allin' ? esc(p.route || '') : num(p.nights) + (num(p.nights) === 1 ? ' night' : ' nights') + (date ? ' · ' + esc(date) : '') + ' · bed from ' + usd(p.bedUsd) + ' a night' + (p.partner ? ' (partner hostel, estimate)' : '');
+      var sub = p.kind === 'allin' ? esc(p.route || '') + (date ? ' · ' + esc(date) : '') + (p.nightBefore ? '<br>Night before: ' + esc(day(p.nightBefore)) + ' in ' + esc(p.nightBeforeAt) + ', free subject to availability (they claim it at ' + esc(MM.PRE_NIGHT_EMAIL) + ')' : '') : num(p.nights) + (num(p.nights) === 1 ? ' night' : ' nights') + (date ? ' · ' + esc(date) : '') + ' · bed from ' + usd(p.bedUsd) + ' a night' + (p.partner ? ' (partner hostel, estimate)' : '');
       var tours = (p.tours || []).map(function (t) {
         return '<li><span>' + (t.fits ? '' : '<em>No room</em> ') + esc(t.name) + '</span><span>' + (t.payOnDay ? 'pay on the day' : usd(t.usd) + (t.est ? ' est.' : '')) + (t.date ? '<i>' + esc(day(t.date)) + '</i>' : t.day ? '<i>day ' + num(t.day) + '</i>' : '') + '</span></li>';
       }).join('') || (p.kind === 'allin' ? '' : '<li class="none"><span>No tours picked</span></li>');
-      var next = p.next ? '<div class="cstop__next"><b>Then</b> ' + esc(p.next.mode) + ' to ' + esc(p.next.to) + ' · ' + esc(p.next.hours) + ' · ' + usd(p.next.usd) + (p.next.overnight ? ' · overnight' : '') + (p.next.date ? ' · ' + esc(day(p.next.date)) : '') + '</div>' : '';
+      var next = p.next ? '<div class="cstop__next"><b>Then</b> ' + esc(p.next.mode) + ' to ' + esc(p.next.to) + ' · ' + esc(p.next.hours) + ' · ' + usd(p.next.usd) + (p.next.flightUsd ? ' <i>(' + usd(p.next.flightUsd) + ' of it is a flight they book, not in the price)</i>' : '') + (p.next.overnight ? ' · overnight' : '') + (p.next.date ? ' · ' + esc(day(p.next.date)) : '') + '</div>' : '';
       return '<article class="cstop"><div class="cstop__n">' + (i + 1) + '</div><div class="cstop__b"><h4>' + head + '</h4><p>' + sub + '</p><ul>' + tours + '</ul>' + next + '</div></article>';
     }).join('');
     var row = function (k, v, bold, n) { return '<tr' + (bold ? ' class="b"' : '') + '><td>' + esc(k) + (n ? '<i>' + esc(n) + '</i>' : '') + '</td><td>' + v + '</td></tr>'; };
-    h += '<table class="cmoney"><caption>The money · each person, US dollars</caption>' + row('Beds', usd(b.beds)) + row('Tours', usd(b.tours)) + row('Getting around', usd(b.transport)) + (b.allIn ? row('ALL IN trip', usd(b.allIn)) : '') +
+    h += '<table class="cmoney"><caption>The money · each person, US dollars</caption>' + row('Beds', usd(b.beds)) + row('Tours', usd(b.tours)) + row(b.flights ? 'Getting around (no flights)' : 'Getting around', usd(b.transport)) + (b.allIn ? row('ALL IN trip', usd(b.allIn)) : '') +
       (b.squadDiscount ? row('Squad discount', '-' + usd(-b.squadDiscount)) : '') + row('Trip cost', usd(b.tripCost), true) +
+      (b.flights ? row('Flights', usd(b.flights), false, 'Not included and not in the price: they book these, we suggest the best ones.') : '') +
       row('Their spending money', usd(b.spendFund), false, usd(b.spendPerDay) + ' a day for food and fun. Theirs to spend, not charged by us.') + row('Estimated total', usd(b.total), true) +
       (num(s.people) > 1 ? row('For all ' + num(s.people), usd(b.tripCostAllPeople) + ' trip cost · ' + usd(b.totalAllPeople) + ' with spending money', true) : '') +
       (b.guestBudget ? row('Their own budget', usd(b.guestBudget) + ' each', false, b.budgetLeft == null ? '' : b.budgetLeft >= 0 ? usd(b.budgetLeft) + ' to spare' : usd(-b.budgetLeft) + ' over') : '') +

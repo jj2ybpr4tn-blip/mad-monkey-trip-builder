@@ -42,6 +42,7 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 | **Pay your way** | After the crew approves a trip and sets the price, the guest chooses how to pay: all now, a week before they leave (a card is saved, nothing charged until then), or in instalments when they leave 60+ days out. See [docs/PAYMENTS.md](docs/PAYMENTS.md). |
 | **Edit it your way** | **Start building** is always a blank sheet (with a short walk-around, and "Pick up where you left off" if you had a trip). Every stop has worded **Remove stop** / **Swap place** buttons, **+ Add a stop** asks where it goes, the day-by-day plan is editable, and Undo/Redo covers everything. A guest can also **change a trip after sending it**: it replaces the one the crew is checking, so they never review an outdated plan. See [docs/EDITING.md](docs/EDITING.md). |
 | **Crew review** | What the team receives when a trip is sent: the whole trip as the guest built it (stops, tours, travel, money, heads-up) in the email, with **Approve / Not approved / Edit it** buttons that open a review page. See [docs/CREW-REVIEW.md](docs/CREW-REVIEW.md). |
+| **Find your crew** | A tick on the send form: travelling solo or keen for company? The crew sees who else is in the same towns on the same nights and fits what they asked for (women only, around my age, solo only), and a real person introduces them once both say yes. See [docs/FIND-YOUR-CREW.md](docs/FIND-YOUR-CREW.md). |
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
 | **Currencies** | USD, GBP, EUR, AUD and CAD at indicative rates (set 22 Oct 2026; `FX_ENDPOINT` in `config.js` refreshes them from a free feed). Real conversion belongs to the booking engine. |
 | **Trip Doctor** | Scores the pace of a trip and fixes it in one tap: back-to-back night buses, 14-hour journeys, one-night stops, too many stops, odd arrival times, visa length, festival clashes. |
@@ -121,8 +122,9 @@ docs/CREW-REVIEW.md the crew email + review page, and the endpoint it talks to
 docs/PAYMENTS.md    free to send, approval, then pay your way (now / a week before / instalments)
 docs/EDITING.md     editing your trip, the blank start + walk-around, changing a trip after sending it
 docs/PLANNING.md    search ("Where to?"), best order, plan in stages + log in, Ask Ewan
+docs/FIND-YOUR-CREW.md  "Find your crew": opting in, how matches work, the crew console tab, privacy
 docs/REVIEW.md      the big review (Oct 2026): what was found, what was fixed, what is still open
-scripts/            lint, audit-data, make-thumbs, mirror-photos, build-pages, sync-allin, deploy-demo
+scripts/            lint, audit-data, make-thumbs, mirror-photos, build-pages, sync-allin, deploy-demo, seed-crew-demo
 test/               logic + fuzz tests (node, no dependencies); ui-smoke.js and ui-lint.js run in a browser tab
 ```
 

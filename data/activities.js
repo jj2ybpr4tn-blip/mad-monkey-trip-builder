@@ -200,8 +200,9 @@
   A('manila', null, 'Intramuros + Binondo food walk', 'day', 25, 'half', '', 'culture food', EST);
 
   /* ---------------- NACPAN BEACH ---------------- */
-  A('nacpan-beach', 'tour-m-island-hopping', 'Nacpan ultimate island hopping', 'day', 39.04, 'full', 'Tue Thu Fri Sat', 'water beach adventure', st({}));
-  A('nacpan-beach', 'sunset-cruise', 'Sunset cruise', 'night', 20.72, 'eve', 'Mon Wed Fri Sun', 'chill party', st({}));
+  // Both run every day (tour pages, 3 Nov 2026). Priced in pesos: island hopping ₱2,500, sunset cruise ₱1,000, at about ₱63.4 to the dollar.
+  A('nacpan-beach', 'tour-m-island-hopping', 'Nacpan ultimate island hopping', 'day', 39.4, 'full', '', 'water beach adventure', st({}));
+  A('nacpan-beach', 'sunset-cruise', 'Sunset cruise', 'night', 15.77, 'eve', '', 'chill party', st({}));
 
   /* ---------------- PANGLAO ---------------- */
   A('panglao', 'dolphin-watching-and-island-hopping-tour-balicasag-and-virgin-island', 'Dolphins + Balicasag + Virgin Island', 'day', 39.84, 'full', '', 'water dive wildlife', st({}));

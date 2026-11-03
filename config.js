@@ -55,6 +55,11 @@ window.MM_CONFIG = {
   // Optional. Enables group mode across devices. Contract in docs/GROUP.md. Blank = demo mode (votes sync between tabs of one browser only).
   GROUP_ENDPOINT: '',
 
+  // "Find your crew" on the send form: a guest can ask the crew to introduce them to travellers on a similar route at the same time (docs/FIND-YOUR-CREW.md).
+  // true only once the backend keeps what they tell us (the bundled crew server does, and switches this on for you). false = not offered, so nobody ticks
+  // a box that goes nowhere. Demo mode (no LEAD_ENDPOINT) always shows it.
+  FIND_CREW: false,
+
   // Optional. Keeps the pound / euro / dollar / baht conversions fresh: a feed that answers { rates: { GBP: 0.75, ... } } per US dollar, e.g.
   // 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP,EUR,AUD,CAD,THB,IDR,PHP'. Each visitor's browser asks at most once every 12 hours (so that
   // service sees their address). Blank = the built-in rates (22 Oct 2026), which is what the live site uses. Prices are always charged in US dollars.
