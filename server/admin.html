@@ -43,7 +43,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
 </head>
 <body>
 <div id="app"></div>
-<script src="/data/places.js"></script><script src="/data/activities.js"></script><script src="/data/media.js"></script><script src="/data/legs.js"></script><script src="/data/trips.js"></script>
+<script src="/data/places.js"></script><script src="/data/activities.js"></script><script src="/data/media.js"></script><script src="/data/legs.js"></script><script src="/data/trips.js"></script><script src="/logic.js"></script>
 <script>
 (function () {
   var app = document.getElementById('app'), TOKEN = sessionStorage.getItem('mm-admin') || '', tab = 'reviews', leads = [], sel = null, PLACES = {}, TRIPS = [];
@@ -141,35 +141,17 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
      Travellers who ticked "Find your crew" when they sent a trip, and every pair of them whose trips cross and who fit each other's wishes.
      A person makes each introduction: ask each of them first (the buttons open their chosen channel with the message written), and only introduce
      them once both have said yes. docs/FIND-YOUR-CREW.md */
-  var CREWFOCUS = '', IST = { new: 'Not asked yet', asked: 'Asked them both', yes: 'Both said yes', introduced: 'Introduced', no: 'Not now' };
+  var CREWFOCUS = '', IST = window.MM.FIND.INTRO_LABELS;
   function renderCrew() {
     api('/crew').then(function (D) {
       var L = D.labels, by = {}; D.travellers.forEach(function (t) { by[t.ref] = t; });
       var lab = function (list, k) { for (var i = 0; i < list.length; i++) if (list[i][0] === k) return list[i][1]; return ''; };
       var labs = function (list, ks) { return (ks || []).map(function (k) { return lab(list, k); }).filter(Boolean); };
-      var first = function (t) { return String(t.name || '').trim().split(/\s+/)[0]; };
+      // The words (who someone is, what they asked for, where a pair cross, the ask-first and intro messages) come from logic.js, the same as the builder's own board.
+      var W = window.MM.crewWords, first = W.first, facts = W.facts, wants = W.wants, where = W.where, kind = W.kind, reach = W.reach;
       var plural = function (n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); };
-      function facts(t) { var c = t.crew; return [lab(L.ages, c.age), c.gender ? lab(L.genders, c.gender).replace(/^A /, '').toLowerCase() : '', c.home ? 'from ' + c.home : '', t.partySize > 1 ? t.partySize + ' travelling together' : 'travelling solo'].filter(Boolean).join(' · '); }
-      function wants(c) { return [c.want.who === 'women' ? 'women only' : 'anyone', c.want.ages === 'any' ? 'any age' : 'around their age', c.want.solo ? 'solo travellers only' : ''].filter(Boolean).join(', '); }
-      function where(p) {
-        if (p.kind === 'together') return p.ranges.map(function (r) { return r.place + ' (' + r.label + ')'; }).join(', ');
-        if (p.kind === 'near') return p.near.map(function (n) { return n.place + ' (' + n.a + ' and ' + n.b + ')'; }).join(', ');
-        return p.shared.join(', ');
-      }
-      function kind(p) { return p.kind === 'together' ? plural(p.nights, 'night') + ' together' : p.kind === 'near' ? 'Near miss' : 'Same stops, no dates yet'; }
-      // The message to one of them, asking first. Nothing about the other person beyond what they agreed to share.
-      function askText(me, them, p) {
-        var c = them.crew, bits = [lab(L.ages, c.age), c.home ? 'from ' + c.home : '', them.partySize > 1 ? 'travelling with ' + (them.partySize - 1) + ' more' : 'travelling solo'].filter(Boolean).join(', ');
-        var at = p.kind === 'together' ? 'is in ' + where(p) + ', the same nights as you' : p.kind === 'near' ? 'is in the same place as you a day or two apart: ' + where(p) : 'is planning the same stops as you (' + where(p) + ') and hasn\'t picked dates yet';
-        return 'Hi ' + first(me) + ', it\'s ' + (WHO || 'the crew') + ' from Mad Monkey. You ticked Find your crew when you sent your trip (' + me.ref + '). ' + first(them) + ' (' + bits + ') ' + at + '.' +
-          (c.about ? ' In their words: "' + c.about + '"' : '') + ' Want me to introduce you? I\'ll only share what you told us for Find your crew, and only if you both say yes.';
-      }
-      // Once both have said yes: the message for a WhatsApp group with the two of them.
-      function introText(a, b, p) {
-        return 'Hi ' + first(a) + ' and ' + first(b) + '! It\'s ' + (WHO || 'the crew') + ' from Mad Monkey. You both said yes, so meet your crew: ' + (p.kind === 'together' ? 'you\'re both in ' + where(p) + '.' : 'your trips cross in ' + where(p) + '.') +
-          (a.crew.about ? ' ' + first(a) + ': "' + a.crew.about + '"' : '') + (b.crew.about ? ' ' + first(b) + ': "' + b.crew.about + '"' : '') + ' Say hi, and see you at the bar!';
-      }
-      function reach(t, text) { return t.via === 'email' || !t.whatsapp ? 'mailto:' + encodeURIComponent(t.email || '') + '?subject=' + encodeURIComponent('Find your crew · Mad Monkey') + '&body=' + encodeURIComponent(text) : 'https://wa.me/' + String(t.whatsapp).replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent(text); }
+      function askText(me, them, p) { return W.ask(me, them, p, WHO); }
+      function introText(a, b, p) { return W.intro(a, b, p, WHO); }
       function person(t) {
         var c = t.crew, chips = labs(L.life, c.life).concat(labs(L.vibes, c.vibes));
         return '<div class="who"><b>' + esc(t.name) + '</b> <span class="muted">' + esc(t.ref) + '</span>' + (t.sample ? ' <span class="pill">sample</span>' : '') + '<div class="muted">' + esc(facts(t)) + '</div>' +

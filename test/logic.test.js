@@ -571,6 +571,21 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   var spots = MM.crewSpots([sophie, mia, tom, pair, zoe, off]);
   ok('Find your crew: hot spots count everyone opted in on a night (filters aside), busiest first, and skip trips without dates', spots[0].p === 'siquijor' && spots[0].peak === 4 && spots[0].nights === 3 && spots[0].ids.indexOf('Z') < 0 && spots[0].ids.indexOf('X') < 0, JSON.stringify(spots[0]));
   ok('Find your crew: a broken trip is skipped, not a crash', MM.crewPairs([sophie, T('B', 'b@x', 1, me(), 'i=nonsense'), mia]).length === 1);
+
+  // The board both crew screens are drawn from: the bundled console and #/crewfind on the ALL IN site.
+  var bt = function (ref, crew, state, start, days, x) { return Object.assign({ ref: ref, name: ref + ' Smith', partySize: 1, via: 'email', email: ref.toLowerCase() + '@x', whatsapp: '', route: 'r', start: start, days: days, state: state, crew: crew }, x || {}); };
+  var B = MM.crewBoard([bt('S', sophie.crew, sophie.state, '2027-02-08', 13), bt('M', mia.crew, mia.state, '2027-02-10', 11, { via: 'whatsapp', whatsapp: '+44 7700 900123' }), bt('X', { on: false }, off.state, '2027-02-10', 4),
+    bt('OLD', me(), feb([['siquijor', 3], ['panglao', 3]], '2026-12-01'), '2026-12-01', 7), bt('J', { on: true, consent: true, adult: true, age: '9-10' }, mia.state, '2027-02-10', 11)],
+  [{ a: 'S', b: 'M', status: 'asked', by: 'Jo', at: '2027-01-01T10:00:00Z' }, { a: 'M', b: 'S', status: 'hacked' }], '2027-01-15');
+  ok('Find your crew board: only people still opted in, cleaned, whose trip isn\'t over', B.travellers.map(function (t) { return t.ref; }).join() === 'S,M', B.travellers.map(function (t) { return t.ref; }).join());
+  var bp = B.pairs[0];
+  ok('Find your crew board: the pair carries town names, ISO dates and where its introduction is (a made-up status is ignored)', B.pairs.length === 1 && bp.key === 'M|S' && bp.kind === 'together' && bp.ranges[0].place === 'Siquijor' && /^\d{4}-\d{2}-\d{2}$/.test(bp.ranges[0].from) && bp.intro.status === 'asked' && bp.intro.by === 'Jo', JSON.stringify(bp && bp.intro));
+  ok('Find your crew board: hot spots by town name, and the labels the screens need', B.spots[0].place === 'Siquijor' && B.labels.intro.join() === 'new,asked,yes,introduced,no' && MM.FIND.INTRO_LABELS.yes === 'Both said yes');
+  var W = MM.crewWords, S0 = B.travellers[0], M0 = B.travellers[1], askS = W.ask(S0, M0, bp, 'Ewan');
+  ok('Find your crew words: the ask-first message is signed, names the place, and never shares the other\'s contact details', /^Hi S, it's Ewan from Mad Monkey/.test(askS) && /Siquijor/.test(askS) && !/m@x|7700/.test(askS) && /only if you both say yes/.test(askS), askS);
+  ok('Find your crew words: the crew is "the crew" when nobody signed it, and the intro names them both', /it's the crew from Mad Monkey/.test(W.ask(S0, M0, bp, '')) && /^Hi S and M!/.test(W.intro(S0, M0, bp, 'Ewan')));
+  ok('Find your crew words: each traveller is reached their own way (email, or WhatsApp digits only)', /^mailto:s%40x\?subject=/.test(W.reach(S0, 'hi')) && W.reach(M0, 'hi') === 'https://wa.me/447700900123?text=hi');
+  ok('Find your crew words: facts and wants read as a line', W.facts(S0) === '22–25 · woman · travelling solo' && W.wants(S0.crew) === 'women only, around their age, solo travellers only', W.facts(S0) + ' | ' + W.wants(S0.crew));
 })();
 
 /* ---------- 3 Nov 2026 fixes: the night before an ALL IN, flights the guest books, flights that don't fly every day, real ALL IN lengths + prices ---------- */

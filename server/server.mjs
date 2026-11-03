@@ -164,25 +164,15 @@ const publicStatus = (l) => ({ ref: l.ref, status: l.status === 'declined' ? 'de
   hold: l.hold && l.hold.status === 'active' ? { until: l.hold.until } : null, findCrew: !!(l.findCrew && l.findCrew.on) });
 
 /* ---------- Find your crew: who opted in, whose trips cross, and where the crew is with each introduction ---------- */
-const INTRO = ['new', 'asked', 'yes', 'introduced', 'no'];
-const pairKey = (a, b) => [a, b].sort().join('|');
-const placeN = (id) => (MM.PLACES[id] ? MM.PLACES[id].n : id);
+const INTRO = MM.FIND.INTRO;
+const pairKey = MM.crewPairKey;
+// MM.crewBoard (logic.js) works it out, the same as the builder's own board on the ALL IN site.
 function crewBoard() {
-  const today = new Date().toISOString().slice(0, 10);
-  const list = leads.get().filter((l) => l.findCrew && l.findCrew.on && l.status !== 'declined').filter((l) => {     // trips that have finished drop off
-    const d = MM.util.parseDate(l.trip.start); return !d || MM.util.isoDate(MM.util.addDays(d, Math.max(0, (+l.trip.days || 1) - 1))) >= today;
-  });
-  const T = list.map((l) => ({ id: l.ref, name: l.contact.name, party: l.contact.partySize, who: String(l.contact.email || l.contact.whatsapp || l.ref).toLowerCase(), state: l.trip.state, crew: l.findCrew }));
-  const iso = (d) => MM.util.isoDate(d), I = intros.get();
-  return {
-    travellers: list.map((l) => ({ ref: l.ref, name: l.contact.name, partySize: l.contact.partySize, via: l.contact.via, email: l.contact.email, whatsapp: l.contact.whatsapp, status: l.status,
-      route: l.trip.route, start: l.trip.start, days: l.trip.days, stops: l.trip.stops, link: l.trip.link, crew: l.findCrew, sample: !!(l.attribution && l.attribution.source === 'demo-seed'), at: l.createdAt })),
-    pairs: MM.crewPairs(T).map((p) => ({ a: p.a, b: p.b, key: pairKey(p.a, p.b), kind: p.kind, nights: p.nights, vibes: p.vibes, life: p.life, score: p.score,
-      ranges: p.ranges.map((r) => ({ place: placeN(r.p), from: iso(r.from), label: r.label, nights: r.nights })), near: p.near.map((n) => ({ place: placeN(n.p), gap: n.gap, a: n.a, b: n.b })),
-      shared: p.shared.map(placeN), intro: I[pairKey(p.a, p.b)] || { status: 'new' } })),
-    spots: MM.crewSpots(T).map((s) => ({ place: placeN(s.p), from: iso(s.from), label: s.label, nights: s.nights, peak: s.peak, ids: s.ids })),
-    labels: { ages: MM.FIND.AGES, genders: MM.FIND.GENDERS, life: MM.FIND.LIFE, who: MM.FIND.WHO, agepref: MM.FIND.AGEPREF, vibes: MM.VIBES.map((v) => [v.k, v.n]), intro: INTRO }
-  };
+  const trips = leads.get().filter((l) => l.status !== 'declined').map((l) => ({ ref: l.ref, name: l.contact.name, partySize: l.contact.partySize, via: l.contact.via, email: l.contact.email,
+    whatsapp: l.contact.whatsapp, status: l.status, route: l.trip.route, start: l.trip.start, days: l.trip.days, stops: l.trip.stops, link: l.trip.link, state: l.trip.state, crew: l.findCrew,
+    sample: !!(l.attribution && l.attribution.source === 'demo-seed'), at: l.createdAt }));
+  const I = intros.get();
+  return MM.crewBoard(trips, Object.keys(I).map((k) => ({ a: k.split('|')[0], b: k.split('|')[1], status: I[k].status, by: I[k].by, at: I[k].at })), new Date().toISOString().slice(0, 10));
 }
 const mmFlows = () => {
   const m = {}; const add = (a, b, n, src) => { if (a === b || !MM.PLACES[a] || !MM.PLACES[b]) return; const k = a + '>' + b + '|' + src; m[k] = m[k] || { a, b, n: 0, src }; m[k].n += n; };

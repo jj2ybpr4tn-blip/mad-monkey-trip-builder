@@ -77,7 +77,7 @@
         act('edit', 'edit', 'Edit it', canEdit || !can ? 'Change it, add our input' : 'Balance link already sent', canEdit, open) + '</div>' +
       '<div id="cpanel"></div>' +
       '<div class="crew__grid"><div class="crew__main">' + (sum ? tripHTML(sum, d.suggestedBalance, r) : '<div class="cbox"><p>This trip can\'t be shown here. Open it in the builder below.</p></div>') + '</div>' +
-      '<div class="crew__side" role="group" aria-label="About the guest and this trip">' + guestHTML(r, first, enc) + historyHTML(r, rev, d.original, first) + '</div></div>' +
+      '<div class="crew__side" role="group" aria-label="About the guest and this trip">' + guestHTML(r, first, enc) + crewFindHTML(r, first) + historyHTML(r, rev, d.original, first) + '</div></div>' +
       '</div></section>';
     root.innerHTML = h;
     var panel = $('#cpanel', root);
@@ -158,6 +158,16 @@
       (r.campaign_ref ? '<dt>Came from</dt><dd>' + esc(r.campaign_ref) + '</dd>' : '') + (r.from_hostel ? '<dt>QR at</dt><dd>' + esc(r.from_hostel) + '</dd>' : '') + '</dl></div>';
     if (enc) h += '<div class="cbox"><h3>See it as ' + esc(first) + ' did</h3><p class="clinks"><a class="btn btn--sm" href="#/build/' + esc(enc) + '">Open in the builder</a><a class="btn btn--sm btn--paper" href="#/pack/' + esc(enc) + '">Trip pack</a></p></div>';
     return h;
+  }
+
+  // They ticked Find your crew when they sent it: what they told us (cleaned again here: only known values show) and a way to their matches.
+  function crewFindHTML(r, first) {
+    var c = MM.cleanCrew(r.find_crew); if (!c) return '';
+    var W = MM.crewWords, chips = W.chips(c);
+    return '<div class="cbox cbox--find"><h3>Find your crew: on</h3><p>' + esc(first) + ' would like to be introduced to travellers on a similar route. A person asks both first.</p>' +
+      '<p class="cdim">' + esc(W.facts({ partySize: num(r.party_size) || 1, crew: c })) + '</p>' + (chips.length ? '<p class="cdim">' + esc(chips.join(' · ')) + '</p>' : '') +
+      (c.about ? '<p>“' + esc(c.about) + '”</p>' : '') + '<p class="cdim">Wants to meet ' + esc(W.wants(c)) + '.</p>' +
+      '<p class="clinks"><a class="btn btn--sm" href="#/crewfind/' + encodeURIComponent(r.ref) + '">See their matches</a></p></div>';
   }
 
   function historyHTML(r, rev, original, first) {
@@ -252,6 +262,108 @@
         .catch(function (e) { b.disabled = false; b.textContent = 'Save our version'; u.toast(e.message); });
     });
   }
+  /* ---------- FIND YOUR CREW BOARD   #/crewfind[/<ref>] ----------
+     For a backend without the bundled crew console (the ALL IN site): everyone who ticked Find your crew, every pair whose trips cross and who fit each
+     other's wishes, the hot spots, and where each introduction is. A person asks each of them first (the buttons open their channel with the message
+     written) and introduces them only once both have said yes. The admin password unlocks it and is kept for this tab only. It talks to
+     trip-builder-admin (crew-list, crew-intro, crew-off); the matching runs here, with MM.crewBoard, the same as the bundled console. docs/FIND-YOUR-CREW.md */
+  var PWKEY = 'mm-crew-pw', WHOKEY = 'mm-who';
+  function pw() { try { return sessionStorage.getItem(PWKEY) || ''; } catch (e) { return ''; } }
+  function setPw(v) { try { if (v) sessionStorage.setItem(PWKEY, v); else sessionStorage.removeItem(PWKEY); } catch (e) { /* private mode */ } }
+  function crewName() { try { return localStorage.getItem(WHOKEY) || ''; } catch (e) { return ''; } }
+  // What crew-list sends (the request's own columns), in the shape MM.crewBoard takes.
+  function boardTrips(list) {
+    return (Array.isArray(list) ? list : []).map(function (t) {
+      t = t || {};
+      return { ref: String(t.ref || ''), name: String(t.name || ''), partySize: num(t.party_size) || 1, via: t.contact_via === 'whatsapp' ? 'whatsapp' : 'email', email: String(t.email || ''),
+        whatsapp: String(t.whatsapp || ''), route: String(t.route || ''), start: /^\d{4}-\d{2}-\d{2}$/.test(String(t.start_date || '')) ? t.start_date : '', days: num(t.days),
+        state: stateOf(t.trip_link), crew: t.find_crew };
+    });
+  }
+  A.views.crewfind = function (rest) {
+    var root = document.getElementById('app'), focus = String(u.dec(rest || '')).toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12);
+    removeBar();
+    if (!endpoint()) return note(root, '<h1 class="disp">Not switched on here.</h1><p class="qhelp">Find your crew needs <code>CREW_ENDPOINT</code> in config.js.</p>');
+    if (!pw()) return crewLogin(root, focus, '');
+    note(root, '<h1 class="disp">Opening Find your crew…</h1>');
+    crewLoad(root, focus, '');
+  };
+  function crewLogin(root, focus, err) {
+    note(root, '<h1 class="disp">Find your crew</h1><p class="qhelp">For the crew: who would like to be introduced, and who matches. Enter the admin password (the same as Admin &gt; Trip builder).</p>' +
+      '<form class="cfin" id="cfin"><label for="cfpw">Admin password</label><input class="input" id="cfpw" type="password" autocomplete="current-password" required>' +
+      (err ? '<p class="cerr" role="alert">' + esc(err) + '</p>' : '') + '<button class="btn btn--lg" type="submit">Open the board</button></form>');
+    $('#cfin', root).addEventListener('submit', function (e) { e.preventDefault(); var v = $('#cfpw', root).value.trim(); if (v) { setPw(v); crewLoad(root, focus, ''); } });
+  }
+  function crewLoad(root, focus, msg) {
+    call({ action: 'crew-list', password: pw() }).then(function (d) { crewPaint(root, d, focus, msg); }).catch(function (e) {
+      if (e.status === 401 || e.status === 403) { setPw(''); return crewLogin(root, focus, 'That password didn\'t work.'); }
+      note(root, '<h1 class="disp">Couldn\'t open the board.</h1><p class="qhelp">' + esc(e.message) + '</p>');
+    });
+  }
+  function crewPaint(root, d, focus, msg) {
+    var W = MM.crewWords, IST = MM.FIND.INTRO_LABELS, me = crewName(), B = MM.crewBoard(boardTrips(d.travellers), d.intros, U.isoDate(new Date())), by = {};
+    B.travellers.forEach(function (t) { by[t.ref] = t; });
+    if (focus && !by[focus]) focus = '';
+    var pairs = B.pairs.filter(function (p) { return !focus || p.a === focus || p.b === focus; });
+    var cnt = function (st) { return B.pairs.filter(function (p) { return st.indexOf(p.intro.status) > -1; }).length; };
+    var stat = function (n, k) { return '<div><span>' + esc(k) + '</span><b>' + num(n) + '</b></div>'; };
+    function person(t) {
+      var c = t.crew, chips = W.chips(c);
+      return '<div class="cfwho"><b>' + esc(t.name) + '</b> <span class="cdim">' + esc(t.ref) + '</span><p class="cdim">' + esc(W.facts(t)) + '</p>' + (chips.length ? '<p class="cdim">' + esc(chips.join(' · ')) + '</p>' : '') +
+        (c.about ? '<p>“' + esc(c.about) + '”</p>' : '') + '<p class="cdim">Wants to meet ' + esc(W.wants(c)) + '</p><p class="cdim">' + esc(t.route) + (t.start ? ' · from ' + esc(day(t.start)) : ' · no dates yet') + ' · ' + num(t.days) + ' days</p></div>';
+    }
+    var h = '<section class="quiz crew cfind"><div class="wrap"><div class="crew__top"><span class="over">For the crew</span><h1 class="disp">Find your crew</h1>' +
+      '<p class="crew__sub">Travellers who ticked Find your crew when they sent a trip. A match is two of them in the same town on the same nights, or a day or two apart, who fit what each other asked for. Ask each of them first, and only introduce them once both have said yes.</p></div>' +
+      (msg ? '<div class="cbanner cbanner--ok" role="status">' + esc(msg) + '</div>' : '') +
+      '<div class="cglance cfind__stats">' + stat(B.travellers.length, 'Opted in') + stat(B.pairs.length, 'Matches') + stat(cnt(['asked', 'yes']), 'Being introduced') + stat(cnt(['introduced']), 'Introduced') + '</div>' +
+      '<div class="field cfind__me"><label for="cfwho">I\'m… (your name signs the messages)</label><input class="input" id="cfwho" maxlength="40" autocomplete="name" value="' + esc(me) + '"></div>' +
+      '<h2 class="crew__h">Matches' + (focus ? ' for ' + esc(by[focus].name) + ' · <a href="#/crewfind">show everyone</a>' : '') + '</h2>' +
+      (pairs.length ? pairs.map(function (p, i) {
+        var a = by[p.a], b = by[p.b], both = W.chips({ life: p.life, vibes: p.vibes });
+        return '<article class="cbox cfpair"><div class="cfpair__hd"><h3>' + esc(W.first(a)) + ' + ' + esc(W.first(b)) + '</h3><span class="cpill cpill--' + esc(p.kind) + '">' + esc(W.kind(p)) + '</span><span class="cpill">' + esc(IST[p.intro.status] || p.intro.status) + '</span>' +
+          (p.intro.by ? '<span class="cdim">' + esc(p.intro.by) + (p.intro.at ? ', ' + esc(when(p.intro.at)) : '') + '</span>' : '') + '</div>' +
+          '<p><b>Where:</b> ' + esc(W.where(p)) + '</p>' + (both.length ? '<p class="cdim">Both: ' + esc(both.join(' · ')) + '</p>' : '') +
+          '<div class="cfpair__who">' + person(a) + person(b) + '</div>' +
+          '<div class="cfpair__acts"><select class="select" data-ist="' + i + '" aria-label="Where the introduction is">' + MM.FIND.INTRO.map(function (k) { return '<option value="' + k + '"' + (p.intro.status === k ? ' selected' : '') + '>' + esc(IST[k]) + '</option>'; }).join('') + '</select>' +
+          '<button class="btn btn--sm" type="button" data-isave="' + i + '">Save</button>' +
+          '<a class="btn btn--sm btn--paper" target="_blank" rel="noopener" href="' + esc(W.reach(a, W.ask(a, b, p, me))) + '">Ask ' + esc(W.first(a)) + '</a>' +
+          '<a class="btn btn--sm btn--paper" target="_blank" rel="noopener" href="' + esc(W.reach(b, W.ask(b, a, p, me))) + '">Ask ' + esc(W.first(b)) + '</a>' +
+          '<button class="btn btn--sm btn--paper" type="button" data-icopy="' + i + '">Copy the intro</button></div></article>';
+      }).join('') : '<div class="cbox"><p>' + (B.travellers.length ? 'No matches yet. Nobody else is on the same route at the same time, or they asked for different people.' : 'Nobody has ticked Find your crew yet. It\'s on the send form ("Hold my beds + get it checked").') + '</p></div>') +
+      '<h2 class="crew__h">Hot spots</h2><div class="cbox"><p class="cdim">Where opted-in travellers stack up, whatever they asked for. Good nights for a Find your crew meet-up at the hostel bar.</p>' +
+      (B.spots.length ? '<div class="cfscroll"><table class="cftable"><thead><tr><th>Where</th><th>When</th><th>Who</th><th>Most on one night</th></tr></thead><tbody>' + B.spots.map(function (s) {
+        return '<tr><td><b>' + esc(s.place) + '</b></td><td>' + esc(s.label) + ' <span class="cdim">' + num(s.nights) + (s.nights === 1 ? ' night' : ' nights') + '</span></td><td>' + s.ids.map(function (id) { return esc(by[id] ? by[id].name : id); }).join(', ') + '</td><td><b>' + num(s.peak) + '</b></td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p>None yet.</p>') + '</div>' +
+      '<h2 class="crew__h">Everyone who opted in</h2><div class="cbox">' + (B.travellers.length ? '<div class="cfscroll"><table class="cftable"><thead><tr><th>Traveller</th><th>Wants to meet</th><th>Trip</th><th><span class="sr">Switch off</span></th></tr></thead><tbody>' + B.travellers.map(function (t) {
+        return '<tr><td><b>' + esc(t.name) + '</b> <span class="cdim">' + esc(t.ref) + '</span><div class="cdim">' + esc(W.facts(t)) + '</div></td><td>' + esc(W.wants(t.crew)) + '</td><td>' + esc(t.route) + '<div class="cdim">' + (t.start ? esc(day(t.start)) + ' · ' : 'no dates · ') + num(t.days) + ' days</div></td>' +
+          '<td><button class="btn btn--sm btn--paper" type="button" data-off="' + esc(t.ref) + '">Switch off</button></td></tr>';
+      }).join('') + '</tbody></table></div><p class="cdim">Switch someone off when they ask to stop. They drop out of every match.</p>' : '<p>Nobody yet.</p>') + '</div>' +
+      '<p class="clinks"><button class="btn btn--sm btn--paper" type="button" id="cfout">Lock the board</button></p></div></section>';
+    root.innerHTML = h;
+    var again = function (m) { crewLoad(root, focus, m); }, fail = function (e) { if (e.status === 401 || e.status === 403) { setPw(''); crewLogin(root, focus, 'That password didn\'t work.'); } else u.toast(e.message); };
+    $('#cfwho', root).addEventListener('change', function () { try { localStorage.setItem(WHOKEY, this.value.trim()); } catch (e) { /* private mode */ } crewPaint(root, d, focus, ''); });
+    $('#cfout', root).addEventListener('click', function () { setPw(''); crewLogin(root, focus, ''); });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-isave]'), function (b) {
+      b.addEventListener('click', function () {
+        var i = b.getAttribute('data-isave'), p = pairs[+i], st = $('[data-ist="' + i + '"]', root).value; b.disabled = true;
+        call({ action: 'crew-intro', password: pw(), a: p.a, b: p.b, status: st, by: crewName() }).then(function () { again('Saved: ' + W.first(by[p.a]) + ' + ' + W.first(by[p.b]) + ' · ' + IST[st] + '.'); }).catch(function (e) { b.disabled = false; fail(e); });
+      });
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-icopy]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = pairs[+b.getAttribute('data-icopy')], text = W.intro(by[p.a], by[p.b], p, crewName());
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () { u.toast('Copied. Paste it into a WhatsApp group with both of them.'); }, function () { window.prompt('Copy the intro', text); });
+      });
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-off]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = by[b.getAttribute('data-off')]; if (!t || !window.confirm('Switch Find your crew off for ' + t.name + '? They drop out of every match.')) return;
+        b.disabled = true;
+        call({ action: 'crew-off', password: pw(), ref: t.ref }).then(function () { again('Switched off: ' + t.name + '.'); }).catch(function (e) { b.disabled = false; fail(e); });
+      });
+    });
+  }
+
   window.addEventListener('hashchange', function () { setTimeout(bar, 60); });
   setTimeout(bar, 300);
 })();
