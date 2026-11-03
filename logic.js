@@ -1063,7 +1063,73 @@
     out.forEach(function (s) { s.label = fmtDate(s.from) + (s.nights > 1 ? ' – ' + fmtDate(s.to) : ''); });
     return out.sort(function (a, b) { return b.peak - a.peak || a.from - b.from; });
   }
-  MM.cleanCrew = cleanCrew; MM.crewFits = crewFits; MM.crewPairs = crewPairs; MM.crewSpots = crewSpots;
+  // The Find your crew board: who opted in, every match with where its introduction is, and the hot spots. One function feeds both boards (the bundled
+  // server's console and the builder's own page on the ALL IN site, #/crewfind), so they can never disagree about who matches.
+  //   trips:  [{ ref, name, partySize, via, email, whatsapp, route, start, days, state, crew, sample }]   crew is cleaned again here: only known values survive
+  //   intros: [{ a, b, status, by, at }]   today: 'YYYY-MM-DD' (trips that have finished drop off)
+  var INTRO = FIND.INTRO = ['new', 'asked', 'yes', 'introduced', 'no'];
+  FIND.INTRO_LABELS = { new: 'Not asked yet', asked: 'Asked them both', yes: 'Both said yes', introduced: 'Introduced', no: 'Not now' };
+  function crewPairKey(a, b) { return [a, b].sort().join('|'); }
+  function crewBoard(trips, intros, today) {
+    var I = {}, list = [], placeN = function (id) { return MM.PLACES[id] ? MM.PLACES[id].n : id; };
+    today = today || isoDate(new Date());
+    (intros || []).forEach(function (x) { if (x && x.a && x.b && INTRO.indexOf(x.status) > -1) I[crewPairKey(x.a, x.b)] = { status: x.status, at: x.at || '', by: x.by || '' }; });
+    (trips || []).forEach(function (t) {
+      var c = t && cleanCrew(t.crew), d = c && parseDate(t.start);
+      if (!c || (d && isoDate(addDays(d, Math.max(0, (+t.days || 1) - 1))) < today)) return;
+      var o = {}; for (var k in t) if (Object.prototype.hasOwnProperty.call(t, k)) o[k] = t[k];
+      o.crew = c; list.push(o);
+    });
+    var T = list.map(function (t) { return { id: t.ref, name: t.name, party: t.partySize, who: String(t.email || t.whatsapp || t.ref).toLowerCase(), state: t.state, crew: t.crew }; });
+    return {
+      travellers: list,
+      pairs: crewPairs(T).map(function (p) {
+        return { a: p.a, b: p.b, key: crewPairKey(p.a, p.b), kind: p.kind, nights: p.nights, vibes: p.vibes, life: p.life, score: p.score,
+          ranges: p.ranges.map(function (r) { return { place: placeN(r.p), from: isoDate(r.from), label: r.label, nights: r.nights }; }),
+          near: p.near.map(function (n) { return { place: placeN(n.p), gap: n.gap, a: n.a, b: n.b }; }), shared: p.shared.map(placeN), intro: I[crewPairKey(p.a, p.b)] || { status: 'new' } };
+      }),
+      spots: crewSpots(T).map(function (s) { return { place: placeN(s.p), from: isoDate(s.from), label: s.label, nights: s.nights, peak: s.peak, ids: s.ids }; }),
+      labels: { ages: FIND.AGES, genders: FIND.GENDERS, life: FIND.LIFE, who: FIND.WHO, agepref: FIND.AGEPREF, vibes: MM.VIBES.map(function (v) { return [v.k, v.n]; }), intro: INTRO }
+    };
+  }
+  // What the crew says, the same on both boards: a traveller in one line, what they asked for, where a pair cross, the ask-first message to each of them
+  // (nothing about the other person beyond what they agreed to share) and, once both have said yes, the intro for a WhatsApp group.
+  function crewLabel(list, k) { for (var i = 0; i < list.length; i++) if (list[i][0] === k) return list[i][1]; return ''; }
+  function crewFirst(t) { return String((t && t.name) || '').trim().split(/\s+/)[0]; }
+  var crewWords = {
+    first: crewFirst,
+    chips: function (c) {
+      var vib = MM.VIBES.map(function (v) { return [v.k, v.n]; });
+      return (c.life || []).map(function (k) { return crewLabel(FIND.LIFE, k); }).concat((c.vibes || []).map(function (k) { return crewLabel(vib, k); })).filter(Boolean);
+    },
+    facts: function (t) {
+      var c = t.crew;
+      return [crewLabel(FIND.AGES, c.age), c.gender ? crewLabel(FIND.GENDERS, c.gender).replace(/^A /, '').toLowerCase() : '', c.home ? 'from ' + c.home : '', t.partySize > 1 ? t.partySize + ' travelling together' : 'travelling solo'].filter(Boolean).join(' · ');
+    },
+    wants: function (c) { return [c.want.who === 'women' ? 'women only' : 'anyone', c.want.ages === 'any' ? 'any age' : 'around their age', c.want.solo ? 'solo travellers only' : ''].filter(Boolean).join(', '); },
+    where: function (p) {
+      if (p.kind === 'together') return p.ranges.map(function (r) { return r.place + ' (' + r.label + ')'; }).join(', ');
+      if (p.kind === 'near') return p.near.map(function (n) { return n.place + ' (' + n.a + ' and ' + n.b + ')'; }).join(', ');
+      return p.shared.join(', ');
+    },
+    kind: function (p) { return p.kind === 'together' ? p.nights + ' night' + (p.nights === 1 ? '' : 's') + ' together' : p.kind === 'near' ? 'Near miss' : 'Same stops, no dates yet'; },
+    ask: function (me, them, p, crew) {
+      var c = them.crew, bits = [crewLabel(FIND.AGES, c.age), c.home ? 'from ' + c.home : '', them.partySize > 1 ? 'travelling with ' + (them.partySize - 1) + ' more' : 'travelling solo'].filter(Boolean).join(', ');
+      var at = p.kind === 'together' ? 'is in ' + crewWords.where(p) + ', the same nights as you' : p.kind === 'near' ? 'is in the same place as you a day or two apart: ' + crewWords.where(p) : 'is planning the same stops as you (' + crewWords.where(p) + ') and hasn\'t picked dates yet';
+      return 'Hi ' + crewFirst(me) + ', it\'s ' + (crew || 'the crew') + ' from Mad Monkey. You ticked Find your crew when you sent your trip (' + me.ref + '). ' + crewFirst(them) + ' (' + bits + ') ' + at + '.' +
+        (c.about ? ' In their words: "' + c.about + '"' : '') + ' Want me to introduce you? I\'ll only share what you told us for Find your crew, and only if you both say yes.';
+    },
+    intro: function (a, b, p, crew) {
+      return 'Hi ' + crewFirst(a) + ' and ' + crewFirst(b) + '! It\'s ' + (crew || 'the crew') + ' from Mad Monkey. You both said yes, so meet your crew: ' + (p.kind === 'together' ? 'you\'re both in ' + crewWords.where(p) + '.' : 'your trips cross in ' + crewWords.where(p) + '.') +
+        (a.crew.about ? ' ' + crewFirst(a) + ': "' + a.crew.about + '"' : '') + (b.crew.about ? ' ' + crewFirst(b) + ': "' + b.crew.about + '"' : '') + ' Say hi, and see you at the bar!';
+    },
+    // their chosen channel with the message written: email, or WhatsApp when that's how they asked to be reached
+    reach: function (t, text) {
+      return t.via === 'email' || !t.whatsapp ? 'mailto:' + encodeURIComponent(t.email || '') + '?subject=' + encodeURIComponent('Find your crew · Mad Monkey') + '&body=' + encodeURIComponent(text)
+        : 'https://wa.me/' + String(t.whatsapp).replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent(text);
+    }
+  };
+  MM.cleanCrew = cleanCrew; MM.crewFits = crewFits; MM.crewPairs = crewPairs; MM.crewSpots = crewSpots; MM.crewBoard = crewBoard; MM.crewPairKey = crewPairKey; MM.crewWords = crewWords;
 
 
   /* ============================================================

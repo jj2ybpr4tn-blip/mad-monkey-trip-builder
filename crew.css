@@ -94,3 +94,20 @@ body[data-view="crew"] .foot{display:none}
 .cbanner--upd{background:var(--pink)} .cbanner--upd ul{margin:6px 0 6px 18px;padding:0;font-weight:700} .cbanner--upd p{margin:6px 0 0;font-weight:500} .cbanner--upd .cdim{color:var(--black)}
 .cpill--upd{background:var(--pink)}
 .cbox--stage{background:var(--cyan);color:var(--black);border-width:3px} .cbox--stage h3{color:var(--black)} .cbox--stage p{margin:0 0 6px;font-size:14px;line-height:1.45} .cbox--stage .cdim{color:#1a1a1a;font-size:12.5px}
+
+/* Find your crew: their answers on the review page, and the board (#/crewfind) */
+.cbox--find{background:var(--lime)} .cbox--find h3{color:var(--black)} .cbox--find .cdim{color:#1a1a1a}
+.cfin{display:flex;flex-direction:column;gap:var(--s-2);max-width:380px;margin-top:var(--s-4)} .cfin label{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase} .cfin .btn{align-self:flex-start}
+.cfind__stats{margin:var(--s-5) 0 var(--s-4)}
+.cfind__me{max-width:380px;margin:0 0 var(--s-2)}
+.cfpair__hd{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:var(--s-2)}
+.cbox .cfpair__hd h3{font-size:20px;letter-spacing:0;text-transform:none;color:var(--black);margin:0}
+.cpill--together{background:var(--lime)} .cpill--near{background:var(--yellow)} .cpill--route{background:var(--cyan)}
+.cfpair__who{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-3);margin:var(--s-3) 0}
+.cfwho{border:2px solid var(--black);background:var(--bone);padding:10px 12px;min-width:0;overflow-wrap:anywhere} .cbox .cfwho p{margin:4px 0 0}
+.cfpair__acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center} .cfpair__acts .select{width:auto;max-width:100%}
+.cfscroll{overflow-x:auto;position:relative;margin:0 0 var(--s-2)}
+.cftable{width:100%;border-collapse:collapse;font-size:14px} .cftable th,.cftable td{text-align:left;padding:8px 10px;border-top:1px solid #ddd;vertical-align:top}
+.cftable th{font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);border-top:0}
+body[data-view="crewfind"] .foot{display:none}
+@media (max-width:620px){ .cfpair__who{grid-template-columns:minmax(0,1fr)} .cfpair__acts .btn{flex:1 1 auto} .cftable{min-width:540px} }

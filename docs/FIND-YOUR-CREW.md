@@ -84,7 +84,18 @@ The trip status endpoint can answer `"findCrew": true` so the trip page shows th
 ## Switching it on
 
 - **The bundled crew server** (`npm run server`) keeps it and switches it on by itself (it sets `FIND_CREW: true` in the `config.js` it serves). Admin API: `GET /api/admin/crew` (travellers, pairs, hot spots, labels), `PATCH /api/admin/crew/intro` `{ a, b, status, by }`, and `PATCH /api/admin/leads/<ref>` `{ findCrewOff: true }`.
-- **Another backend** (the ALL IN site): leave `FIND_CREW: false` until it stores `findCrew` with the trip (run it through the same rules as `MM.cleanCrew`), shows it to the crew, and lists the matches. Until then the form doesn't offer it, so nobody ticks a box that goes nowhere.
+- **Another backend** (the ALL IN site): leave `FIND_CREW: false` until it stores `findCrew` with the trip (run it through the same rules as `MM.cleanCrew`) and answers the calls below. Until then the form doesn't offer it, so nobody ticks a box that goes nowhere. The screens are the builder's own, so they arrive with a sync and the backend builds none of them:
+  - **The crew review page** (`#/crew/<ref>`) shows a **Find your crew: on** box with their answers and a **See their matches** button, when `trip-builder-admin` `view` returns the request with `find_crew`.
+  - **The board** (`#/crewfind`, or `#/crewfind/<ref>` for one traveller's matches) is the console's tab for a backend without the console. It asks for the admin password (kept for that browser tab only), works the matches out in the browser with `MM.crewBoard` (the same function the bundled server uses), and calls `trip-builder-admin` (`CREW_ENDPOINT`) with the password in the body:
+
+    | Action | Sends | Answers |
+    | --- | --- | --- |
+    | `crew-list` | `{ password }` | `{ ok, travellers: [{ ref, name, party_size, contact_via, email, whatsapp, route, start_date, days, trip_link, find_crew }], intros: [{ a, b, status, by, at }] }` for everyone opted in whose trip isn't declined or over. 401 for a wrong password. |
+    | `crew-intro` | `{ password, a, b, status, by }`, status one of `new`, `asked`, `yes`, `introduced`, `no` | `{ ok }`. One status per pair (the two refs in either order). |
+    | `crew-off` | `{ password, ref }` | `{ ok }`. Their `find_crew` is switched off, so they drop out of every match. |
+
+    The board cleans every traveller again with `MM.cleanCrew` and drops finished trips itself, so a backend that sends a little too much can't show anything it shouldn't.
+  - **`trip-builder-status`** answers `findCrew: true` for a trip that has it on, so the trip page says so on any device.
 - **Demo mode** (no `LEAD_ENDPOINT`) always offers it, so it can be tried. Nothing is sent.
 
 ## Try it
@@ -98,11 +109,11 @@ Then build a trip through Siquijor and Panglao starting in about 100 days, send 
 
 ## Tests
 
-`test/logic.test.js` (cleaning, the matching rules, hot spots), `test/server.test.js` (stored cleaned, the board, introductions, switching off) and, in a browser on the builder, `test/ui-crewfind.js`: `await import('/test/ui-crewfind.js?' + Date.now()); await __findcrew()`.
+`test/logic.test.js` (cleaning, the matching rules, hot spots, the board), `test/server.test.js` (stored cleaned, the board, introductions, switching off) and, in a browser on the builder, `test/ui-crewfind.js` (the send form: `await import('/test/ui-crewfind.js?' + Date.now()); await __findcrew()`) and `test/ui-crewboard.js` (the review page box and the `#/crewfind` board against a stubbed `trip-builder-admin`: `await __crewboard()`).
 
 ## Next steps
 
-1. **The ALL IN backend** (Charlie): store `findCrew` on the trip request, show it in the crew email and review page, and an admin list of matches. Then `FIND_CREW: true` on the live site.
+1. **The ALL IN backend** (Charlie): store `findCrew` on the trip request, put it in the crew email, and answer `view` / `crew-list` / `crew-intro` / `crew-off` above. The review page box and the board are built (Nov 2026). Then the privacy notice, and `FIND_CREW: true` on the live site.
 2. **Counts on the plan**: "+5 travellers here the same nights" on each stop, from the same matching, without names. Social proof that sells trips.
 3. **Crews from matches**: three or more who all fit each other become a crew, with the Squad Leader perks.
 4. **Meet-ups**: a Find your crew night at each hostel on its hot-spot nights.

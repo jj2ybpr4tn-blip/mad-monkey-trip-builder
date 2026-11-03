@@ -170,7 +170,7 @@
      ============================================================ */
   function parseHash() {
     var h = location.hash.replace(/^#\/?/, ''), seg = h.split('/'), view = seg[0] || 'home';
-    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack', 'crew'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
+    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack', 'crew', 'crewfind'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
   }
   function sameAddress(a, b) { try { return decodeURIComponent(a) === decodeURIComponent(b); } catch (e) { return a === b; } }
   // Setting the address to what it already is fires no hashchange, so the screen would never redraw: buttons like "start from a classic",
@@ -225,7 +225,7 @@
   }
   var levelTimer = 0;
   if (window.MutationObserver) new MutationObserver(function () { clearTimeout(levelTimer); levelTimer = setTimeout(levelHeadings, 60); }).observe(root, { childList: true, subtree: true });
-  var TITLES = { home: 'Trip Builder', quiz: 'Build it for me', results: 'Your routes', build: 'Your trip', group: 'Group trip', trip: 'Trip status', pack: 'Trip pack', crew: 'Crew review' };
+  var TITLES = { home: 'Trip Builder', quiz: 'Build it for me', results: 'Your routes', build: 'Your trip', group: 'Group trip', trip: 'Trip status', pack: 'Trip pack', crew: 'Crew review', crewfind: 'Find your crew' };
   function routeNow() {
     var r = parseHash(); closeModal();
     if (r.view === 'results' && !app.results) r.view = 'quiz';
