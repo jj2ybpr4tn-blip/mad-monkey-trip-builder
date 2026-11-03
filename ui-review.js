@@ -249,6 +249,7 @@
   function optionCopy(o, withDep) {
     var first = o.items[0];
     if (o.plan === 'now') return { t: 'Pay it all now', big: usd(o.amount), d: 'One payment today, and you\'re fully paid up.', go: 'Pay ' + usd(o.amount) + ' now' };
+    if (o.plan === 'later' && o.items.length > 1) return { t: usd(first.amount) + ' now, the rest on ' + fmtDay(o.items[1].due), big: usd(first.amount) + ' today', d: 'A ' + usd(first.amount) + ' deposit books your trip today. The other ' + usd(o.items[1].amount) + ' is charged to the same card a week before you leave, and we email you a reminder first. The deposit comes off your total. It\'s non-refundable if you cancel, but if we can\'t make your trip work, we refund it.', go: 'Pay ' + usd(first.amount) + ' deposit and book' };
     if (o.plan === 'later') return withDep
       ? { t: 'Pay on ' + fmtDay(first.due), big: usd(o.amount), d: 'You\'re booked today. We charge the card you paid your deposit with, a week before you leave, and email you a reminder first.', go: 'Book my trip' }
       : { t: 'Pay on ' + fmtDay(first.due), big: usd(o.amount), d: 'You\'re booked once you\'ve added a card. Nothing is charged today: we charge it a week before you leave, and email you a reminder first.', go: 'Add a card and book' };
@@ -286,7 +287,7 @@
       var demo = !C.LEAD_ENDPOINT || x.demo, dep = x.deposit || {}, bal = x.balance || {}, depMode = !!(dep.amount);
       // booked through the pay-your-way screen (a plan and a schedule), with or without a deposit
       var hasPlan = !!(x.plan || (x.schedule && x.schedule.length));
-      var titles = { pending_payment: waiting ? 'Confirming your payment…' : 'Deposit not paid yet.', submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: waiting ? (waitPlan === 'later' ? 'Saving your card…' : 'Confirming your payment…') : 'Ready for your OK.', approved: depMode || hasPlan ? 'You\'re booked.' : 'You\'re all set.', declined: 'We need to tweak it.' };
+      var titles = { pending_payment: waiting ? 'Confirming your payment…' : 'Deposit not paid yet.', submitted: 'It\'s with the crew.', checking: 'A human is checking it.', ready: waiting ? (waitPlan === 'card' ? 'Saving your card…' : 'Confirming your payment…') : 'Ready for your OK.', approved: depMode || hasPlan ? 'You\'re booked.' : 'You\'re all set.', declined: 'We need to tweak it.' };
       x._sel = sel; var ready = x.status === 'ready' && !waiting;
       root.innerHTML = '<section class="quiz"><div class="wrap"><div class="qbox"><span class="over">Trip ' + esc(x.ref) + '</span><h1 class="disp">' + (titles[x.status] || titles.submitted) + '</h1><p class="qhelp">' + esc(x.route) + ' · ' + (Math.round(+x.days) || 0) + ' days' + (x.start ? ' · from ' + esc(fmtDay(x.start)) : '') + '. Every trip is checked by a real person before you pay' + (depMode ? ' the rest' : ' anything') + '.</p>' +
         (x.status === 'declined' || x.status === 'approved' ? '' : stepsHTML(x.status, depMode)) +
@@ -340,7 +341,7 @@
       u.timed(payEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: r, k: key, plan: plan }) }, 30000)
         .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || d.ok === false) throw new Error(d.error || 'Something went wrong. Try again.'); return d; }); })
         .then(function (d) {
-          if (d.checkoutUrl) { try { sessionStorage.setItem('mm-paying', r + ':' + (rec.status || 'ready') + ':' + (/^[a-z]{1,12}$/.test(plan) ? plan : '')); } catch (x) { /* ignore */ } if (u.url(d.checkoutUrl, true)) { window.location.href = u.url(d.checkoutUrl, true); return; } throw new Error('Something went wrong. Try again.'); }
+          if (d.checkoutUrl) { try { sessionStorage.setItem('mm-paying', r + ':' + (rec.status || 'ready') + ':' + (d.card ? 'card' : /^[a-z]{1,12}$/.test(plan) ? plan : '')); } catch (x) { /* ignore */ } if (u.url(d.checkoutUrl, true)) { window.location.href = u.url(d.checkoutUrl, true); return; } throw new Error('Something went wrong. Try again.'); }
           busy = false; wait = null; fetchStatus(); u.toast(d.booked ? 'You\'re booked' : 'Done');
         }).catch(function (e) { busy = false; if (b) { b.disabled = false; b.textContent = txt; } perr(e.message); });
     }

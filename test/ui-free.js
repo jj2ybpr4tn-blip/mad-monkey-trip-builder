@@ -103,10 +103,28 @@
       A.util.url = saved.url;
       var pp = sentWith(/trip-builder-pay/)[0]; var mark = ''; try { mark = sessionStorage.getItem('mm-paying') || ''; } catch (e) { /* ignore */ }
       expect('the plan they chose is sent with their key', !!pp && pp.body.plan === 'later' && pp.body.ref === 'MM-FREE22' && pp.body.k === 'zz', JSON.stringify(pp && pp.body));
-      expect('and the page remembers it is waiting for a card, not a payment', mark === 'MM-FREE22:ready:later', mark);
+      expect('and the page remembers it is waiting for a card, not a payment', mark === 'MM-FREE22:ready:card', mark);
       answer = trip({ status: 'ready', balance: { amount: 600, paid: false }, pay: { balance: 600, daysToGo: 130, options: OPTS }, canPay: true });
       location.hash = '#/trip/MM-FREE22?k=zz&t=' + (seq++); await wait(1200);
       expect('back from the card page, before it is confirmed: "Saving your card…"', /Saving your card/.test(page()), page().slice(0, 200));
+      try { sessionStorage.removeItem('mm-paying'); } catch (e) { /* ignore */ }
+
+      // "a week before" with a deposit (Ewan, 3 Nov 2026): $99 now on Checkout, the rest charged to that card a week before
+      var DEP = [OPTS[0], { plan: 'later', count: 2, amount: 600, items: [{ amount: 99, due: '2026-10-23' }, { amount: 501, due: '2027-02-22' }] }, OPTS[2]];
+      p = await show(trip({ status: 'ready', balance: { amount: 600, paid: false }, pay: { balance: 600, daysToGo: 130, options: DEP }, canPay: true }));
+      expect('later with a deposit: "$99 now, the rest on" a date, "$99 today", and what is charged later', /\$99 now, the rest on /.test(p) && /\$99 today/.test(p) && /The other \$501 is charged to the same card a week before you leave/.test(p), p.slice(0, 400));
+      expect('and the deposit is non-refundable unless we can\'t make the trip work', /non-refundable if you cancel/.test(p) && /we refund it/.test(p));
+      later = document.querySelector('input[name="payplan"][value="later"]'); if (later) { later.click(); later.dispatchEvent(new Event('change', { bubbles: true })); await wait(300); }
+      expect('choosing it makes the button "Pay $99 deposit and book"', /Pay \$99 deposit and book/.test(page()), page().slice(-300));
+      answer = function (u) { return /trip-builder-pay/.test(u) ? { ok: true, checkoutUrl: 'https://checkout.stripe.test/pay/cs_10', plan: 'later' } : trip({ status: 'ready', balance: { amount: 600, paid: false }, pay: { balance: 600, daysToGo: 130, options: DEP }, canPay: true }); };
+      A.util.url = function () { return '#/trip/MM-FREE22?k=zz&t=dep'; };
+      posted.length = 0; go = document.querySelector('[data-act="paygo"]'); if (go) go.click(); await wait(900);
+      A.util.url = saved.url;
+      try { mark = sessionStorage.getItem('mm-paying') || ''; } catch (e) { /* ignore */ }
+      expect('the deposit goes to a payment page, so the page waits for a payment', mark === 'MM-FREE22:ready:later', mark);
+      answer = trip({ status: 'ready', balance: { amount: 600, paid: false }, pay: { balance: 600, daysToGo: 130, options: DEP }, canPay: true });
+      location.hash = '#/trip/MM-FREE22?k=zz&t=' + (seq++); await wait(1200);
+      expect('back from paying the deposit: "Confirming your payment…", not "Saving your card…"', /Confirming your payment/.test(page()) && !/Saving your card/.test(page()), page().slice(0, 200));
       try { sessionStorage.removeItem('mm-paying'); } catch (e) { /* ignore */ }
 
       p = await show(trip({ status: 'ready', balance: { amount: 600, paid: false }, pay: null, canPay: true }), false);
