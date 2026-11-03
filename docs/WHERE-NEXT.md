@@ -32,8 +32,10 @@ What is saved, per guest: `{ hostel, booking, checkout, name, trips: ['laos', 'l
 `#/wherenext-crew`: everyone who ticked something and hasn't checked out yet, soonest first.
 
 - **Stats:** answered, the share who ticked a trip, the most wanted trip, and how many leave in the next 3 days.
+- **What guests want:** each trip and how many guests still with us ticked it, most wanted first. Tap one to list just those guests.
+- **By hostel:** answered, ticked a trip, and said no.
 - **Filters:** hostel and trip.
-- **Each guest:** their hostel, check-out and booking, each trip they ticked with its next departure after they check out, a **WhatsApp** or **Email** button (their channel from the booking) with the message written, **Copy the message**, and where they are: *Not messaged yet, Messaged, Booked, Not now*.
+- **Each guest:** their hostel, check-out, booking and how they prefer to be reached, then each trip they ticked with its next departure after they check out and a **WhatsApp about this** button: a message about that trip only (an email button when the booking has no number). Someone who ticked more than one also gets **WhatsApp ... about all**, plus **Email**, **Copy the message**, and where they are: *Not messaged yet, Messaged, Booked, Not now*.
 - **The message** (`MM.whereNextMsg`): signed with the name in "I'm…", each ticked trip's next date, length, price and link, "$99 holds your spot", and **"Flights to get there aren't included."** Links are tagged `utm_source=checkin&utm_medium=where-next`, so a booking can be traced back to check-in.
 
 Follow-up we'd suggest: one message the day after check-in, a nudge two days before check-out, then stop.
