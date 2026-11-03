@@ -26,7 +26,7 @@
       /* ---- the guest's page, from a real check-in link ---- */
       var p = await open('h=hanoi&out=' + out + '&b=BK-123&n=Sam&back=' + encodeURIComponent('https://checkin.example.com/step/4'));
       var rows = [].slice.call(app().querySelectorAll('.wnt:not(.wnt--own)')), first = rows.map(function (r) { return r.querySelector('input').value; });
-      expect('guest page: "Where next?", their name and check-out day, and no demo bar on a real link', /Where next\?/.test(p) && /Hey Sam, you check out/.test(p) && !app().querySelector('.wn__demo'), p.slice(0, 200));
+      expect('guest page: "Where next?", their name and check-out day, and nothing else to fill in', /Where next\?/.test(p) && /Hey Sam, you check out/.test(p) && !app().querySelector('.wn select, .wn input:not([type="checkbox"])'), p.slice(0, 200));
       expect('guest page: every live ALL IN as a row, trips from Hanoi first, plus "Plan my own"', rows.length === MM.whereNext('hanoi', out).length && first.slice(0, 2).sort().join() === 'loop,vietnam' && !!app().querySelector('.wnt--own input[value="builder"]'), first.join());
       expect('guest page: each row has its days, route, next departure and price', rows.every(function (r) { return /\d+days/.test(words(r.querySelector('.wnt__days'))) && /Next: /.test(words(r)) && /from\$\d+/.test(words(r.querySelector('.wnt__p'))); }));
       expect('guest page: the main menus are out of the way during check-in', getComputedStyle(document.querySelector('.hdr__nav')).display === 'none' && getComputedStyle(document.getElementById('humanbar')).display === 'none');
@@ -54,17 +54,12 @@
 
       /* ---- hostile link values ---- */
       p = await open('h=<img src=x onerror=alert(1)>&out=nope&b=<b>x</b>&n=' + encodeURIComponent('<script>alert(1)</script>Kai') + '&back=' + encodeURIComponent('javascript:alert(1)'));
-      expect('guest page: an unknown hostel falls back to the demo, a broken date and booking are dropped, and nothing becomes markup', !!app().querySelector('.wn__demo') && !app().querySelector('.wn img[src="x"], .wn script'), page().slice(0, 200));
+      expect('guest page: an unknown hostel falls back to the example guest (Hanoi), and nothing becomes markup', /Mad Monkey Hanoi/.test(page()) && /Hey Sam/.test(page()) && !app().querySelector('.wn img[src="x"], .wn script'), page().slice(0, 200));
       p = await open('h=hanoi&out=' + out + '&n=' + encodeURIComponent('<script>alert(1)</script>Kai') + '&back=' + encodeURIComponent('https://evil.example.org/'));
       expect('guest page: a name is plain text', !app().querySelector('.wn script') && !/[<>]/.test(words(app().querySelector('.wn__lead'))), words(app().querySelector('.wn__lead')));
       tick('vietnam'); document.getElementById('wngo').click(); await wait(400);
       expect('guest page: a "back" link to any other site is ignored', !app().querySelector('a[href^="https://evil"]') && /You can carry on with your check-in/.test(page()));
       location.hash = '#/'; await wait(200);
-
-      /* ---- the demo: change hostel and date ---- */
-      p = await open('');
-      var hs = document.getElementById('wnh'); hs.value = 'uluwatu'; hs.dispatchEvent(new Event('change')); await wait(300);
-      expect('demo: picking Uluwatu reorders the trips (ALL IN Indonesia first) and says Uluwatu', (app().querySelector('.wnt input') || {}).value === 'indonesia' && /Mad Monkey Uluwatu/.test(page()));
 
       /* ---- the crew's list (demo) ---- */
       location.hash = '#/wherenext-crew'; await wait(900);
@@ -72,10 +67,25 @@
       var names = [].slice.call(app().querySelectorAll('.wnc__g h3')).map(function (h) { return words(h); });
       expect('crew list: demo banner, sample guests, and the answers given on this device', /Demo: sample guests/.test(p) && names.indexOf('Sam Lee') > -1 && names.indexOf('Sam') > -1 && names.some(function (n) { return /Kai$/.test(n) && !/[<>]/.test(n); }), names.join(', '));
       expect('crew list: guests who said not interested aren\'t listed, but count as answered', names.indexOf('Zoe Kim') < 0 && names.indexOf('Finn Walsh') < 0 && /Answered ?1[0-9]/.test(p), (p.match(/Answered ?\d+/) || [''])[0]);
+      var bars = [].slice.call(app().querySelectorAll('.wnc__bars li')).map(function (li) { return words(li); });
+      expect('crew list: "What guests want" counts each trip, most wanted first', bars.length >= 4 && /^ALL IN Laos\d+ guests$/.test(bars[0]), bars.join(' | '));
+      var hrows = [].slice.call(app().querySelectorAll('.wnc__glance tbody tr')).map(function (tr) { return words(tr); });
+      expect('crew list: "By hostel" shows answered, ticked and said no (Siem Reap: 1 answered, 0 ticked, 1 not interested)', hrows.some(function (t) { return /^Siem Reap1 ?0 \(0%\) ?1$/.test(t); }) && hrows.some(function (t) { return /^Hanoi/.test(t); }), hrows.join(' | '));
       var cards = [].slice.call(app().querySelectorAll('.wnc__g')), outs = cards.map(function (c) { return (words(c).match(/checks out (\w{3} \d+ \w{3})/) || [])[1] || ''; });
       expect('crew list: soonest check-out first', cards.length > 3 && outs.every(Boolean), outs.join(' | '));
       var mail = [].slice.call(app().querySelectorAll('.wnc__g a[href^="mailto:"]'))[0], wa = [].slice.call(app().querySelectorAll('.wnc__g a[href^="https://wa.me/"]'))[0];
       expect('crew list: email and WhatsApp buttons open their channel with the message written, flights line and all', !!mail && !!wa && /Flights to get there aren't included/.test(decodeURIComponent(mail.getAttribute('href'))) && /utm_source%3Dcheckin|utm_source=checkin/.test(wa.getAttribute('href')));
+      var samCard = [].slice.call(app().querySelectorAll('.wnc__g')).filter(function (c) { return words(c.querySelector('h3')) === 'Sam Lee'; })[0];
+      var perTrip = samCard ? [].slice.call(samCard.querySelectorAll('.wnc__trips a[href^="https://wa.me/"]')).map(function (x) { return decodeURIComponent(x.getAttribute('href')); }) : [];
+      expect('crew list: a WhatsApp button for each trip a guest ticked, each about that trip only', perTrip.length === 2 && /You ticked ALL IN Ha Giang Loop when/.test(perTrip[0] + perTrip[1]) && /You ticked ALL IN Laos when/.test(perTrip[0] + perTrip[1]) && perTrip.every(function (m) { return !/ and ALL IN /.test(m); }), perTrip.map(function (m) { return m.slice(0, 120); }).join(' | '));
+      expect('crew list: and one about everything they ticked', !!samCard && /WhatsApp Sam about all 2/.test(words(samCard)) && /You ticked ALL IN Ha Giang Loop and ALL IN Laos/.test(decodeURIComponent((samCard.querySelector('.cfpair__acts a[href^="https://wa.me/"]') || { getAttribute: function () { return ''; } }).getAttribute('href'))));
+      var priya = [].slice.call(app().querySelectorAll('.wnc__g')).filter(function (c) { return words(c.querySelector('h3')) === 'Priya Shah'; })[0];
+      expect('crew list: someone who prefers email can still be WhatsApped about their trip, and emailed', !!priya && /prefers email/.test(words(priya)) && !!priya.querySelector('.wnc__trips a[href^="https://wa.me/"]') && !!priya.querySelector('.cfpair__acts a[href^="mailto:"]'));
+      var bar = app().querySelector('[data-wtrip="cambodia"]'); if (bar) bar.click(); await wait(400);
+      var onlyKh = [].slice.call(app().querySelectorAll('.wnc__g'));
+      expect('crew list: tapping a trip in "What guests want" shows just the guests who ticked it', !!bar && onlyKh.length === 2 && onlyKh.every(function (c) { return /ALL IN Cambodia/.test(words(c)); }) && /Who to message: ALL IN Cambodia/.test(page()), onlyKh.length + '');
+      var allBtn = document.getElementById('wncall'); if (allBtn) allBtn.click(); await wait(400);
+      expect('crew list: and "Show everyone" brings them all back', !!allBtn && app().querySelectorAll('.wnc__g').length === cards.length, app().querySelectorAll('.wnc__g').length + ' of ' + cards.length);
       var ts = document.getElementById('wnct'); ts.value = 'laos'; ts.dispatchEvent(new Event('change')); await wait(300);
       var only = [].slice.call(app().querySelectorAll('.wnc__g'));
       expect('crew list: the trip filter shows only guests who ticked it', only.length >= 2 && only.every(function (c) { return /ALL IN Laos/.test(words(c)); }), only.length + '');

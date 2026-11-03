@@ -32,33 +32,31 @@
     var h = MM.PLACES[q.h] && !MM.PLACES[q.h].partner ? q.h : '';
     return { h: h, out: /^\d{4}-\d{2}-\d{2}$/.test(q.out || '') && U.parseDate(q.out) ? q.out : '', b: /^[A-Za-z0-9-]{1,40}$/.test(q.b || '') ? q.b : '', n: plainText(q.n, 30), back: backUrl(q.back) };
   }
-  var hostels = function () { return Object.keys(MM.PLACES).filter(function (id) { return !MM.PLACES[id].partner; }).sort(function (a, b) { return hostelName(a) < hostelName(b) ? -1 : 1; }); };
 
   /* ---------- the guest's page ---------- */
   A.views.wherenext = function (rest) {
-    var root = document.getElementById('app'), q = parse(rest), demo = !q.h;
+    var root = document.getElementById('app'), q = parse(rest);
     A._wnDone = null;
-    if (demo) { q.h = 'hanoi'; q.out = addDays(3); q.n = 'Sam'; }
-    paint(root, q, demo, {});
+    if (!q.h) { q.h = 'hanoi'; q.out = addDays(3); q.n = 'Sam'; }            // opened without a check-in link: an example guest
+    paint(root, q);
   };
   function photo(t) { var src = (t.img && (MM.tourImg(t.img[0]) || MM.hostelImg(t.img[1]))) || ''; return src ? u.photo(src, 'wnt__img', 's') : '<div class="photo photo--none wnt__img"></div>'; }
-  function tripRow(t, on) {
-    return '<label class="wnt wnt--' + esc(t.col) + (on ? ' wnt--on' : '') + '"><input class="sr" type="checkbox" name="wn" value="' + esc(t.id) + '"' + (on ? ' checked' : '') + '>' +
+  function tripRow(t) {
+    return '<label class="wnt wnt--' + esc(t.col) + '"><input class="sr" type="checkbox" name="wn" value="' + esc(t.id) + '">' +
       '<span class="wnt__pic">' + photo(t) + '<span class="wnt__days"><b>' + num(t.days) + '</b>days</span></span>' +
       '<span class="wnt__b"><span class="wnt__tag">' + esc(t.kicker) + '</span><span class="wnt__n">' + esc(t.n.replace(/^ALL IN /, '')) + '</span><span class="wnt__r">' + esc(t.route) + '</span>' +
       '<span class="wnt__next">Next: <b>' + esc(t.depLabel) + '</b> · ' + esc(t.when) + '</span></span>' +
       '<span class="wnt__p"><i>from</i><b>$' + num(t.usd) + '</b></span><span class="wnt__tick" aria-hidden="true"></span></label>';
   }
-  function paint(root, q, demo, picked) {
+  function paint(root, q) {
     var trips = MM.whereNext(q.h, q.out), at = hostelName(q.h);
     root.innerHTML = '<section class="wn">' +
       '<div class="wn__strip" aria-hidden="true"><span>Where next? · Vietnam · Laos · Cambodia · Indonesia · Gili T · Your crew · Your route · Zero planning · Where next? · Vietnam · Laos · Cambodia · Indonesia · Gili T</span></div>' +
-      (demo ? demoBar(q) : '') +
       '<div class="wn__wrap"><div class="wn__brand"><span class="wn__logo">ALL<br>IN</span><span class="wn__at">Mad Monkey ' + esc(at) + '<br>Check-in</span></div>' +
       '<p class="wn__over">One last thing</p><h1 class="wn__h">Where next?<em>Your next crew is waiting.</em></h1>' +
       '<p class="wn__lead">' + (q.n ? 'Hey ' + esc(q.n) + ', you' : 'You') + (q.out ? ' check out <b>' + esc(day(q.out)) + '</b>.' : '\'re all checked in.') + ' Tick any trips you\'d like details on, and the crew will send you the dates.</p>' +
-      '<fieldset class="wn__list"><legend class="sr">ALL IN trips you could do next</legend>' + trips.map(function (t) { return tripRow(t, !!picked[t.id]); }).join('') +
-      '<label class="wnt wnt--own' + (picked.builder ? ' wnt--on' : '') + '"><input class="sr" type="checkbox" name="wn" value="builder"' + (picked.builder ? ' checked' : '') + '><span class="wnt__b"><span class="wnt__tag">Somewhere else?</span><span class="wnt__n">Plan my own</span>' +
+      '<fieldset class="wn__list"><legend class="sr">ALL IN trips you could do next</legend>' + trips.map(tripRow).join('') +
+      '<label class="wnt wnt--own"><input class="sr" type="checkbox" name="wn" value="builder"><span class="wnt__b"><span class="wnt__tag">Somewhere else?</span><span class="wnt__n">Plan my own</span>' +
       '<span class="wnt__r">Build your next leg in 2 minutes, and a real person checks it.</span></span><span class="wnt__tick" aria-hidden="true"></span></label></fieldset>' +
       '<p class="wn__fine">' + esc(CONSENT) + '</p></div>' +
       '<div class="wn__bar"><p class="wn__err" id="wnerr" role="alert" hidden></p><div class="wn__btns"><button class="btn wn__no" id="wnno" type="button">Not interested</button><button class="btn wn__go" id="wngo" type="button">Next</button></div></div>' +
@@ -71,21 +69,12 @@
     });
     go.addEventListener('click', function () {
       var t = ticked(); if (!t.length) { err.textContent = 'Tick a trip, or press Not interested.'; err.hidden = false; return; }
-      send(root, q, demo, t);
+      send(root, q, t);
     });
-    $('#wnno', root).addEventListener('click', function () { send(root, q, demo, []); });
-    if (demo) wireDemo(root, q, picked);
+    $('#wnno', root).addEventListener('click', function () { send(root, q, []); });
     count();
   }
-  function demoBar(q) {
-    return '<div class="wn__demo"><span class="pill pill--lime pill--sm">Demo</span><label>Hostel <select class="select" id="wnh">' + hostels().map(function (id) { return '<option value="' + esc(id) + '"' + (id === q.h ? ' selected' : '') + '>' + esc(hostelName(id)) + '</option>'; }).join('') + '</select></label>' +
-      '<label>Checks out <input class="input" id="wnout" type="date" value="' + esc(q.out) + '"></label><a href="#/wherenext-crew">The crew\'s list</a></div>';
-  }
-  function wireDemo(root, q, picked) {
-    var redo = function () { var h = $('#wnh', root).value, o = $('#wnout', root).value; if (MM.PLACES[h]) q.h = h; if (/^\d{4}-\d{2}-\d{2}$/.test(o)) q.out = o; paint(root, q, true, picked); };
-    $('#wnh', root).addEventListener('change', redo); $('#wnout', root).addEventListener('change', redo);
-  }
-  function send(root, q, demo, trips) {
+  function send(root, q, trips) {
     var body = { hostel: q.h, booking: q.b, checkout: q.out, name: q.n, trips: trips, consent: trips.length ? CONSENT : '', at: new Date().toISOString() };
     var btns = root.querySelectorAll('.wn__btns .btn'); Array.prototype.forEach.call(btns, function (b) { b.disabled = true; });
     var done = function () { thanks(root, q, trips); };
@@ -114,7 +103,7 @@
   /* ---------- the crew's list ---------- */
   // Demo guests: made-up names, example.com addresses and UK drama-range numbers, so a message button never reaches a real person.
   function samples() {
-    var g = function (id, name, hostel, out, via, trips) { return { id: id, name: name, hostel: hostel, checkout: addDays(out), via: via, email: via === 'email' ? name.split(' ')[0].toLowerCase() + '@example.com' : '', whatsapp: via === 'whatsapp' ? '+44 7700 900' + (100 + id.length * 7 + out) : '', trips: trips, sample: true, at: new Date().toISOString() }; };
+    var g = function (id, name, hostel, out, via, trips) { return { id: id, name: name, hostel: hostel, checkout: addDays(out), via: via, email: name.split(' ')[0].toLowerCase() + '@example.com', whatsapp: '+44 7700 900' + (100 + 11 * +id.slice(1)), trips: trips, sample: true, at: new Date().toISOString() }; };
     return [g('s1', 'Sam Lee', 'hanoi', 2, 'whatsapp', ['laos', 'loop']), g('s2', 'Priya Shah', 'hanoi', 1, 'email', ['vietnam']), g('s3', 'Jonas Berg', 'hoi-an', 3, 'whatsapp', ['cambodia']),
       g('s4', 'Mia Clarke', 'phnom-penh', 2, 'email', ['cambodia', 'gili-lombok']), g('s5', 'Leo Martin', 'uluwatu', 4, 'whatsapp', ['gili-lombok']), g('s6', 'Ana Souza', 'luang-prabang', 1, 'email', ['laos']),
       g('s7', 'Tom Price', 'bangkok', 5, 'whatsapp', ['builder']), g('s8', 'Zoe Kim', 'siem-reap', 3, 'email', []), g('s9', 'Finn Walsh', 'hanoi', 2, 'whatsapp', [])];
@@ -161,22 +150,41 @@
     var shown = keen.filter(function (r) { return (!f.h || r.hostel === f.h) && (!f.t || r.trips.indexOf(f.t) > -1); }).sort(function (a, b) { return a.checkout < b.checkout ? -1 : a.checkout > b.checkout ? 1 : 0; });
     var soon = keen.filter(function (r) { return r.checkout && r.checkout <= addDays(3); }).length, stat = function (n, k) { return '<div><span>' + esc(k) + '</span><b>' + esc(n) + '</b></div>'; };
     var hs = {}; keen.forEach(function (r) { hs[r.hostel] = 1; });
+    // every answer at a glance: how many guests still with us want each trip, and how each hostel is doing
+    var byTrip = Object.keys(want).sort(function (a, b) { return want[b] - want[a]; }), most = byTrip.length ? want[byTrip[0]] : 1, byHostel = {};
+    rows.forEach(function (r) { var o = byHostel[r.hostel] = byHostel[r.hostel] || { n: 0, keen: 0, no: 0 }; o.n++; if (r.trips.length) o.keen++; else o.no++; });
+    var glance = '<div class="wnc__glance"><div class="cbox"><h3>What guests want</h3><p class="cdim">Tap a trip to see who to message about it.</p>' + (byTrip.length ? '<ul class="wnc__bars">' + byTrip.map(function (id) {
+        return '<li><button class="wnc__bar' + (f.t === id ? ' wnc__bar--on' : '') + '" type="button" data-wtrip="' + esc(id) + '" style="--c:var(--' + (id === 'builder' ? 'black' : MM.WN_COL[id] || 'lime') + ')" aria-pressed="' + (f.t === id ? 'true' : 'false') + '"><span>' + esc(tname(id)) + '</span><b>' + want[id] + (want[id] === 1 ? ' guest' : ' guests') + '</b><i style="width:' + Math.max(6, Math.round(100 * want[id] / most)) + '%"></i></button></li>';
+      }).join('') + '</ul>' : '<p>No ticks yet.</p>') + '</div>' +
+      '<div class="cbox"><h3>By hostel</h3>' + (Object.keys(byHostel).length ? '<table class="cftable wnc__ht"><thead><tr><th>Hostel</th><th>Answered</th><th>Ticked</th><th>Said no</th></tr></thead><tbody>' +
+        Object.keys(byHostel).sort(function (a, b) { return byHostel[b].n - byHostel[a].n || (hostelName(a) < hostelName(b) ? -1 : 1); }).map(function (id) {
+          var o = byHostel[id]; return '<tr><td><b>' + esc(hostelName(id)) + '</b></td><td>' + o.n + '</td><td>' + o.keen + ' (' + Math.round(100 * o.keen / o.n) + '%)</td><td>' + o.no + '</td></tr>';
+        }).join('') + '</tbody></table>' : '<p>Nobody has answered yet.</p>') + '</div></div>';
     var h = '<section class="quiz crew wnc"><div class="wrap"><div class="crew__top"><span class="over">For the crew</span><h1 class="disp">Where next?</h1>' +
       '<p class="crew__sub">Guests who ticked an ALL IN trip at check-in, leaving soonest first. Message them while they\'re still with us, before they book their next stop somewhere else.</p></div>' +
       (demo ? '<div class="cbanner">Demo: sample guests (made up), plus anything answered on <a href="#/wherenext">the check-in page</a> on this device. Nothing is sent from here.</div>' : '') +
       (msg ? '<div class="cbanner cbanner--ok" role="status">' + esc(msg) + '</div>' : '') +
-      '<div class="cglance cfind__stats">' + stat(rows.length, 'Answered') + stat(rows.length ? Math.round(100 * keen.length / rows.length) + '%' : '0%', 'Ticked a trip') + stat(top ? tname(top).replace(/^ALL IN /, '') : '—', 'Most wanted') + stat(soon, 'Leaving in 3 days') + '</div>' +
+      '<div class="cglance cfind__stats">' + stat(rows.length, 'Answered') + stat(rows.length ? Math.round(100 * keen.length / rows.length) + '%' : '0%', 'Ticked a trip') + stat(top ? tname(top).replace(/^ALL IN /, '') : '—', 'Most wanted') + stat(soon, 'Leaving in 3 days') + '</div>' + glance +
+      '<h2 class="crew__h" id="wncwho2">Who to message' + (f.t ? ': ' + esc(tname(f.t)) + ' <button class="btn btn--sm btn--paper" type="button" id="wncall">Show everyone</button>' : '') + '</h2>' +
       '<div class="wnc__tools"><label>Hostel <select class="select" id="wnch"><option value="">All hostels</option>' + Object.keys(hs).sort().map(function (id) { return '<option value="' + esc(id) + '"' + (f.h === id ? ' selected' : '') + '>' + esc(hostelName(id)) + '</option>'; }).join('') + '</select></label>' +
       '<label>Trip <select class="select" id="wnct"><option value="">Every trip</option>' + Object.keys(want).map(function (id) { return '<option value="' + esc(id) + '"' + (f.t === id ? ' selected' : '') + '>' + esc(tname(id)) + ' (' + want[id] + ')</option>'; }).join('') + '</select></label>' +
       '<div class="field cfind__me"><label for="wncwho">I\'m… (your name signs the messages)</label><input class="input" id="wncwho" maxlength="40" autocomplete="name" value="' + esc(me) + '"></div></div>' +
       (shown.length ? shown.map(function (r, i) {
-        var picks = MM.whereNext(r.hostel, r.checkout).filter(function (t) { return r.trips.indexOf(t.id) > -1; }), text = MM.whereNextMsg(r, r.trips, me), first = r.name.split(' ')[0];
-        var reach = MM.crewWords.reach({ via: r.via, email: r.email, whatsapp: r.whatsapp }, text), can = r.via === 'whatsapp' ? !!r.whatsapp : !!r.email;
-        return '<article class="cbox wnc__g"><div class="cfpair__hd"><h3>' + esc(r.name) + '</h3><span class="cdim">Mad Monkey ' + esc(hostelName(r.hostel)) + (r.checkout ? ' · checks out ' + esc(day(r.checkout)) : '') + (r.booking ? ' · ' + esc(r.booking) : '') + '</span>' +
+        var picks = MM.whereNext(r.hostel, r.checkout).filter(function (t) { return r.trips.indexOf(t.id) > -1; }), first = r.name.split(' ')[0], wa = r.whatsapp.replace(/\D/g, '').length >= 8;
+        // one message per trip they ticked (WhatsApp when the booking has a number, email otherwise), and one about all of them when they ticked more than one
+        var say = function (ids, label) {
+          var text = MM.whereNextMsg(r, ids, me);
+          return wa ? '<a class="btn btn--sm wnc__wa" target="_blank" rel="noopener" href="' + esc(MM.crewWords.reach({ via: 'whatsapp', whatsapp: r.whatsapp }, text)) + '">WhatsApp ' + esc(label) + '</a>'
+            : r.email ? '<a class="btn btn--sm btn--paper" target="_blank" rel="noopener" href="' + esc(MM.crewWords.reach({ via: 'email', email: r.email }, text)) + '">Email ' + esc(label) + '</a>' : '';
+        };
+        var all = picks.map(function (t) { return t.id; }).concat(r.trips.indexOf('builder') > -1 ? ['builder'] : []);
+        return '<article class="cbox wnc__g"><div class="cfpair__hd"><h3>' + esc(r.name) + '</h3><span class="cdim">Mad Monkey ' + esc(hostelName(r.hostel)) + (r.checkout ? ' · checks out ' + esc(day(r.checkout)) : '') + (r.booking ? ' · ' + esc(r.booking) : '') + ' · prefers ' + (r.via === 'whatsapp' ? 'WhatsApp' : 'email') + '</span>' +
           (r.sample ? '<span class="cpill">Sample</span>' : '') + '<span class="cpill cpill--' + (r.status === 'booked' ? 'ok' : r.status === 'messaged' ? 'rdy' : r.status === 'no' ? 'off' : 'new') + '">' + esc(ST[r.status]) + '</span></div>' +
-          '<ul class="wnc__trips">' + picks.map(function (t) { return '<li class="wnt--' + esc(t.col) + '"><b>' + esc(t.n) + '</b> · next ' + esc(t.depLabel) + ' (' + esc(t.when.replace(/\byou\b/g, 'they')) + ') · from $' + num(t.usd) + '</li>'; }).join('') +
-          (r.trips.indexOf('builder') > -1 ? '<li class="wnt--own"><b>Plan my own</b> · send them the trip builder</li>' : '') + '</ul>' +
-          '<div class="cfpair__acts">' + (can ? '<a class="btn btn--sm" target="_blank" rel="noopener" href="' + esc(reach) + '">' + (r.via === 'whatsapp' ? 'WhatsApp ' : 'Email ') + esc(first) + '</a>' : '<span class="cdim">No contact details yet: they come from the booking.</span>') +
+          '<ul class="wnc__trips">' + picks.map(function (t) { return '<li class="wnt--' + esc(t.col) + '"><span><b>' + esc(t.n) + '</b> · next ' + esc(t.depLabel) + ' (' + esc(t.when.replace(/\byou\b/g, 'they')) + ') · from $' + num(t.usd) + '</span>' + say([t.id], 'about this') + '</li>'; }).join('') +
+          (r.trips.indexOf('builder') > -1 ? '<li class="wnt--own"><span><b>Plan my own</b> · send them the trip builder</span>' + say(['builder'], 'about this') + '</li>' : '') + '</ul>' +
+          '<div class="cfpair__acts">' + (all.length > 1 ? say(all, first + ' about all ' + all.length) : '') +
+          (wa && r.email ? '<a class="btn btn--sm btn--paper" target="_blank" rel="noopener" href="' + esc(MM.crewWords.reach({ via: 'email', email: r.email }, MM.whereNextMsg(r, all, me))) + '">Email ' + esc(first) + '</a>' : '') +
+          (!wa && !r.email ? '<span class="cdim">No contact details yet: they come from the booking.</span>' : '') +
           '<button class="btn btn--sm btn--paper" type="button" data-wcopy="' + i + '">Copy the message</button>' +
           '<select class="select" data-wst="' + i + '" aria-label="Where this guest is">' + Object.keys(ST).map(function (k) { return '<option value="' + k + '"' + (r.status === k ? ' selected' : '') + '>' + esc(ST[k]) + '</option>'; }).join('') + '</select>' +
           '<button class="btn btn--sm btn--paper" type="button" data-wsave="' + i + '">Save</button></div></article>';
@@ -186,6 +194,11 @@
     var again = function (m) { list(root, rows, demo, m, f); };
     $('#wnch', root).addEventListener('change', function () { f.h = this.value; again(''); });
     $('#wnct', root).addEventListener('change', function () { f.t = this.value; again(''); });
+    var toList = function () { var el = $('#wncwho2', root); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    Array.prototype.forEach.call(root.querySelectorAll('[data-wtrip]'), function (b) {
+      b.addEventListener('click', function () { var id = b.getAttribute('data-wtrip'); f.t = f.t === id ? '' : id; again(''); toList(); });
+    });
+    if ($('#wncall', root)) $('#wncall', root).addEventListener('click', function () { f.t = ''; again(''); toList(); });
     $('#wncwho', root).addEventListener('change', function () { try { localStorage.setItem(WHOKEY, this.value.trim()); } catch (e) { /* private mode */ } again(''); });
     Array.prototype.forEach.call(root.querySelectorAll('[data-wcopy]'), function (b) {
       b.addEventListener('click', function () { var r = shown[+b.getAttribute('data-wcopy')]; u.copy(MM.whereNextMsg(r, r.trips, me)); u.toast('Copied. Paste it into WhatsApp or an email.'); });
