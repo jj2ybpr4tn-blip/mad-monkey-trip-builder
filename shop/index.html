@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0E2B26">
+<title>Private preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0E2B26; color: #F6E7C1; font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { min-height: 100%; display: grid; place-items: center; padding: 24px; box-sizing: border-box; text-align: center; }
+  p { max-width: 30ch; margin: 0 auto; }
+  .bar { width: 180px; height: 4px; margin: 18px auto 0; background: rgba(246, 231, 193, .2); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 4%; background: #F6E7C1; transition: width .2s; }
+  .bar[hidden] { display: none; }
+</style>
+</head>
+<body>
+<main><div><p id="msg">Opening the preview…</p><div class="bar" id="bar"><i id="fill"></i></div></div></main>
+<script>
+/* The page itself is encrypted (shop.bin: gzip, then AES-256-GCM, IV first). The key only travels in the link's #k= part,
+   which browsers never send to the server, so this public folder holds nothing readable. */
+(async function () {
+  var FILE = 'shop.bin', KEYNAME = 'allin-preview-key';
+  var msg = document.getElementById('msg'), bar = document.getElementById('bar'), fill = document.getElementById('fill');
+  function fail(t) { msg.textContent = t; bar.hidden = true; }
+  var m = location.hash.match(/k=([A-Za-z0-9_-]{43})/), k = m ? m[1] : null;
+  try { if (k) localStorage.setItem(KEYNAME, k); else k = localStorage.getItem(KEYNAME); } catch (e) {}
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (!k) return fail('This preview is private. Open it with the full link you were sent.');
+  if (!(window.crypto && crypto.subtle && window.DecompressionStream && window.TextDecoder)) return fail('This browser can’t open the preview. Try the latest Safari or Chrome.');
+  var buf;
+  try {
+    var res = await fetch(FILE, { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var total = +res.headers.get('Content-Length') || 0;
+    if (total && res.body && res.body.getReader) {
+      var r = res.body.getReader(), parts = [], got = 0;
+      for (;;) {
+        var step = await r.read();
+        if (step.done) break;
+        parts.push(step.value); got += step.value.length;
+        fill.style.width = Math.max(4, Math.min(100, got * 100 / total)) + '%';
+      }
+      buf = new Uint8Array(got);
+      var o = 0; parts.forEach(function (p) { buf.set(p, o); o += p.length; });
+    } else buf = new Uint8Array(await res.arrayBuffer());
+  } catch (e) { return fail('Couldn’t load the preview. Check your connection, then reload.'); }
+  try {
+    var raw = Uint8Array.from(atob(k.replace(/-/g, '+').replace(/_/g, '/') + '='), function (c) { return c.charCodeAt(0); });
+    var key = await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['decrypt']);
+    var plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12));
+    var html = await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  } catch (e) {
+    try { localStorage.removeItem(KEYNAME); } catch (_) {}
+    return fail('This link doesn’t open the preview. Ask for the full link again.');
+  }
+  document.open(); document.write(html); document.close();
+})();
+</script>
+</body>
+</html>
