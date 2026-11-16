@@ -7,6 +7,8 @@
      • MM.applyFix(state, fix) apply one of the doctor's one-tap fixes
      • MM.packing(plan)        a packing list built from the trip
      • MM.THEMES / themeTrip / surprise   ready-made vibes and "Surprise me"
+     • MM.bigDays(state)       big days (data/rules.js BIGDAYS) the trip catches, just misses (one-tap shift) or could be timed to
+     • MM.allinFrom / allinMark / allinFind   a trip handed over by the ALL IN site: which stops are the ALL IN trip
    ============================================================ */
 (function (r) {
   var MM = r.MM = r.MM || {};
@@ -45,6 +47,28 @@
     return out;
   }
   MM.fullMoons = fullMoons;
+  // the same for new moons (Meeus ch. 49, the new-moon terms), for the dark nights the plankton glows brightest
+  function newMoonJDE(k) {
+    var T = k / 1236.85, T2 = T * T, T3 = T2 * T, T4 = T3 * T;
+    var jde = 2451550.09766 + 29.530588861 * k + 0.00015437 * T2 - 0.00000015 * T3 + 0.00000000073 * T4;
+    var E = 1 - 0.002516 * T - 0.0000074 * T2;
+    var M = (2.5534 + 29.1053567 * k - 0.0000014 * T2 - 0.00000011 * T3) * rad;
+    var Mp = (201.5643 + 385.81693528 * k + 0.0107582 * T2 + 0.00001238 * T3 - 0.000000058 * T4) * rad;
+    var F = (160.7108 + 390.67050284 * k - 0.0016118 * T2 - 0.00000227 * T3 + 0.000000011 * T4) * rad;
+    var O = (124.7746 - 1.56375588 * k + 0.0020672 * T2 + 0.00000215 * T3) * rad;
+    return jde - 0.40720 * Math.sin(Mp) + 0.17241 * E * Math.sin(M) + 0.01608 * Math.sin(2 * Mp) + 0.01039 * Math.sin(2 * F) + 0.00739 * E * Math.sin(Mp - M) -
+      0.00514 * E * Math.sin(Mp + M) + 0.00208 * E * E * Math.sin(2 * M) - 0.00111 * Math.sin(Mp - 2 * F) - 0.00057 * Math.sin(Mp + 2 * F) + 0.00056 * E * Math.sin(2 * Mp + M) -
+      0.00042 * Math.sin(3 * Mp) + 0.00042 * E * Math.sin(M + 2 * F) + 0.00038 * E * Math.sin(M - 2 * F) - 0.00024 * E * Math.sin(2 * Mp - M) - 0.00017 * Math.sin(O);
+  }
+  function newMoons(y) {
+    var out = [], k0 = Math.floor((y - 2000) * 12.3685) - 1;
+    for (var k = k0; k < k0 + 16; k++) {
+      var d = new Date((newMoonJDE(k) - 2440587.5) * DAY + 7 * 3600000);
+      if (d.getUTCFullYear() === y) out.push(utc(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    }
+    return out;
+  }
+  MM.newMoons = newMoons;
   function easter(y) {                                   // Anonymous Gregorian algorithm
     var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3),
       h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451),
@@ -63,6 +87,7 @@
         for (var y = y0; y <= y1; y++) { var f = utc(y, +a[0] - 1, +a[1]), t = utc(y, +b[0] - 1, +b[1]); if (t < f) t = utc(y + 1, +b[0] - 1, +b[1]); out.push({ from: f, to: t, conf: true }); }
       } else if (s.fullmoon) { for (var y2 = y0; y2 <= y1; y2++) fullMoons(y2).forEach(function (d) { out.push({ from: d, to: d, conf: true, moon: true }); }); }
       else if (s.holyweek) { for (var y3 = y0; y3 <= y1; y3++) { var e = easter(y3); out.push({ from: new Date(e.getTime() - 7 * DAY), to: new Date(e.getTime() + DAY), conf: true }); } }
+      else if (s.newmoon) { for (var y4 = y0; y4 <= y1; y4++) newMoons(y4).forEach(function (d) { out.push({ from: new Date(d.getTime() - s.newmoon * DAY), to: new Date(d.getTime() + s.newmoon * DAY), conf: true, moon: true }); }); }
     });
     return out.filter(function (s) { return s.to >= from && s.from <= to; });
   }
@@ -144,6 +169,7 @@
     else if (fix.t === 'leg') { s.legPick[fix.i] = fix.k; }
     else if (fix.t === 'remove') { s.items.splice(fix.i, 1); s.legPick = {}; }
     else if (fix.t === 'shift' && s.start) { s.start = iso(new Date(pISO(s.start).getTime() + fix.d * DAY)); }
+    else if (fix.t === 'start' && /^\d{4}-\d{2}-\d{2}$/.test(fix.iso || '')) { s.start = fix.iso; }
     return s;
   };
 
@@ -286,6 +312,104 @@
     var st = stateFromRoute(route, t, { pref: t.pref || (rng() < 0.25 ? 'fast' : 'balanced') }), why = [];
     why.push(t.n); if (route[0][0] !== t.route[0][0]) why.push('run backwards for a change');
     return { theme: t, state: st, why: why, days: MM.plan(st).totals.days };
+  };
+
+  /* ---------------- big days: catch them, don't just dodge them ----------------
+     MM.bigDays(state) -> { dated, caught: [...], near: [...], ahead: [...] }
+       caught: big days the trip is already in town for
+       near:   ones it misses by a few days, with the smallest shift of the whole trip that catches them (fix: { t: 'shift', d })
+       ahead:  for a trip without dates, the next time each one happens at a stop on the route, with the start date that puts the
+               guest there on the day (fix: { t: 'start', iso }). Never a date in the past or tomorrow's rush: from 7 days out. */
+  function bdSpans(bd, from, to) {
+    var ev = bd.cal ? MM.CALENDAR.filter(function (c) { return c.id === bd.cal; })[0] : bd;
+    return ev ? spansOf({ spans: ev.spans }, from, to) : [];
+  }
+  function bdHits(bd, days, sp) { return days.filter(function (d) { return d.date >= sp.from && d.date <= sp.to && bd.at.indexOf(d.loc) > -1; }); }
+  var NEAR = { 1: 4, 2: 10, 3: 10 };                                  // how far the whole trip may move to catch one, by size: never weeks for a lantern night
+  MM.bigDays = function (state, o) {
+    o = o || {}; var out = { dated: !!state.start, caught: [], near: [], ahead: [] };
+    if (!MM.BIGDAYS || !state.items || !state.items.length) return out;
+    var pl = MM.plan(state), days = pl.days.filter(function (d) { return d.loc && d.kind !== 'depart'; });
+    var where = {}; days.forEach(function (d) { where[d.loc] = 1; });
+    var mine = MM.BIGDAYS.filter(function (bd) { return bd.at.some(function (p) { return where[p]; }); });
+    var today = o.today ? pISO(iso(o.today)) : pISO(iso(new Date())), soonest = new Date(today.getTime() + 7 * DAY);
+    if (out.dated) {
+      var dd = days.filter(function (d) { return d.date; }); if (!dd.length) return out;
+      var from = dd[0].date, to = dd[dd.length - 1].date, start = pISO(state.start);
+      mine.forEach(function (bd) {
+        var sps = bdSpans(bd, new Date(from.getTime() - 12 * DAY), new Date(to.getTime() + 12 * DAY)), got = null;
+        sps.forEach(function (sp) { if (got) return; var h = bdHits(bd, dd, sp); if (h.length) got = { bd: bd, sp: sp, at: h[0].loc, on: h[0].date, nights: h.length }; });
+        if (got) { out.caught.push(got); return; }
+        var lim = NEAR[bd.w] || 4, best = null;
+        for (var k = 1; k <= lim && !best; k++) [k, -k].forEach(function (sh) {
+          if (best || start.getTime() + sh * DAY < soonest.getTime()) return;
+          var moved = dd.map(function (d) { return { date: new Date(d.date.getTime() + sh * DAY), loc: d.loc }; });
+          sps.forEach(function (sp) { if (best) return; var h = bdHits(bd, moved, sp); if (h.length) best = { bd: bd, sp: sp, at: h[0].loc, on: h[0].date, shift: sh, fix: { t: 'shift', d: sh } }; });
+        });
+        if (best) out.near.push(best);
+      });
+    } else {
+      var first = {}; pl.days.forEach(function (d) { if (d.loc && d.kind !== 'depart' && first[d.loc] == null) first[d.loc] = d.n - 1; });
+      var horizon = new Date(today.getTime() + 400 * DAY);
+      mine.forEach(function (bd) {
+        var cand = null;
+        bdSpans(bd, soonest, horizon).sort(function (a, b) { return a.from - b.from; }).forEach(function (sp) {
+          if (cand) return;
+          bd.at.forEach(function (p) {
+            if (cand || first[p] == null) return;
+            var st = new Date(sp.from.getTime() - first[p] * DAY);                // arrive at that stop on the first day of it
+            if (st >= soonest) cand = { bd: bd, sp: sp, at: p, on: sp.from, start: st, fix: { t: 'start', iso: iso(st) } };
+          });
+        });
+        if (cand) out.ahead.push(cand);
+      });
+    }
+    var big = function (a, b) { return b.bd.w - a.bd.w || a.on - b.on; };
+    out.caught.sort(big); out.near.sort(function (a, b) { return b.bd.w - a.bd.w || Math.abs(a.shift) - Math.abs(b.shift); }); out.ahead.sort(big);
+    return out;
+  };
+
+  /* ---------------- the ALL IN site hand-off ----------------
+     The ALL IN site sends a guest here with ?via=allin. For one of its trips it adds trip (its id on that site), tn (its name),
+     part (which stops of the trip in the link are the ALL IN trip: first index . how many) and away (nights it spends away
+     from a Mad Monkey, like a night ship or a partner hotel, which the builder can't price). It all comes in the address, so
+     none of it is trusted: the id and name must match a strict pattern (no digits, dots or markup, so no prices or web addresses, and nothing long), numbers are clamped,
+     and anything that doesn't pass is dropped. The builder never shows a price from the address. */
+  var AI_ID = /^[a-z][a-z0-9-]{0,39}$/, AI_NAME = /^[A-Za-z\u00C0-\u024F\u1E00-\u1EFF &'\u2019,:()+-]{2,60}$/;
+  MM.allinFrom = function (search) {
+    var q; try { q = new URLSearchParams(String(search || '')); } catch (e) { return null; }
+    if (q.get('via') !== 'allin') return null;
+    var id = String(q.get('trip') || '').toLowerCase(), name = String(q.get('tn') || '').replace(/\s+/g, ' ').trim(), part = /^(\d{1,2})\.(\d{1,2})$/.exec(String(q.get('part') || ''));
+    if (!AI_ID.test(id)) id = '';
+    if (!id || !AI_NAME.test(name) || !/[A-Za-z].*[A-Za-z]/.test(name)) name = '';
+    var n = part ? Math.min(+part[2], 40) : 0;
+    return { trip: id, name: name, b: id && n ? Math.min(+part[1], 40) : -1, n: id ? n : 0, away: id ? Math.max(0, Math.min(9, Math.round(+q.get('away') || 0))) : 0 };
+  };
+  // What to remember about the ALL IN part when the guest arrives: its places, nights and tours, in order. Later edits are compared with it.
+  MM.allinMark = function (items, ctx) {
+    if (!ctx || ctx.b < 0 || !ctx.n || !items || ctx.b + ctx.n > items.length) return null;
+    var part = items.slice(ctx.b, ctx.b + ctx.n);
+    if (!part.every(function (it) { return it && it.kind === 'stop' && P()[it.p]; })) return null;
+    return { places: part.map(function (it) { return it.p; }), nights: part.map(function (it) { return it.n; }), acts: part.map(function (it) { return (it.acts || []).slice().sort().join('+'); }) };
+  };
+  // Where that part is now: its first stop and length, whether the guest changed nights or tours inside it, and what they added either side.
+  // null once its run of places is gone (a stop removed, swapped or moved), and from then on it's simply their own route.
+  MM.allinFind = function (items, mark) {
+    if (!mark || !mark.places || !mark.places.length || !items) return null;
+    var L = mark.places.length;
+    for (var i = 0; i + L <= items.length; i++) {
+      var ok = true;
+      for (var k = 0; k < L && ok; k++) ok = items[i + k] && items[i + k].kind === 'stop' && items[i + k].p === mark.places[k];
+      if (!ok) continue;
+      var changed = [];
+      for (var j = 0; j < L; j++) {
+        var it = items[i + j], p = P()[it.p] ? P()[it.p].n : it.p;
+        if (it.n !== mark.nights[j]) changed.push(p + ': ' + mark.nights[j] + ' to ' + it.n + (it.n === 1 ? ' night' : ' nights'));
+        else if ((it.acts || []).slice().sort().join('+') !== mark.acts[j]) changed.push(p + ': tours changed');
+      }
+      return { i: i, n: L, before: i, after: items.length - i - L, changed: changed, intact: !changed.length };
+    }
+    return null;
   };
 
   if (typeof module !== 'undefined') module.exports = MM;

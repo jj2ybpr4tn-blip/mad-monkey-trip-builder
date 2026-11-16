@@ -137,6 +137,15 @@
       if (sum.stage.from) L.push('Starting from ' + sum.stage.from.name + (sum.stage.arrival ? ': ' + sum.stage.arrival.mode + ' to ' + sum.stage.arrival.to + ' · ' + sum.stage.arrival.hours + ' · ' + usd(sum.stage.arrival.usd) + (sum.stage.arrival.overnight ? ' · overnight' : '') : ''));
       if (sum.stage.been.length) L.push('Already been to: ' + sum.stage.been.join(', ') + ' (so none of these are suggested)');
     }
+    if (x.allin) {                                                 // handed over by the ALL IN site (ui-allin.js)
+      var ai = x.allin;
+      rule('FROM THE ALL IN SITE' + (ai.name ? ': ' + ai.name.toUpperCase() : ''));
+      if (ai.stops) L.push('Stops ' + ai.stops[0] + ' to ' + ai.stops[1] + ' are the ALL IN trip' + (ai.trip ? ' (' + ai.trip + ' on the site)' : '') + (ai.intact ? ', as the site sells it.' : '. They changed it: ' + (ai.changed || []).join('; ') + '.'));
+      else if (ai.trip) L.push('They started from ' + (ai.name || 'an ALL IN trip') + ' (' + ai.trip + ' on the site), then changed its stops, so this is their own route now.');
+      else L.push('They came from the ALL IN site and built this from scratch.');
+      if (ai.stops && (ai.before || ai.after)) L.push('Added: ' + [ai.before ? ai.before + (ai.before === 1 ? ' stop' : ' stops') + ' before it' : '', ai.after ? ai.after + (ai.after === 1 ? ' stop' : ' stops') + ' after it' : ''].filter(Boolean).join(' and ') + '.');
+      if (ai.away) L.push('Plus ' + ai.away + (ai.away === 1 ? ' night' : ' nights') + ' on the ALL IN trip that the builder can\'t see (a night boat or bus, or a partner hotel). They aren\'t in its price: add them.');
+    }
     rule('THE TRIP');
     L.push(sum.headline);
     L.push(sum.days + ' days · ' + sum.nights + ' nights · ' + sum.stopCount + (sum.stopCount === 1 ? ' stop · ' : ' stops · ') + sum.countries.join(' + '));

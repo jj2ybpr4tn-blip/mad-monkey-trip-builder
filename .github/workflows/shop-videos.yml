@@ -1,0 +1,78 @@
+# Sharp, light background videos for the private ALL IN shop preview (gh-pages, folder shop/).
+# Mixkit's 1080p files are 40 to 170 MB a clip (about 25 Mbps), too heavy to stream on a web page, and its 720p files look
+# soft on phones and laptops. This downloads each 1080p master once, keeps up to 20 seconds as a loop, drops the sound
+# (the page plays them muted) and re-encodes to H.264 1080p at about 4 to 5 Mbps, then publishes them as shop/v/<name>-1080.mp4.
+# The page plays these on the live preview and falls back to Mixkit's 720p if one is missing.
+# Run it from GitHub: Actions > Shop videos > Run workflow. Clips already published are kept unless you tick "force".
+# Clips are free under the Mixkit Stock Video Free License (placeholder footage until we have our own).
+name: Shop videos
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Re-encode clips that are already published
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: gh-pages-shop
+  cancel-in-progress: false
+jobs:
+  encode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+      - name: Get ffmpeg
+        run: command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+      - name: Encode the clips
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          mkdir -p shop/v
+          M=https://assets.mixkit.co/videos
+          A=https://assets.mixkit.co/active_storage/video_items
+          # name, the Mixkit 1080p master, seconds to keep
+          while read -r name url secs; do
+            [ -z "$name" ] && continue
+            out="shop/v/$name-1080.mp4"
+            if [ -f "$out" ] && [ "$FORCE" != "true" ]; then echo "keep $out"; continue; fi
+            curl -fsSL --retry 3 --retry-delay 5 -o /tmp/src.mp4 "$url"
+            ffmpeg -nostdin -loglevel error -y -i /tmp/src.mp4 -t "$secs" -an \
+              -vf "scale=w='if(gte(iw,ih),min(1920,iw),-2)':h='if(gte(iw,ih),-2,min(1920,ih))'" \
+              -fpsmax 30 -c:v libx264 -preset slow -crf 23 -maxrate 5M -bufsize 10M \
+              -profile:v high -pix_fmt yuv420p -movflags +faststart "$out"
+            rm -f /tmp/src.mp4
+            echo "made $out: $(du -h "$out" | cut -f1), $(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$out")"
+          done <<CLIPS
+          sunrise $M/1944/1944-1080.mp4 20
+          moto $M/39915/39915-1080.mp4 20
+          surf $M/1076/1076-1080.mp4 20
+          balloon $M/4053/4053-1080.mp4 20
+          falls $M/50566/50566-1080.mp4 20
+          island $M/1577/1577-1080.mp4 20
+          sunsea $M/38859/38859-1080.mp4 20
+          paradise $M/2888/2888-1080.mp4 20
+          fire $M/513/513-1080.mp4 20
+          fireworks $M/4155/4155-1080.mp4 20
+          lanterns $A/100516/1725310306/100516-video-1080.mp4 20
+          dragon $A/100498/1725309129/100498-video-1080.mp4 20
+          splash $A/99789/1716843091/99789-video-1080.mp4 20
+          CLIPS
+          du -ch shop/v/*.mp4 | tail -1
+      - name: Publish to gh-pages
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shop/v
+          if git diff --cached --quiet; then echo "No new clips."; exit 0; fi
+          git commit -qm "Shop preview: sharp 1080p background videos"
+          for i in 1 2 3; do git pull -q --rebase origin gh-pages && git push -q origin HEAD:gh-pages && exit 0; sleep 10; done
+          exit 1

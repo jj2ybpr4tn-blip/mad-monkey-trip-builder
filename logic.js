@@ -1372,12 +1372,14 @@
         urgency: urgencyOf(state) },
       itinerary: planText(pl, state, 'USD')
     };
+    // A trip handed over by the ALL IN site (ui-allin.js): which of its trips, and which stops are that trip. It also goes in the crew's text below.
+    if (meta && meta.allin) out.allinSite = meta.allin;
     // The same trip, laid out for the crew: stop by stop, tours, travel, money and a heads-up list (crew.js).
     if (MM.crewSummary) {
       try {
         var sum = MM.crewSummary(state, pl, { people: contact && contact.partySize, dates: contact && contact.dates, stage: meta && meta.stage });
         out.summary = sum; if (sum.stage) out.stage = { n: sum.stage.n, parent: sum.stage.parent, from: state.from || '', been: (state.been || []).slice() };
-        out.crewText = MM.crewText(sum, { name: contact && contact.name, from: contact && contact.from, notes: contact && contact.notes, link: meta && meta.link,
+        out.crewText = MM.crewText(sum, { name: contact && contact.name, from: contact && contact.from, notes: contact && contact.notes, link: meta && meta.link, allin: meta && meta.allin,
           contact: contact && (contact.via === 'whatsapp' ? 'WhatsApp ' + (contact.whatsapp || '') : 'Email ' + (contact.email || '')) });
       } catch (e) { /* the lead still goes through without the crew layout */ }
     }

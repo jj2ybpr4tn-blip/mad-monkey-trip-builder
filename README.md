@@ -42,6 +42,7 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 | **Pay your way** | After the crew approves a trip and sets the price, the guest chooses how to pay: all now, a week before they leave (a card is saved, nothing charged until then), or in instalments when they leave 60+ days out. See [docs/PAYMENTS.md](docs/PAYMENTS.md). |
 | **Edit it your way** | **Start building** is always a blank sheet (with a short walk-around, and "Pick up where you left off" if you had a trip). Every stop has worded **Remove stop** / **Swap place** buttons, **+ Add a stop** asks where it goes, the day-by-day plan is editable, and Undo/Redo covers everything. A guest can also **change a trip after sending it**: it replaces the one the crew is checking, so they never review an outdated plan. See [docs/EDITING.md](docs/EDITING.md). |
 | **Crew review** | What the team receives when a trip is sent: the whole trip as the guest built it (stops, tours, travel, money, heads-up) in the email, with **Approve / Not approved / Edit it** buttons that open a review page. See [docs/CREW-REVIEW.md](docs/CREW-REVIEW.md). |
+| **From the ALL IN site** | The new ALL IN site hands a trip over with **Carry on in the trip builder**: the builder names it, tags which stops are the ALL IN trip, stops suggesting a different trip, links **Back to the trip** (`ALLIN_SITE`) and tells the crew which trip it started from and what the guest changed. Nothing in the link is priced or trusted. See [docs/ALL-IN-SITE.md](docs/ALL-IN-SITE.md). |
 | **Find your crew** | A tick on the send form: travelling solo or keen for company? The crew sees who else is in the same towns on the same nights and fits what they asked for (women only, around my age, solo only), and a real person introduces them once both say yes. See [docs/FIND-YOUR-CREW.md](docs/FIND-YOUR-CREW.md). |
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
 | **Currencies** | USD, GBP, EUR, AUD and CAD at indicative rates (set 22 Oct 2026; `FX_ENDPOINT` in `config.js` refreshes them from a free feed). Real conversion belongs to the booking engine. |
@@ -123,6 +124,7 @@ docs/PAYMENTS.md    free to send, approval, then pay your way (now / a week befo
 docs/EDITING.md     editing your trip, the blank start + walk-around, changing a trip after sending it
 docs/PLANNING.md    search ("Where to?"), best order, plan in stages + log in, Ask Ewan
 docs/FIND-YOUR-CREW.md  "Find your crew": opting in, how matches work, the crew console tab, privacy
+docs/ALL-IN-SITE.md the hand-off from the new ALL IN site: the link it sends, what the builder does with it
 docs/REVIEW.md      the big review (Oct 2026): what was found, what was fixed, what is still open
 scripts/            lint, audit-data, make-thumbs, mirror-photos, build-pages, sync-allin, deploy-demo, seed-crew-demo
 test/               logic + fuzz tests (node, no dependencies); ui-smoke.js and ui-lint.js run in a browser tab
@@ -131,6 +133,8 @@ test/               logic + fuzz tests (node, no dependencies); ui-smoke.js and 
 ## Brand notes
 
 Follows the Mad Monkey core design system: Montserrat 900 uppercase display, the eight poster colours (never more than three at once) on Mad Black / Bone / Paper, 3px outlines, hard-offset shadows with no blur, sharp-or-pill corners, one brand device per layout (ALL IN sticker, lime starburst), official logo files only. Copy is British English and in voice. No decorative emoji.
+
+**The ALL IN look** (`look-allin.css`, on by default): the builder dressed like the new ALL IN site, so the two read as one. Its palette (canopy green, mist, limestone, amber, coral, lagoon), Archivo headings set wide and heavy in sentence case, rounded cards on soft shadows, and no hard shadows, stickers or starbursts. It only overrides the core styles: `LOOK: 'core'` in `config.js` (or removing `data-look="allin"` from `index.html`) brings the core look back. The live copy keeps the core look until its own config says `LOOK: 'allin'`; a guest handed over by the ALL IN site always gets the new look.
 
 ## Still to do
 - **Live fares** from a real provider. Today the crew enters real fares in `/admin`; the built-in table is the fallback. (12Go / Rome2Rio style feeds need paid API keys.)

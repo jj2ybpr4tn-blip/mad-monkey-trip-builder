@@ -10,7 +10,7 @@ Look: the ALL IN trip guide (black page, a neon strip, Bungee headings, a row pe
 
 | Value | What it is | If it's missing or wrong |
 | --- | --- | --- |
-| `h` | The hostel's id in `data/places.js` (`hanoi`, `hoi-an`, `phnom-penh`…) | The page is the demo (Hanoi, a few days out, with a bar to change hostel and date) |
+| `h` | The hostel's id in `data/places.js` (`hanoi`, `hoi-an`, `phnom-penh`…) | The page is the demo: a guest called Sam at Hanoi, checking out in 3 days |
 | `out` | Their check-out date | "You're all checked in", and departures count from today |
 | `b` | The booking reference, so the answer joins up with the booking (and its contact details) | Saved without one |
 | `n` | Their first name, for "Hey Sam" | No name |
@@ -58,4 +58,4 @@ Follow-up we'd suggest: one message the day after check-in, a nudge two days bef
 
 ## Tests
 
-`test/logic.test.js` (the order, departures, prices, sales window and the message) and, in a browser on the builder, `test/ui-wherenext.js`: `await import('/test/ui-wherenext.js?' + Date.now()); await __wherenext()` (the page from a real link, ticks, Next / Not interested, what is saved, the way back, hostile link values, the demo controls, and the crew's list).
+`test/logic.test.js` (the order, departures, prices, sales window and the message) and, in a browser on the builder, `test/ui-wherenext.js`: `await import('/test/ui-wherenext.js?' + Date.now()); await __wherenext()` (the page from a real link, ticks, Next / Not interested, what is saved, the way back, hostile link values, and the crew's list).

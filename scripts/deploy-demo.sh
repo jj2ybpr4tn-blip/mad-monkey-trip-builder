@@ -12,6 +12,11 @@ git worktree add -q -B gh-pages .demo-build HEAD
   BASE_PATH="/$NAME" NOINDEX=1 node scripts/build-pages.mjs
   touch .nojekyll
   rm -rf handoff                       # the patches for the ALL IN site aren't part of the demo
+  # Keep shop/ as it is on GitHub: the locked ALL IN shop preview and its videos live only on gh-pages (put there by
+  # drafts/all-in-store/publish-preview.sh and the shop-videos workflow), so a demo deploy must carry them over.
+  if git fetch -q origin gh-pages 2>/dev/null && git cat-file -e FETCH_HEAD:shop 2>/dev/null; then
+    rm -rf shop && git archive FETCH_HEAD shop | tar -x && echo "Kept shop/ (the ALL IN shop preview) from gh-pages."
+  fi
   git add -A
   if git diff --cached --quiet; then echo "Nothing changed in the demo build."; else
     # use your git identity if you have one, otherwise a neutral one so the commit can't fail quietly

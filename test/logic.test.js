@@ -648,4 +648,58 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('Where next message: "plan my own" only sends the trip builder, signed by the crew', /^Hi there, it's the crew from Mad Monkey/.test(own) && /all-in-trips\/trip-builder\/\?utm_source=checkin/.test(own) && !/holds your spot/.test(own), own);
 })();
 
+/* ---------- big days: catch them (extras.js MM.bigDays, data/rules.js BIGDAYS) ---------- */
+(function () {
+  var T = { today: new Date('2026-11-16T09:00:00Z') }, iso = function (d) { return d.toISOString().slice(0, 10); };
+  ok('Big days: every one has a name, a line, a short blurb, real hostels and dates', MM.BIGDAYS.every(function (b) { return b.n && b.title && b.blurb && b.blurb.length < 260 && b.at.length && b.at.every(function (p) { return MM.PLACES[p]; }) && (b.cal ? MM.CALENDAR.some(function (c) { return c.id === b.cal; }) : b.spans.length); }));
+  ok('Big days: no dashes standing in for punctuation in guest copy', MM.BIGDAYS.every(function (b) { return !/\u2014|\u2013| - /.test(b.blurb + b.title + b.n); }));
+  ok('New moons: 8 March 2027 (Nyepi is the new moon) and 6 February 2027 (Tet)', MM.newMoons(2027).map(iso).indexOf('2027-03-08') > -1 && MM.newMoons(2027).map(iso).indexOf('2027-02-06') > -1);
+  var ny = MM.CALENDAR.filter(function (c) { return c.id === 'nyepi'; })[0];
+  ok('Nyepi 2027 is Monday 8 March, as Indonesia\'s holiday list sets it', ny.spans[0].core === '8 Mar' && ny.spans[0].from <= '2027-03-08' && ny.spans[0].to >= '2027-03-08' && ny.spans[0].conf === true);
+  var cm = st([stop('bangkok', 2), stop('chiang-mai', 4), stop('pai', 3)], { start: '2027-04-06' }), r = MM.bigDays(cm, T);
+  ok('Big days: a trip in the north for 13 April is there for Songkran', r.caught.some(function (x) { return x.bd.id === 'songkran'; }), JSON.stringify(r.caught.map(function (x) { return x.bd.id; })));
+  var sr = st([stop('siem-reap', 3), stop('phnom-penh', 2), stop('koh-rong', 3)], { start: '2027-11-02' }), r2 = MM.bigDays(sr, T);
+  var wf = r2.near.filter(function (x) { return x.bd.id === 'waterfest'; })[0];
+  ok('Big days: Siem Reap 2 to 5 November 2027 just misses the boat races, and the smallest move that catches them is 8 days later', wf && wf.shift === 8 && wf.fix.t === 'shift', JSON.stringify(r2.near.map(function (x) { return [x.bd.id, x.shift]; })));
+  var moved = MM.applyFix(sr, wf.fix);
+  ok('Big days: that move puts the guest in Siem Reap for the races', moved.start === '2027-11-10' && MM.bigDays(moved, T).caught.some(function (x) { return x.bd.id === 'waterfest' && x.at === 'siem-reap'; }));
+  ok('Big days: a lantern night is never worth moving a trip by more than 4 days', MM.bigDays(st([stop('hoi-an', 2)], { start: '2027-03-01' }), T).near.every(function (x) { return x.bd.id !== 'lantern' || Math.abs(x.shift) <= 4; }));
+  var un = MM.bigDays(st([stop('bangkok', 2), stop('chiang-mai', 4), stop('pai', 3)]), T), sk = un.ahead.filter(function (x) { return x.bd.id === 'songkran'; })[0];
+  ok('Big days: with no dates, Songkran is offered with the start date that lands the guest in Chiang Mai on 13 April', sk && sk.at === 'chiang-mai' && iso(sk.on) === '2027-04-13' && sk.fix.t === 'start' && sk.fix.iso < '2027-04-13', JSON.stringify(sk && sk.fix));
+  var withStart = MM.applyFix(st([stop('bangkok', 2), stop('chiang-mai', 4), stop('pai', 3)]), sk.fix);
+  ok('Big days: taking that start date means the trip catches it', MM.bigDays(withStart, T).caught.some(function (x) { return x.bd.id === 'songkran' && x.at === 'chiang-mai'; }));
+  ok('Big days: never a start date in the past or this week', un.ahead.every(function (x) { return x.fix.iso >= '2026-11-23'; }) && MM.bigDays(st([stop('siem-reap', 4)], { start: '2026-11-18' }), T).near.every(function (x) { return x.shift > 0 || iso(new Date(Date.parse('2026-11-18') + x.shift * 864e5)) >= '2026-11-23'; }));
+  ok('Big days: a trip nowhere near one gets nothing', (function () { var x = MM.bigDays(st([stop('dumaguete', 3)], { start: '2027-06-01' }), T); return !x.caught.length && !x.near.length; })());
+})();
+
+/* ---------- a trip handed over by the ALL IN site (extras.js: allinFrom / allinMark / allinFind, crew.js) ---------- */
+(function () {
+  var F = MM.allinFrom;
+  var c = F('?via=allin&trip=cambodia&tn=Temples%20%26%20Beaches&part=2.5&away=1&ref=exeter');
+  ok('ALL IN site: the trip id, name, which stops and nights away are read from the address', c && c.trip === 'cambodia' && c.name === 'Temples & Beaches' && c.b === 2 && c.n === 5 && c.away === 1, JSON.stringify(c));
+  eq('ALL IN site: nothing without via=allin', F('?trip=cambodia&tn=Hi'), null);
+  ok('ALL IN site: via=allin alone is a guest from the site with no trip', (function () { var x = F('?via=allin'); return x && x.trip === '' && x.name === '' && x.b === -1 && x.n === 0; })());
+  ok('ALL IN site: a name with markup, digits, a web address or too many characters is dropped (never shown)', ['<b>x</b>', 'FREE TRIP 0800 123', 'Visit evil.example/x', 'Book at evil.example', 'A'.repeat(61), 'x'].every(function (n) { return F('?via=allin&trip=x&tn=' + encodeURIComponent(n)).name === ''; }));
+  ok('ALL IN site: Vietnamese letters and curly apostrophes are fine in a name', F('?via=allin&trip=tet&tn=' + encodeURIComponent('Tết in the North')).name === 'Tết in the North' && F('?via=allin&trip=a&tn=' + encodeURIComponent('Ewan’s pick')).name === 'Ewan’s pick');
+  ok('ALL IN site: a bad trip id drops the trip, its name and its stops', (function () { var x = F('?via=allin&trip=..%2Fx&tn=Hello%20there&part=0.3&away=2'); return x.trip === '' && x.name === '' && x.n === 0 && x.away === 0; })());
+  ok('ALL IN site: numbers are clamped (part and away)', (function () { var x = F('?via=allin&trip=a&tn=Ab&part=99.99&away=50'); return x.b === 40 && x.n === 40 && x.away === 9; })());
+  var items = [stop('bangkok', 2, []), stop('siem-reap', 4, ['a1']), stop('phnom-penh', 1), stop('kampot', 3), stop('koh-rong', 3), stop('koh-sdach', 2), stop('phuket', 3)];
+  var mk = MM.allinMark(items, { b: 1, n: 5 });
+  ok('ALL IN site: the part is remembered as places, nights and tours', mk && mk.places.join() === 'siem-reap,phnom-penh,kampot,koh-rong,koh-sdach' && mk.nights.join() === '4,1,3,3,2');
+  eq('ALL IN site: a part that runs past the end of the trip is ignored', MM.allinMark(items, { b: 5, n: 5 }), null);
+  var f0 = MM.allinFind(items, mk);
+  ok('ALL IN site: found where it was, untouched, with a stop before and after', f0 && f0.i === 1 && f0.n === 5 && f0.before === 1 && f0.after === 1 && f0.intact);
+  var moved = [stop('hanoi', 2)].concat(JSON.parse(JSON.stringify(items))); moved[4].n = 4;
+  var f1 = MM.allinFind(moved, mk);
+  ok('ALL IN site: still found after a stop is added in front, and a changed night count is spelt out', f1 && f1.i === 2 && !f1.intact && f1.changed[0] === 'Kampot: 3 to 4 nights', JSON.stringify(f1));
+  var gone = JSON.parse(JSON.stringify(items)); gone.splice(3, 1);
+  eq('ALL IN site: once a stop of it is removed, it is the guest\'s own route', MM.allinFind(gone, mk), null);
+  var s0 = st(items, { start: '2027-01-05' }), pl0 = MM.plan(s0);
+  var lead = MM.leadPayload(s0, pl0, { name: 'Sam', via: 'email', email: 's@example.com', partySize: 1 }, { link: 'x', allin: { site: 'all-in', trip: 'cambodia', name: 'Temples & Beaches', stops: [2, 6], intact: true, changed: [], before: 1, after: 1, away: 1 } });
+  ok('ALL IN site: the lead carries which trip and which stops', lead.allinSite && lead.allinSite.trip === 'cambodia' && lead.allinSite.stops[0] === 2);
+  ok('ALL IN site: the crew\'s text says it, stops and all, and asks them to price the nights away', /FROM THE ALL IN SITE: TEMPLES & BEACHES/.test(lead.crewText) && /Stops 2 to 6 are the ALL IN trip \(cambodia on the site\), as the site sells it\./.test(lead.crewText) && /Added: 1 stop before it and 1 stop after it\./.test(lead.crewText) && /Plus 1 night on the ALL IN trip that the builder can't see/.test(lead.crewText), lead.crewText.split('\n').slice(0, 9).join(' | '));
+  var plain = MM.leadPayload(s0, pl0, { name: 'Sam', via: 'email', email: 's@example.com', partySize: 1 }, { link: 'x' });
+  ok('ALL IN site: an ordinary trip says nothing about it', !plain.allinSite && !/ALL IN SITE/.test(plain.crewText));
+})();
+
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });
