@@ -209,3 +209,47 @@
 :root[data-look="allin"] svg [fill="#ccff01"]{fill:var(--amber)} :root[data-look="allin"] svg [stroke="#ccff01"]{stroke:var(--amber)}
 :root[data-look="allin"] svg [stroke="#0a0a0a"]{stroke:var(--canopy)} :root[data-look="allin"] svg [fill="#0a0a0a"]{fill:var(--canopy)}
 :root[data-look="allin"] svg [fill="#f5efe2"]{fill:#fff}
+
+/* ---------- inside the ALL IN site: its bar and menu instead of the builder's own header ----------
+   On while <html data-site="allin">: the builder sits inside the ALL IN site (MM_CONFIG.ALLIN_SITE set) and wears its look.
+   The bar copies the site's sticky bar (wordmark, sections, Enquire, Book a trip, Menu) and the menu copies its full-screen
+   menu; the builder's own pages and the currency picker sit in a slim row under it. index.html .sitebar/.subnav/.sitemenu,
+   ui-site.js, docs/ALL-IN-SITE.md. */
+.sitebar,.subnav,.sitemenu{display:none}
+:root[data-site] .hdr{display:none}
+:root[data-site]{--hdr:104px;--site-pad:clamp(20px,5vw,72px)}
+:root[data-site] .sitebar{position:sticky;top:0;z-index:50;height:60px;display:flex;align-items:center;gap:20px;padding:0 var(--site-pad);background:rgba(14,43,38,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#F3F7F2;font-family:var(--f)}
+.sitebar__mark{display:flex;align-items:baseline;gap:10px;text-decoration:none;white-space:nowrap;color:inherit}
+:root[data-site] .sitebar__mark b{font-stretch:125%;font-weight:900;font-size:20px;letter-spacing:-.02em!important}
+.sitebar__links{display:flex;gap:22px;font-weight:600;font-size:14px;margin-left:10px;min-width:0}
+.sitebar__links a{color:inherit;text-decoration:none;opacity:.78;padding:4px 0;border-bottom:2px solid transparent;white-space:nowrap}
+.sitebar__links a:hover{opacity:1}
+.sitebar__links a[aria-current="page"]{opacity:1;border-bottom-color:#FFB238}
+.sitebar__r{margin-left:auto;display:flex;gap:10px;align-items:center}
+.sbtn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 18px;border-radius:999px;font-weight:700;font-stretch:110%;font-size:14px;line-height:1.2;text-decoration:none;border:2px solid transparent;white-space:nowrap;cursor:pointer;transition:transform .2s ease,background .2s ease}
+.sbtn:hover{transform:translateY(-2px)}
+.sbtn--primary{background:#FFB238;color:#0E2B26}
+.sbtn--ghost{border-color:currentColor;background:transparent;color:#F3F7F2}
+.sitebar__menu{display:none;align-items:center;background:transparent;color:inherit;border:1.5px solid currentColor;border-radius:999px;padding:9px 16px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
+:root[data-site] .subnav{position:sticky;top:60px;z-index:49;height:44px;display:flex;align-items:center;gap:6px;padding:0 var(--site-pad);background:#143A33;color:#F3F7F2;border-bottom:1px solid rgba(243,247,242,.14);overflow-x:auto;scrollbar-width:none}
+.subnav::-webkit-scrollbar{display:none}
+.subnav__t{font-weight:800;font-stretch:110%;font-size:13px;opacity:.72;margin-right:8px;white-space:nowrap}
+.subnav .navbtn{min-height:34px;padding:6px 14px}
+.subnav__cur{margin-left:auto;display:flex;align-items:center;flex:none;padding-left:8px}
+:root[data-site] .aibar__k{display:none}   /* the site's own bar already says ALL IN */
+:root[data-site] .sitemenu[open]{display:block}
+.sitemenu{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;background:#0E2B26;color:#F3F7F2;font-family:var(--f)}
+.sitemenu::backdrop{background:#0E2B26}
+.sitemenu__in{position:relative;min-height:100%;box-sizing:border-box;padding:90px var(--site-pad) 40px;display:flex;flex-direction:column}
+.sitemenu__x{position:absolute;top:14px;right:var(--site-pad);min-height:44px;background:rgba(10,20,18,.55);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;font-size:14px;cursor:pointer}
+.sitemenu__links{display:flex;flex-direction:column;gap:4px}
+:root[data-site] .sitemenu__links a{color:inherit;font-stretch:125%;font-weight:900;font-size:clamp(34px,9vw,64px);letter-spacing:-.02em!important;line-height:1.08;text-decoration:none}
+.sitemenu__links a[aria-current="page"]{color:#FFB238}
+.sitemenu__foot{margin-top:auto;padding-top:30px;display:flex;flex-wrap:wrap;gap:12px}
+@media (pointer:coarse){:root[data-site]{--hdr:108px} :root[data-site] .subnav{height:48px} .sitebar__r .sbtn,.sitebar__menu,.sitemenu__foot .sbtn,.subnav .navbtn{min-height:44px}}
+@media (max-width:1180px){.sitebar__links{display:none}.sitebar__menu{display:inline-flex}}
+@media (max-width:1000px){:root[data-site]{--hdr:60px} :root[data-site] .subnav{position:relative;top:0;z-index:2}}
+@media (max-width:760px){.sitebar__enq{display:none}}
+@media (max-width:560px){:root[data-site] .sitebar{gap:10px}.subnav__t{display:none}.subnav .navbtn{padding:6px 11px}}
+@media (max-width:360px){.sitebar__r{gap:6px}.sitebar__r .sbtn,.sitebar__menu{padding-left:12px;padding-right:12px;font-size:13px}}
+@media print{.sitebar,.subnav,.sitemenu{display:none!important}}

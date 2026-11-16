@@ -6,3 +6,5 @@ node_modules/
 .idea/
 server/data/
 .demo-build/
+.site/
+drafts/

@@ -702,4 +702,26 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('ALL IN site: an ordinary trip says nothing about it', !plain.allinSite && !/ALL IN SITE/.test(plain.crewText));
 })();
 
+/* ---------- the ALL IN site's menu on top of the builder (extras.js: siteMenu, ui-site.js) ---------- */
+(function () {
+  var SITE = 'https://example.github.io/repo/shop/', HERE = 'https://example.github.io/repo/shop/trip-builder/', NOW = 1800000000000;
+  var good = { v: 1, at: NOW - 1000, bar: [['Trips', '#trips'], ['Dates and prices', '#dates'], ['Trip builder', 'https://example.github.io/repo/shop/trip-builder/?via=allin#/build', 1], ['Questions', '#faq']],
+    menu: [['Your crew', '#solo'], ['Trip builder', 'trip-builder/?via=allin#/build', 1], ['Questions', '#faq']] };
+  var m = MM.siteMenu(JSON.stringify(good), SITE, HERE, NOW);
+  ok('site menu: read from what the site left', m && m.bar.length === 4 && m.menu.length === 3);
+  eq('site menu: a section goes to the site page', m.bar[0].href, SITE + '#trips');
+  ok('site menu: the builder is marked as the page you are on', m.bar[2].here && m.bar[2].href === '' && m.menu[1].here);
+  ok('site menu: a link to the builder is spotted without the flag too', MM.siteMenu({ v: 1, bar: [['Builder', 'trip-builder/#/build']] }, SITE, HERE, NOW).bar[0].here);
+  var bad = { v: 1, bar: [['Evil', 'javascript:alert(1)'], ['Away', 'https://evil.example/x'], ['Proto', '//evil.example/'], ['Data', 'data:text/html,hi'], ['<img src=x onerror=alert(1)>', '#ok'], ['', '#empty'], [42, '#n'], ['Fine', '#fine']] };
+  var b = MM.siteMenu(bad, SITE, HERE, NOW);
+  eq('site menu: only the site\'s own addresses get through', b.bar.map(function (x) { return x.t; }).join('|'), 'img src=x onerror=alert(1)|Fine');
+  ok('site menu: markup never survives in a label', b.bar.every(function (x) { return x.t.indexOf('<') < 0 && x.t.indexOf('>') < 0; }));
+  ok('site menu: too old is ignored', MM.siteMenu(Object.assign({}, good, { at: NOW - 31 * 864e5 }), SITE, HERE, NOW) === null);
+  ok('site menu: not JSON, a wrong version or nothing usable gives nothing', MM.siteMenu('{nope', SITE, HERE, NOW) === null && MM.siteMenu({ v: 2, bar: good.bar }, SITE, HERE, NOW) === null && MM.siteMenu({ v: 1, bar: [['x', 'javascript:0']] }, SITE, HERE, NOW) === null);
+  var many = { v: 1, menu: [] }; for (var i = 0; i < 30; i++) many.menu.push(['Link ' + i, '#s' + i]);
+  var mm = MM.siteMenu(many, SITE, HERE, NOW);
+  ok('site menu: at most 16 links, and a bar made from the menu when there is none', mm.menu.length === 16 && mm.bar.length === 8);
+  ok('site menu: a long label is cut short', MM.siteMenu({ v: 1, bar: [['x'.repeat(90), '#a']] }, SITE, HERE, NOW).bar[0].t.length === 40);
+})();
+
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

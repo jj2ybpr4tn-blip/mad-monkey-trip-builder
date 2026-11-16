@@ -412,5 +412,33 @@
     return null;
   };
 
+  /* ---------------- the ALL IN site's menu, for its bar on top of the builder (ui-site.js) ----------------
+     When the builder sits inside the ALL IN site it wears that site's bar and menu. The menu comes from the site itself (its
+     page, or what its locked preview left in this browser: {v:1, at, bar:[[label, address, toBuilder]], menu:[…]}), so it's
+     checked like anything from outside: at most 16 links a list, each a short plain label (shown as text, never markup) and
+     an address on the site's own origin, a #section of the site page or a page on it. Anything else is dropped. A link to
+     this builder comes back as here: true, so the bar can mark it as the page you're on. Older than 30 days: ignored. */
+  MM.siteMenu = function (raw, siteHref, hereHref, now) {
+    var o = raw;
+    if (typeof o === 'string') { try { o = JSON.parse(o); } catch (e) { return null; } }
+    if (!o || o.v !== 1) return null;
+    if (o.at && (+now || Date.now()) - o.at > 30 * 864e5) return null;
+    var base, here;
+    try { base = new URL(siteHref); here = new URL(hereHref); } catch (e) { return null; }
+    function one(x) {
+      if (!Array.isArray(x) || typeof x[0] !== 'string' || typeof x[1] !== 'string') return null;
+      var t = x[0].replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40), u;
+      if (!t) return null;
+      try { u = new URL(x[1].trim(), base); } catch (e) { return null; }
+      if (u.origin !== base.origin || !/^https?:$/.test(u.protocol)) return null;
+      var isHere = x[2] === 1 || (u.pathname.indexOf(here.pathname) === 0 && here.pathname !== base.pathname);
+      return { t: t, href: isHere ? '' : u.href, here: isHere };
+    }
+    function list(a) { return Array.isArray(a) ? a.slice(0, 16).map(one).filter(Boolean) : []; }
+    var bar = list(o.bar), menu = list(o.menu);
+    if (!bar.length && !menu.length) return null;
+    return { bar: bar.length ? bar : menu.slice(0, 8), menu: menu.length ? menu : bar };
+  };
+
   if (typeof module !== 'undefined') module.exports = MM;
 })(typeof window !== 'undefined' ? window : globalThis);

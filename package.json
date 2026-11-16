@@ -15,6 +15,7 @@
     "build-map": "node scripts/build-map.mjs",
     "build-pages": "node scripts/build-pages.mjs",
     "og-home": "bash scripts/render-og.sh",
-    "deploy-demo": "bash scripts/deploy-demo.sh"
+    "deploy-demo": "bash scripts/publish-preview.sh",
+    "publish-preview": "bash scripts/publish-preview.sh"
   }
 }

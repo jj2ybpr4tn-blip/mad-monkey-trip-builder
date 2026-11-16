@@ -22,7 +22,7 @@ if (!target) { console.error('usage: node scripts/sync-allin.mjs <path to mm-squ
 const DEST = path.join(path.resolve(target), 'public', 'trip-builder');
 if (!fs.existsSync(DEST)) { console.error('No public/trip-builder in ' + target); process.exit(2); }
 
-const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-wherenext.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'ui-allin.js', 'styles.css', 'crew.css', 'wherenext.css', 'look-allin.css'];
+const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-wherenext.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'ui-allin.js', 'ui-site.js', 'styles.css', 'crew.css', 'wherenext.css', 'look-allin.css'];
 const withThumbs = WITH_THUMBS_FLAG || fs.existsSync(path.join(DEST, 'assets', 'photos', 's'));
 const DATA = fs.readdirSync(path.join(ROOT, 'data')).filter((f) => f.endsWith('.js')).map((f) => 'data/' + f);
 const changes = [];
@@ -40,6 +40,9 @@ html = html.replace(/<!--seo:start-->[\s\S]*?<!--seo:end-->/, '  <!-- The Google
 // the ALL IN look: the live copy keeps the core look until its own config says LOOK: 'allin' (a guest from the new ALL IN site gets it anyway)
 const liveCfg = fs.existsSync(path.join(DEST, 'config.js')) ? fs.readFileSync(path.join(DEST, 'config.js'), 'utf8') : '';
 if (!/^\s*LOOK:\s*'allin'/m.test(liveCfg)) html = html.replace(' data-look="allin"', '');
+// inside the ALL IN site: once the live config has ALLIN_SITE set and LOOK 'allin', the copy wears the site's bar and menu (ui-site.js).
+// Set up front so the page never flashes the builder's own header first; ui-site.js keeps it in step with the config either way.
+if (/^\s*ALLIN_SITE:\s*'[^']+'/m.test(liveCfg) && /^\s*LOOK:\s*'allin'/m.test(liveCfg)) html = html.replace('<html lang="en-GB"', '<html lang="en-GB" data-site="allin"');
 put('index.html', html);
 
 // assets: refresh only what the live copy already has

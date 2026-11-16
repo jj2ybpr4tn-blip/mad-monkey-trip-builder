@@ -17,14 +17,54 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
-  <link rel="stylesheet" href="styles.css?v=104">
-  <link rel="stylesheet" href="crew.css?v=104">
-  <link rel="stylesheet" href="wherenext.css?v=104">
+  <link rel="stylesheet" href="styles.css?v=105">
+  <link rel="stylesheet" href="crew.css?v=105">
+  <link rel="stylesheet" href="wherenext.css?v=105">
   <!-- the ALL IN look (the new ALL IN site's palette and type) while <html data-look="allin">: see look-allin.css, MM_CONFIG.LOOK -->
-  <link rel="stylesheet" href="look-allin.css?v=104">
+  <link rel="stylesheet" href="look-allin.css?v=105">
 </head>
 <body data-view="home">
   <a class="skip" href="#app">Skip to the content</a>
+  <!-- Inside the ALL IN site (MM_CONFIG.ALLIN_SITE set, LOOK 'allin', <html data-site="allin">) the builder wears that site's bar and menu
+       instead of its own header. These links are the short public menu; ui-site.js swaps in the site's full menu from the site
+       itself (its own page, or what the locked preview left in this browser), so names that aren't public never sit in these files.
+       See docs/ALL-IN-SITE.md. -->
+  <header class="sitebar" id="sitebar">
+    <a class="sitebar__mark" href="../" data-site-href=""><b>ALL IN</b></a>
+    <nav class="sitebar__links" id="sitebar-links" aria-label="ALL IN">
+      <a href="../#trips" data-site-href="#trips">Trips</a>
+      <a href="../#dates" data-site-href="#dates">Dates and prices</a>
+      <a href="#/build" aria-current="page" data-here>Trip builder</a>
+      <a href="../#faq" data-site-href="#faq">Questions</a>
+    </nav>
+    <div class="sitebar__r">
+      <a class="sbtn sbtn--ghost sitebar__enq" href="../#enquire" data-site-href="#enquire">Enquire</a>
+      <a class="sbtn sbtn--primary" href="../#dates" data-site-href="#dates">Book a trip</a>
+      <button class="sitebar__menu" id="sitebar-menu" type="button" aria-haspopup="dialog" aria-controls="sitemenu">Menu</button>
+    </div>
+  </header>
+  <nav class="subnav" id="subnav" aria-label="Trip builder">
+    <span class="subnav__t">Trip builder</span>
+    <button class="navbtn" data-go="home" type="button">Ideas</button>
+    <button class="navbtn" data-go="build" type="button">Your trip</button>
+    <button class="navbtn" data-go="quiz" type="button">Quiz</button>
+    <span class="subnav__cur" id="subnav-cur"></span>
+  </nav>
+  <dialog class="sitemenu" id="sitemenu" aria-label="Menu">
+    <div class="sitemenu__in">
+      <button class="sitemenu__x" type="button" data-close>Close</button>
+      <nav class="sitemenu__links" id="sitemenu-links" aria-label="Menu">
+        <a href="../#trips" data-site-href="#trips">Trips</a>
+        <a href="../#dates" data-site-href="#dates">Dates and prices</a>
+        <a href="#/build" aria-current="page" data-here>Trip builder</a>
+        <a href="../#faq" data-site-href="#faq">Questions</a>
+      </nav>
+      <div class="sitemenu__foot">
+        <a class="sbtn sbtn--primary" href="../#dates" data-site-href="#dates">Book a trip</a>
+        <a class="sbtn sbtn--ghost" href="../#enquire" data-site-href="#enquire">Enquire</a>
+      </div>
+    </div>
+  </dialog>
   <header class="hdr" id="hdr">
     <a class="hdr__logo" href="#/" aria-label="Mad Monkey Trip Builder, home"><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="100" height="30"></a>
     <nav class="hdr__nav" aria-label="Main">
@@ -49,36 +89,37 @@
   <div id="modal-root"></div>
   <div id="toast-root" aria-live="polite"></div>
 
-  <script src="data/map-data.js?v=104"></script>
-  <script src="data/places.js?v=104"></script>
-  <script src="data/activities.js?v=104"></script>
-  <script src="data/media.js?v=104"></script>
-  <script src="data/legs.js?v=104"></script>
-  <script src="data/trips.js?v=104"></script>
-  <script src="data/entry.js?v=104"></script>
-  <script src="data/gallery.js?v=104"></script>
-  <script src="data/rules.js?v=104"></script>
-  <script src="data/guide.js?v=104"></script>
-  <script src="logic.js?v=104"></script>
-  <script src="extras.js?v=104"></script>
-  <script src="crew.js?v=104"></script>
-  <script src="edit.js?v=104"></script>
-  <script src="search.js?v=104"></script>
-  <script src="group.js?v=104"></script>
-  <script src="config.js?v=104"></script>
-  <script src="ui-map.js?v=104"></script>
-  <script src="ui-story.js?v=104"></script>
-  <script src="app.js?v=104"></script>
-  <script src="ui-allin.js?v=104"></script>
-  <script src="ui-review.js?v=104"></script>
-  <script src="ui-group.js?v=104"></script>
-  <script src="ui-live.js?v=104"></script>
-  <script src="ui-extras.js?v=104"></script>
-  <script src="ui-pack.js?v=104"></script>
-  <script src="ui-crew.js?v=104"></script>
-  <script src="ui-wherenext.js?v=104"></script>
-  <script src="ui-tour.js?v=104"></script>
-  <script src="ui-search.js?v=104"></script>
-  <script src="ui-stage.js?v=104"></script>
+  <script src="data/map-data.js?v=105"></script>
+  <script src="data/places.js?v=105"></script>
+  <script src="data/activities.js?v=105"></script>
+  <script src="data/media.js?v=105"></script>
+  <script src="data/legs.js?v=105"></script>
+  <script src="data/trips.js?v=105"></script>
+  <script src="data/entry.js?v=105"></script>
+  <script src="data/gallery.js?v=105"></script>
+  <script src="data/rules.js?v=105"></script>
+  <script src="data/guide.js?v=105"></script>
+  <script src="logic.js?v=105"></script>
+  <script src="extras.js?v=105"></script>
+  <script src="crew.js?v=105"></script>
+  <script src="edit.js?v=105"></script>
+  <script src="search.js?v=105"></script>
+  <script src="group.js?v=105"></script>
+  <script src="config.js?v=105"></script>
+  <script src="ui-map.js?v=105"></script>
+  <script src="ui-story.js?v=105"></script>
+  <script src="app.js?v=105"></script>
+  <script src="ui-allin.js?v=105"></script>
+  <script src="ui-site.js?v=105"></script>
+  <script src="ui-review.js?v=105"></script>
+  <script src="ui-group.js?v=105"></script>
+  <script src="ui-live.js?v=105"></script>
+  <script src="ui-extras.js?v=105"></script>
+  <script src="ui-pack.js?v=105"></script>
+  <script src="ui-crew.js?v=105"></script>
+  <script src="ui-wherenext.js?v=105"></script>
+  <script src="ui-tour.js?v=105"></script>
+  <script src="ui-search.js?v=105"></script>
+  <script src="ui-stage.js?v=105"></script>
 </body>
 </html>

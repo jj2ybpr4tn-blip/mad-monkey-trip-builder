@@ -46,8 +46,10 @@ window.MM_CONFIG = {
   ALLIN_BASE: 'https://madmonkeyhostels.com/all-in-trips',
 
   // The NEW ALL IN site (the rebrand). Blank until it launches, and nothing changes while it's blank.
-  // When set, the ALL IN nav button goes there, and a guest it sends here ("Carry on in the trip builder") gets a "Back to the trip" link to
-  // <ALLIN_SITE>#trip-<id>. A full https address, or a path on this site like '../' if the builder sits inside it. See docs/ALL-IN-SITE.md.
+  // The builder lives inside it, at <site>/trip-builder/, so this is '../' there (the preview: shop/trip-builder/; at launch:
+  // madmonkeyhostels.com/all-in-trips/trip-builder/). When set, with LOOK 'allin', the builder wears the site's own bar and menu
+  // (ui-site.js), and a guest the site sends here ("Carry on in the trip builder") gets a "Back to the trip" link to <ALLIN_SITE>#trip-<id>.
+  // A path on this site like '../', or a full https address. See docs/ALL-IN-SITE.md.
   ALLIN_SITE: '',
 
   // The look. 'allin' (the default): dressed like the new ALL IN site, its colours, type and rounded cards (look-allin.css).
