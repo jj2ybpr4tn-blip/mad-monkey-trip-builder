@@ -27,8 +27,9 @@
   function fail(t) { msg.textContent = t; bar.hidden = true; }
   var m = location.hash.match(/k=([A-Za-z0-9_-]{43})/), k = m ? m[1] : null;
   try { if (k) localStorage.setItem(KEYNAME, k); else k = localStorage.getItem(KEYNAME); } catch (e) {}
-  // the key leaves the address; a link to one trip (#trip-<id>, the trip builder's "Back to the trip") stays, so the page opens on it
-  var keep = location.hash.replace(/^#/, '').split('&').filter(function (x) { return /^trip-[a-z0-9-]{1,40}$/.test(x); })[0];
+  // the key leaves the address; a link to one trip (#trip-<id>, the trip builder's "Back to the trip") or to a part of the site
+  // (#dates, #faq, #enquire: the trip builder's bar and menu) stays, so the page opens on it
+  var keep = location.hash.replace(/^#/, '').split('&').filter(function (x) { return /^(trip-[a-z0-9-]{1,40}|[a-z][a-z0-9-]{0,40})$/.test(x); })[0];
   if (location.hash) history.replaceState(null, '', location.pathname + location.search + (keep ? '#' + keep : ''));
   if (!k) return fail('This preview is private. Open it with the full link you were sent.');
   if (!(window.crypto && crypto.subtle && window.DecompressionStream && window.TextDecoder)) return fail('This browser can’t open the preview. Try the latest Safari or Chrome.');

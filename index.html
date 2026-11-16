@@ -1,84 +1,14 @@
 <!doctype html>
-<html lang="en-GB" data-look="allin">
+<html lang="en-GB">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Trip Builder · Mad Monkey</title>
-  <meta name="description" content="Build your own Southeast Asia trip: 23 Mad Monkey hostels, every bus, boat and flight between them, real activity prices. Send it to the crew, or jump on an ALL IN.">
-  <meta name="theme-color" content="#0E2B26">
-  <!-- Only our own scripts may run: even if some text got into the page unescaped, it could not execute. Styles may be inline (the page sets a few); fonts come from Google; photos and APIs are over https. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'">
-  <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta property="og:title" content="BUILD THE TRIP YOU ACTUALLY WANT · Mad Monkey">
-  <meta property="og:description" content="Pick your stops, see what it really costs, send it to the crew.">
-  <!--og:start--><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image"><!--og:end-->
-  <link rel="icon" type="image/png" href="assets/logo/favicon.png">
-  <link rel="apple-touch-icon" href="assets/logo/favicon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Montserrat:wght@400;500;700;900&family=Bungee&display=swap">
-  <link rel="stylesheet" href="styles.css?v=104">
-  <link rel="stylesheet" href="crew.css?v=104">
-  <link rel="stylesheet" href="wherenext.css?v=104">
-  <!-- the ALL IN look (the new ALL IN site's palette and type) while <html data-look="allin">: see look-allin.css, MM_CONFIG.LOOK -->
-  <link rel="stylesheet" href="look-allin.css?v=104">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>The trip builder has moved · Mad Monkey</title>
+<script>location.replace('shop/trip-builder/' + location.search + location.hash);</script>
+<meta http-equiv="refresh" content="0; url=shop/trip-builder/">
 </head>
-<body data-view="home">
-  <a class="skip" href="#app">Skip to the content</a>
-  <header class="hdr" id="hdr">
-    <a class="hdr__logo" href="#/" aria-label="Mad Monkey Trip Builder, home"><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="100" height="30"></a>
-    <nav class="hdr__nav" aria-label="Main">
-      <a class="navbtn" id="nav-allin" href="https://madmonkeyhostels.com/all-in-trips">ALL IN</a>
-      <button class="navbtn opt" data-go="home" type="button">Trips</button>
-      <button class="navbtn" data-go="build" type="button">Builder</button>
-      <button class="navbtn opt" data-go="quiz" type="button">Quiz</button>
-      <span class="cur"><label class="sr" for="cursel">Currency</label><select id="cursel" aria-label="Currency"><option value="USD">USD $</option><option value="GBP">GBP £</option><option value="EUR">EUR €</option><option value="AUD">AUD A$</option><option value="CAD">CAD C$</option></select></span>
-    </nav>
-  </header>
-
-  <div id="humanbar" class="humanbar" role="region" aria-label="Checked by real humans"></div>
-
-  <main id="app" tabindex="-1"></main>
-  <div id="route-announcer" class="sr" aria-live="polite" aria-atomic="true"></div>
-
-  <!--seo:start--><footer class="foot seo-nav"><div class="wrap"><nav aria-label="Explore Mad Monkey trips and guides" class="seo__foot">
-    <div><b>Backpacking guides</b><a href="guides/vietnam/">Vietnam</a><a href="guides/thailand/">Thailand</a><a href="guides/cambodia/">Cambodia</a><a href="guides/laos/">Laos</a><a href="guides/indonesia/">Indonesia</a><a href="guides/philippines/">Philippines</a></div>
-    <div><b>Popular trips</b><a href="trips/vietnam-itinerary/">Vietnam itinerary</a><a href="trips/northern-loop/">Thailand, Laos and Vietnam</a><a href="trips/party-route/">The party trail</a><a href="trips/surfdive-route/">Surf and dive</a><a href="trips/cheap-backpacking-route/">Cheap backpacking route</a><a href="trips/">All trips</a></div>
-    <div><b>Explore</b><a href="hostels/">All 23 hostels</a><a href="routes/">Getting around</a></div></nav></div></footer><!--seo:end-->
-  <noscript><p style="padding:24px;text-align:center">The trip builder needs JavaScript. The guides and trip pages above work without it.</p></noscript>
-  <div id="modal-root"></div>
-  <div id="toast-root" aria-live="polite"></div>
-
-  <script src="data/map-data.js?v=104"></script>
-  <script src="data/places.js?v=104"></script>
-  <script src="data/activities.js?v=104"></script>
-  <script src="data/media.js?v=104"></script>
-  <script src="data/legs.js?v=104"></script>
-  <script src="data/trips.js?v=104"></script>
-  <script src="data/entry.js?v=104"></script>
-  <script src="data/gallery.js?v=104"></script>
-  <script src="data/rules.js?v=104"></script>
-  <script src="data/guide.js?v=104"></script>
-  <script src="logic.js?v=104"></script>
-  <script src="extras.js?v=104"></script>
-  <script src="crew.js?v=104"></script>
-  <script src="edit.js?v=104"></script>
-  <script src="search.js?v=104"></script>
-  <script src="group.js?v=104"></script>
-  <script src="config.js?v=104"></script>
-  <script src="ui-map.js?v=104"></script>
-  <script src="ui-story.js?v=104"></script>
-  <script src="app.js?v=104"></script>
-  <script src="ui-allin.js?v=104"></script>
-  <script src="ui-review.js?v=104"></script>
-  <script src="ui-group.js?v=104"></script>
-  <script src="ui-live.js?v=104"></script>
-  <script src="ui-extras.js?v=104"></script>
-  <script src="ui-pack.js?v=104"></script>
-  <script src="ui-crew.js?v=104"></script>
-  <script src="ui-wherenext.js?v=104"></script>
-  <script src="ui-tour.js?v=104"></script>
-  <script src="ui-search.js?v=104"></script>
-  <script src="ui-stage.js?v=104"></script>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0E2B26;color:#F3F7F2;font:17px/1.5 system-ui,sans-serif;text-align:center">
+<p>The trip builder has moved. <a href="shop/trip-builder/" style="color:#FFB238">Open it here</a>.</p>
 </body>
 </html>
