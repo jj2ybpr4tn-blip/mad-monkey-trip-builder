@@ -17,6 +17,9 @@ git worktree add -q -B gh-pages .demo-build HEAD
   if git fetch -q origin gh-pages 2>/dev/null && git cat-file -e FETCH_HEAD:shop 2>/dev/null; then
     rm -rf shop && git archive FETCH_HEAD shop | tar -x && echo "Kept shop/ (the ALL IN shop preview) from gh-pages."
   fi
+  # The demo builder and the shop preview are one site: the builder's "Back to the trip" and ALL IN button go to shop/
+  # (MM_CONFIG.ALLIN_SITE, docs/ALL-IN-SITE.md). main keeps ALLIN_SITE blank, so this only ever changes the demo.
+  if [ -d shop ]; then sed -i.bak "s#^  ALLIN_SITE: '',#  ALLIN_SITE: 'shop/',#" config.js && rm -f config.js.bak; fi
   git add -A
   if git diff --cached --quiet; then echo "Nothing changed in the demo build."; else
     # use your git identity if you have one, otherwise a neutral one so the commit can't fail quietly
