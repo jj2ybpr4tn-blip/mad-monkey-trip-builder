@@ -702,6 +702,28 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('ALL IN site: an ordinary trip says nothing about it', !plain.allinSite && !/ALL IN SITE/.test(plain.crewText));
 })();
 
+/* ---------- nights away from a Mad Monkey on an ALL IN trip from the site (logic.js plan: state.away, set by ui-allin.js) ---------- */
+(function () {
+  var U = MM.util, base = st([stop('siem-reap', 3), stop('phnom-penh', 2), stop('kampot', 3)], { start: '2027-02-10' });
+  var withAway = function (after, n) { return Object.assign({}, base, { away: { after: after, n: n } }); };
+  var p0 = MM.plan(base), p1 = MM.plan(withAway(1, 2));
+  eq('away nights: the trip is that many days longer', p1.totals.days, p0.totals.days + 2);
+  eq('away nights: and that many nights', p1.totals.nights, p0.totals.nights + 2);
+  eq('away nights: no bed price for them (the crew prices them)', p1.totals.beds, p0.totals.beds);
+  var aw = p1.days.filter(function (d) { return d.kind === 'away'; }), lastAt = p1.days.filter(function (d) { return d.si === 1; }).pop();
+  ok('away nights: two of them, straight after the ALL IN part\'s last stop', aw.length === 2 && aw[0].n === lastAt.n + 1 && !aw[0].loc && aw[0].si === -2 && /away/i.test(aw[0].title) && aw[0].note);
+  var firstOf = function (pl, si) { return pl.days.filter(function (d) { return d.si === si; })[0]; };
+  eq('away nights: the stop after them starts that much later', U.isoDate(firstOf(p1, 2).date), U.isoDate(U.addDays(firstOf(p0, 2).date, 2)));
+  eq('away nights: never in a share link', MM.encodeState(withAway(1, 2)), MM.encodeState(base));
+  ok('away nights: a bad place or count is ignored', MM.plan(withAway(7, 2)).totals.days === p0.totals.days && MM.plan(withAway(1, 0)).totals.days === p0.totals.days && MM.plan(withAway(-1, 2)).totals.days === p0.totals.days);
+  eq('away nights: at most 9', MM.plan(withAway(0, 40)).totals.days, p0.totals.days + 9);
+  ok('away nights: in the day by day the crew reads', /Away on your ALL IN trip/.test(MM.planText(p1, base)));
+  var s1 = MM.crewSummary(base, p1, {}), s0 = MM.crewSummary(base, p0, {});
+  ok('away nights: the crew\'s stays leave them out (no beds held for them)', s1.stops[1].to === s0.stops[1].to && s1.stops[2].from === U.isoDate(U.addDays(U.parseDate(s0.stops[2].from), 2)), JSON.stringify([s0.stops[1], s1.stops[2]]).slice(0, 200));
+  var lead = MM.leadPayload(base, p1, { name: 'Sam', via: 'email', email: 's@example.com', partySize: 1 }, { link: 'x', allin: { site: 'all-in', trip: 'cambodia', name: 'Temples & Beaches', stops: [1, 2], intact: true, changed: [], before: 0, after: 1, away: 2, awayIn: true } });
+  ok('away nights: the crew is told they are in the days but not the price', /in its days and dates/.test(lead.crewText) && lead.trip.days === p1.totals.days);
+})();
+
 /* ---------- the ALL IN site's menu on top of the builder (extras.js: siteMenu, ui-site.js) ---------- */
 (function () {
   var SITE = 'https://example.github.io/repo/shop/', HERE = 'https://example.github.io/repo/shop/trip-builder/', NOW = 1800000000000;

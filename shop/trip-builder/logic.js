@@ -223,6 +223,10 @@
 
   function plan(state) {
     state = state || defaultState();
+    // Nights on an ALL IN trip from the ALL IN site that aren't at a Mad Monkey (a night boat or bus, a partner hotel): ui-allin.js says how many
+    // and after which stop. They count as days, so the trip is as long as the site says and the dates after it are right, but cost nothing here:
+    // the crew prices them. Never part of a share link (encodeState), only of the trip the site handed over.
+    var away = state.away && +state.away.n >= 1 ? { after: Math.round(+state.away.after), n: Math.min(9, Math.round(+state.away.n)) } : null;
     if (!isClean(state)) state = sanitizeState(state);               // an old save with a place that has since gone must not blank the page
     var items = state.items || [];
     var start = parseDate(state.start);
@@ -250,6 +254,7 @@
       return { index: index, from: a, to: b, options: opts, chosen: chosen, key: chosen.key, pkgs: MM.LEG_PKGS[a + '|' + b] || MM.LEG_PKGS[b + '|' + a] || null,
         tickets: MM.TICKETS[a + '|' + b] || MM.TICKETS[b + '|' + a] || null, border: borderNote(a, b), h: chosen.h, u: chosen.u, ovn: chosen.ovn, nights: chosen.nights };
     }
+    if (away && !(away.after >= 0 && away.after < segs.length && segs[away.after].kind === 'stop')) away = null;
     var legBetween = [], originLeg = null;
     for (var i = 0; i < segs.length - 1; i++) {
       var a = segs[i].last, b = segs[i + 1].first, leg = null;
@@ -278,6 +283,7 @@
         s.epics.forEach(function (e) { for (var q = 0; q < e.multi.n; q++) timeline.push({ t: 'epic', si: si, act: e, q: q, of: e.multi.n }); });
         for (var a2 = 0; a2 < k2; a2++) timeline.push({ t: 'bed', si: si, first: false, afterEpic: a2 === 0 });
       }
+      if (away && si === away.after) for (var w = 0; w < away.n; w++) timeline.push({ t: 'away', si: -2, w: w, of: away.n });   // after the ALL IN part, before the journey on
       var leg = legBetween[si];
       if (leg && leg.nights > 0) for (var m = 0; m < leg.nights; m++) timeline.push({ t: 'move', si: si, leg: leg, m: m, of: leg.nights });
     });
@@ -318,6 +324,10 @@
       } else if (tn.t === 'block') {
         day.loc = tn.trip.stops[0].p; day.title = 'ALL IN ' + tn.trip.n + ' · day ' + (tn.k + 1); day.slots = { am: false, pm: false, eve: false };
         day.blockTrip = tn.trip;
+      } else if (tn.t === 'away') {
+        day.kind = 'away'; day.loc = null; day.slots = { am: false, pm: false, eve: false };
+        day.title = tn.of > 1 ? 'Away on your ALL IN trip · night ' + (tn.w + 1) + ' of ' + tn.of : 'A night away on your ALL IN trip';
+        if (tn.w === 0) day.note = 'A night boat or bus, or a partner hotel, the way the trip runs. Part of your ALL IN trip: the crew sorts it out and prices it.';
       }
       // the same-day journey into an ALL IN trip belongs to the day they arrive (the night before, if they have one)
       if ((tn.t === 'pre' || (tn.t === 'block' && tn.k === 0 && !seg.pre)) && !(timeline[k - 1] && timeline[k - 1].t === 'move')) { var into = tn.si > 0 ? legBetween[tn.si - 1] : originLeg; if (into) day.travel = into; }
