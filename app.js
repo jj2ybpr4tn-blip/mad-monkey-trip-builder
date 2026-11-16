@@ -300,6 +300,8 @@
       X('themesSection') +
 
       '<section class="sec sec--bone" id="trips"><div class="wrap"><div class="sec__head"><div><div class="over" style="margin-bottom:var(--s-2)">ALL IN trips</div><h2 class="disp">Stop planning.<br>Start going.</h2></div><p class="dim" style="max-width:30em">Up to 20 backpackers, real Mad Monkey beds every night, every transfer and activity in the price, free drinks, 24/7 crew. Flights and insurance not included. Hit <b>Build on this</b> to bolt more days on either end.</p></div>' +
+        // the ALL IN trips' first message (Nov 2026): nobody travels alone on them
+        '<div class="solo"><div class="solo__h"><span class="sticker sticker--onbone">Never solo</span><h3 class="disp">You\'ll never be solo.</h3></div><p>Most of our guests arrive knowing nobody. Our hostels are full of good, genuine people from all walks of life, all in the same boat, and their average age is over 23. On an ALL IN trip you\'re one of a crew of up to 20 from day one.</p></div>' +
         '<div class="tgrid">' + MM.ALL_IN.map(tripCard).join('') + '</div>' +
         specialHTML(g) +
       '</div></section>' +
@@ -462,6 +464,7 @@
     var s = app.state, t = pl.totals, items = s.items, h = app.revise && app.reviseBar ? app.reviseBar() : '';
     if (items.length) h += '<div class="print-head"><img src="assets/logo/mad-monkey-black.png" alt="Mad Monkey"><h1>' + esc(MM.routeLine(pl)) + '</h1><p>' + t.days + ' days · ' + plural(pl.countries.length, 'country', 'countries') + ' · about ' + money(t.total) + ' per person (estimate' + (t.flights ? ', flights not included' : '') + ')' + (s.start ? ' · starting ' + U.fmtDate(U.parseDate(s.start)) : '') + '</p><p class="print-link">Open this trip: ' + esc(shareLink()) + '</p></div>';
     if (window.MMStage && (s.from || (s.been && s.been.length))) h += window.MMStage.banner(s, pl);
+    if (app.allinBar) h += app.allinBar(pl);                                          // handed over by the ALL IN site (ui-allin.js)
     var backG = store('mm-back-group');
     if (backG && items.length) h += '<div class="backg"><span>Building your own route for the group?</span><a class="btn btn--sm btn--pink" href="#/group/' + esc(backG) + '" data-act="backg">Back to the group</a><button class="ideas__x" data-act="backgx" type="button">Dismiss</button></div>';
     /* summary */
@@ -493,6 +496,7 @@
     h += timelineHTML(pl);
     h += X('doctor', pl);
     h += missHTML();
+    h += X('bigdays', pl);                                                          // the festivals the trip catches or just misses (ui-extras.js)
     /* add bar */
     var groups = {}; MM.PLACE_ORDER.forEach(function (id) { if (app.focus.length && app.focus.indexOf(P[id].c) < 0) return; (groups[P[id].c] = groups[P[id].c] || []).push(id); });
     h += '<div class="addbar">' + (app.search ? app.search.html({ mode: 'add', label: 'Add a place or a tour', placeholder: 'Add a place or a tour: Hoi An, kayaking…', cls: 'srch--add' }) : '') + '<button class="btn btn--pink addbar__btn" data-act="insertat" data-i="' + app.state.items.length + '" data-where="1" type="button">+ Add a stop</button>' +
@@ -512,7 +516,7 @@
     h += '<button class="addstop" data-act="insertat" data-i="' + pl.segs.length + '" data-where="1" type="button"><b>+ Add another stop</b><span>Changed your mind about a place? Add somewhere else, at the end or anywhere in between.</span></button></div>';
 
     /* ALL IN match */
-    if (pl.match.length) h += matchCard(pl.match[0], pl);
+    if (pl.match.length && !(app.allinHides && app.allinHides())) h += matchCard(pl.match[0], pl);      // not when the guest brought an ALL IN trip from the site: it would argue with the one they picked
     /* squad */
     if (pl.segs.some(function (x) { return x.kind === 'allin'; })) h += squadCard(pl);
     /* warnings */
@@ -695,7 +699,7 @@
     var sub = [MM.COUNTRIES[p.c].n, 'dorm from ' + money(p.bed) + '/night', plural(sg.n, 'night')];
     var epicNights = sg.epics.reduce(function (a, e) { return a + e.multi.n; }, 0); if (epicNights) sub.push('+ ' + plural(epicNights, 'night') + ' away');
     var h = '<div class="stopc" id="stop' + i + '" data-seg="' + i + '" data-c="' + p.c + '"><div class="stopc__head"><div class="stopc__thumb photo">' + photo(MM.hostelImg(p.id), '', 's').replace('<div', '<div style="width:100%;height:100%"') + '<span class="stopc__num">' + (i + 1) + '</span></div>' +
-      '<div><h3><span class="dotc" data-c="' + p.c + '"></span>' + esc(p.n) + (p.partner ? ' ' + chip('Partner', 'pill--yellow') : '') + '</h3><div class="stopc__sub">' + sub.join(' · ') + '</div></div>' +
+      '<div><h3><span class="dotc" data-c="' + p.c + '"></span>' + esc(p.n) + (p.partner ? ' ' + chip('Partner', 'pill--yellow') : '') + (app.allinTag ? app.allinTag(i) : '') + '</h3><div class="stopc__sub">' + sub.join(' · ') + '</div></div>' +
       '<div class="stopc__ctl"><div class="stepper" role="group" aria-label="Nights in ' + esc(p.n) + '"><button type="button" data-act="nights" data-i="' + i + '" data-d="-1" aria-label="One fewer night"' + (it.n <= 1 ? ' disabled' : '') + '>−</button><b>' + plural(it.n, 'night') + '</b><button type="button" data-act="nights" data-i="' + i + '" data-d="1" aria-label="One more night"' + (it.n >= 30 ? ' disabled' : '') + '>+</button></div>' +
 '</div></div>' +
       '<div class="stopc__acts" role="group" aria-label="Change ' + esc(p.n) + '"><button class="btn btn--sm btn--paper" data-act="swapat" data-i="' + i + '" type="button"><span aria-hidden="true">⇄</span> Swap place</button><button class="btn btn--sm btn--paper stopc__rm" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + ' from your trip" type="button"><span aria-hidden="true">×</span> Remove stop</button>' +
@@ -757,7 +761,7 @@
     var nd = U.fmtDate(m.next);
     var names = m.hit.map(function (p) { return P[p].n; }).join(' + ');
     return '<div class="match"><span class="pill pill--sm pill--black">ALL IN match</span><h3>This looks a lot like ALL IN ' + esc(t.n) + '.</h3>' +
-      '<p>You\'re hitting ' + esc(names) + (m.missing.length ? ' but skipping ' + esc(m.missing.map(function (p) { return P[p].n; }).join(', ')) : '') + '. On ALL IN you get beds, every transfer, every activity, free drinks and a crew of up to ' + t.max + ' in one price.</p>' +
+      '<p>You\'re hitting ' + esc(names) + (m.missing.length ? ' but skipping ' + esc(m.missing.map(function (p) { return P[p].n; }).join(', ')) : '') + '. On ALL IN you get beds, every transfer, every activity, free drinks and a crew of up to ' + t.max + ' in one price. Travelling solo? Not for long.</p>' +
       '<div class="cmp"><div><b>~' + money(pl.totals.diy) + '</b><span>Your DIY route</span></div><div><b>' + money(t.usd) + '</b><span>ALL IN ' + (t.status === 'soon' ? 'rrp' : 'from') + '</span></div></div>' +
       '<p class="fine" style="color:var(--black)">' + (cheaper ? 'ALL IN is the cheaper way to do it, and meals + drinks are on top of your DIY number.' : 'Not like for like: ALL IN also covers meals, free drinks and a guaranteed crew.') + ' ' + (t.status === 'soon' ? 'Launching soon.' : 'Next departure ' + nd + '.') + '</p>' +
       '<div class="match__row"><button class="btn btn--sm btn--black" data-act="swapallin" data-id="' + t.id + '" type="button">Swap in ALL IN</button><a class="btn btn--sm btn--paper" href="' + MM.allInUrl(t.id) + '" target="_blank" rel="noopener">Details ↗</a></div></div>';
@@ -1036,7 +1040,7 @@
       case 'focussearch': { var si = document.querySelector('#app .srch__in'); if (si) { si.scrollIntoView({ block: 'center' }); si.focus(); } break; }
       case 'askdemo': toast('Demo: on the live site this opens a message to ' + (askName() || 'the crew') + ', with your trip already in it.'); break;
       case 'forgetme': forgetMe(); break;
-      case 'cleanslate': ['mm-trip', 'mm-trip-last', 'mm-revise', 'mm-quiz', 'mm-nmoff'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }); location.hash = '#/'; location.reload(); break;
+      case 'cleanslate': ['mm-trip', 'mm-trip-last', 'mm-revise', 'mm-quiz', 'mm-nmoff'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }); if (app.allinClear) app.allinClear(true); location.hash = '#/'; location.reload(); break;
       /* quiz */
       case 'qpick': { var s = QSTEPS[app.quiz.step]; app.quiz.a[s.k] = el.getAttribute('data-v'); renderQuiz(); setTimeout(quizAdvance, 220); break; }
       case 'qdays': app.quiz.a.days = +el.getAttribute('data-v'); renderQuiz(); break;
@@ -1079,7 +1083,7 @@
       case 'leg': { var lk = el.getAttribute('data-i') === 'o' ? 'o' : i; mutate(function (s2) { s2.legPick = s2.legPick || {}; s2.legPick[lk] = el.getAttribute('data-k'); }); break; }
       case 'pref': mutate(function (s2) { s2.pref = el.getAttribute('data-v'); s2.legPick = {}; }); break;
       case 'crew': mutate(function (s2) { s2.crew = Math.max(0, Math.min(8, (s2.crew || 0) + (+el.getAttribute('data-d')))); }); break;
-      case 'reset': { stash(); var keepF = app.state.from, keepB = app.state.been; app.state = MM.defaultState(); if (keepF) app.state.from = keepF; if (keepB) app.state.been = keepB; app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); toast('Cleared your trip', { undo: true }); break; }
+      case 'reset': { stash(); if (app.allinClear) app.allinClear(false); var keepF = app.state.from, keepB = app.state.been; app.state = MM.defaultState(); if (keepF) app.state.from = keepF; if (keepB) app.state.been = keepB; app.open = {}; app.focus = []; persist(); history.replaceState(null, '', '#/build'); refreshBuilder(); toast('Cleared your trip', { undo: true }); break; }
       case 'lead': if (app.review) app.review.open(); break;
       case 'share': openShare(); break;
       case 'story': openStory(); break;

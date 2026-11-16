@@ -45,6 +45,11 @@ window.MM_CONFIG = {
   // Where "ALL IN details" links and the ALL IN nav button go. The live copy at madmonkeyhostels.com/all-in-trips/trip-builder/ sets '../'.
   ALLIN_BASE: 'https://madmonkeyhostels.com/all-in-trips',
 
+  // The NEW ALL IN site (the rebrand). Blank until it launches, and nothing changes while it's blank.
+  // When set, the ALL IN nav button goes there, and a guest it sends here ("Carry on in the trip builder") gets a "Back to the trip" link to
+  // <ALLIN_SITE>#trip-<id>. A full https address, or a path on this site like '../' if the builder sits inside it. See docs/ALL-IN-SITE.md.
+  ALLIN_SITE: '',
+
   // Optional. The crew review page (#/crew/<ref>, opened from the buttons in the new-trip email) calls this: POST JSON { action, ref, key, ... }.
   // With the ALL IN backend it is the trip-builder-admin function. Blank = derived from STATUS_ENDPOINT, or the page says it isn't switched on.
   CREW_ENDPOINT: '',

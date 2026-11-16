@@ -147,7 +147,7 @@
     u.store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
     var plan = u.getPlan(), wantHold = !!A.state.start, people = Math.min(8, Math.max(1, +v.size || 1)), dep = deposit();
     var payload = MM.leadPayload(A.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: people, dates: v.flex, notes: v.notes || '', consent: true },
-      { ref: A.meta.ref, fromHostel: A.meta.from, link: u.shareLink(), stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null });
+      { ref: A.meta.ref, fromHostel: A.meta.from, link: u.shareLink(), stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null, allin: A.allinMeta ? A.allinMeta() : null });
     payload.type = 'review_request'; payload.status = 'submitted'; payload.hold = { requested: wantHold, hours: hold() };
     if (dep) payload.deposit = { perPersonUsd: per(), people: people };
     if (fc) payload.findCrew = fc;
@@ -222,7 +222,7 @@
     var R = A.revise, plan = u.getPlan(), btn = $('#rv-go', m), err = $('#reverr', m), label = btn.textContent;
     function show(msg) { err.style.display = 'grid'; $('span', err).textContent = msg; btn.disabled = false; btn.textContent = label; }
     btn.disabled = true; btn.textContent = 'Sending…'; err.style.display = 'none';
-    var payload = MM.leadPayload(A.state, plan, { name: R.name, via: R.via, email: R.email, whatsapp: R.whatsapp, from: '', partySize: R.people || 1, dates: R.datesFlex, notes: note }, { link: u.shareLink(), stage: R.stage || null });
+    var payload = MM.leadPayload(A.state, plan, { name: R.name, via: R.via, email: R.email, whatsapp: R.whatsapp, from: '', partySize: R.people || 1, dates: R.datesFlex, notes: note }, { link: u.shareLink(), stage: R.stage || null, allin: A.allinMeta ? A.allinMeta() : null });
     var body = { ref: R.ref, k: R.k, note: note, changes: ch.slice(0, 8), trip: payload.trip, summary: payload.summary, crewText: payload.crewText, itinerary: payload.itinerary };
     function done(d) {
       var rec = subs().filter(function (x) { return x.ref === R.ref; })[0];

@@ -60,6 +60,36 @@
     return h;
   };
 
+  /* ---------------- Big days: the nights worth building a trip around (extras.js MM.bigDays, data/rules.js BIGDAYS) ---------------- */
+  var bdCache = { key: '', val: null };
+  function bigDays() {
+    var key = MM.encodeState(A.state) + '|' + U.isoDate(new Date());
+    if (bdCache.key !== key) bdCache = { key: key, val: MM.bigDays(A.state) };
+    return bdCache.val;
+  }
+  function bdWhere(x) { return P[x.at] ? P[x.at].n : ''; }
+  function fmtY(d) { return fmtD(d) + (d.getUTCFullYear() !== new Date().getFullYear() ? ' ' + d.getUTCFullYear() : ''); }       // the year, once it isn't this one
+  function bdWhen(x) { return (x.sp.moon ? 'around ' + fmtY(x.on) : x.sp.from.getTime() === x.sp.to.getTime() ? fmtY(x.sp.from) : fmtD(x.sp.from) + ' to ' + fmtY(x.sp.to)) + (x.sp.conf ? '' : ', expected'); }
+  X.bigdays = function (pl) {
+    if (!pl || !pl.totals.days) return '';
+    var r = bigDays(), rows = [], i;
+    r.caught.slice(0, 3).forEach(function (x) { rows.push('<li class="bigd__i bigd__i--on"><span class="bigd__k">You\'re there</span><div><b>' + esc(x.bd.n) + ': ' + esc(x.bd.title.charAt(0).toLowerCase() + x.bd.title.slice(1)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p></div></li>'); });
+    for (i = 0; i < r.near.length && i < 3; i++) (function (x, n) {
+      var later = x.shift > 0, d = Math.abs(x.shift);
+      rows.push('<li class="bigd__i"><span class="bigd__k">' + plural(d, 'day') + (later ? ' after you' : ' before you') + '</span><div><b>' + esc(x.bd.n) + ': ' + esc(x.bd.title.charAt(0).toLowerCase() + x.bd.title.slice(1)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p>' +
+        '<button class="btn btn--sm btn--pink" type="button" data-act="bigfix" data-k="near" data-n="' + n + '">Start ' + plural(d, 'day') + (later ? ' later' : ' earlier') + ' and be there</button></div></li>');
+    })(r.near[i], i);
+    for (i = 0; i < r.ahead.length && i < 4; i++) (function (x, n) {
+      rows.push('<li class="bigd__i"><span class="bigd__k">' + esc(fmtY(x.on)) + '</span><div><b>' + esc(x.bd.n) + ': ' + esc(x.bd.title.charAt(0).toLowerCase() + x.bd.title.slice(1)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p>' +
+        '<button class="btn btn--sm btn--pink" type="button" data-act="bigfix" data-k="ahead" data-n="' + n + '">Start ' + esc(fmtY(x.start)) + ' and be there</button></div></li>');
+    })(r.ahead[i], i);
+    if (!rows.length) return '';
+    var ttl = r.caught.some(function (x) { return x.bd.w >= 2; }) ? 'You\'re there for a big one.' : r.near.length ? 'So close to a big day.' : r.dated ? 'Big days on your trip.' : 'Time it to a big day.';
+    var sub = r.dated ? 'The nights a whole town comes out for, on your dates.' + (r.near.length ? ' Move your dates and the rest of the trip moves with them.' : '') : 'Add dates and we\'ll check them. Or pick one of these and we\'ll set your start date so you\'re in town on the night.';
+    return '<section class="bigd"><div class="cal__hd"><span class="doc__tag">Big days</span><h3 class="disp">' + ttl + '</h3><p class="fine">' + esc(sub) + '</p></div><ul class="bigd__list">' + rows.join('') + '</ul>' +
+      '<p class="fine">Dates marked expected follow the lunar calendar and are confirmed closer to the time. A real person checks your dates before anything is booked.</p></section>';
+  };
+
   /* ---------------- What's on: festivals + closures ---------------- */
   var KIND = { closure: 'Closures', festival: 'Festival', peak: 'Busy + dear', info: 'Good to know' };
   X.calendar = function (pl) {
@@ -162,6 +192,13 @@
   /* ---------------- clicks ---------------- */
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act]'); if (!b) return; var act = b.getAttribute('data-act');
+    if (act === 'bigfix') {
+      var r = bigDays(), x = (r[b.getAttribute('data-k')] || [])[+b.getAttribute('data-n')]; if (!x || !x.fix) return;
+      A.state = Object.assign(MM.defaultState(), MM.applyFix(A.state, x.fix)); A.auto = false; u.persist(); u.refresh();
+      u.track('bigday_fix', { id: x.bd.id, k: x.fix.t });
+      u.toast('Done: your trip now starts ' + fmtY(MM.util.parseDate(A.state.start)) + ', and you\'re in ' + bdWhere(x) + ' for the big day.', { undo: true });
+      return;
+    }
     if (act === 'docfix') {
       var d = diagnose(), f = d.findings[+b.getAttribute('data-n')]; if (!f || !f.fix) return;
       var before = MM.plan(A.state).totals; A.state = Object.assign(MM.defaultState(), MM.applyFix(A.state, f.fix)); A.auto = false; u.persist(); u.refresh();

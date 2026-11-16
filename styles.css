@@ -678,6 +678,23 @@ main{flex:1;display:flex;flex-direction:column}
 @media (max-width:640px){.rvs{grid-template-columns:1fr}}
 .backg{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);background:var(--cyan);border:var(--bw) solid var(--black);padding:var(--s-3);font-weight:700;font-size:14px;margin-bottom:var(--s-4)}
 .backg span{flex:1 1 200px}
+.solo{display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:var(--s-4) var(--s-6);align-items:center;background:var(--black);color:var(--paper);border:var(--bw) solid var(--black);box-shadow:8px 8px 0 var(--lime);padding:var(--s-5);margin-bottom:var(--s-6)}
+.solo__h{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-3)} .solo__h h3{font-size:clamp(30px,4.4vw,48px)}
+.solo p{font-size:16px;font-weight:500;line-height:1.55;color:#ece8de}
+@media (max-width:760px){.solo{grid-template-columns:1fr;padding:var(--s-4)}}
+/* ---- a trip handed over by the ALL IN site (ui-allin.js): in that site's own colours, so it reads as the way back there ---- */
+.aibar{--ai-canopy:#0E2B26;--ai-mist:#F3F7F2;--ai-amber:#FFB238;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-5);background:var(--ai-canopy);color:var(--ai-mist);border-radius:18px;padding:var(--s-4) var(--s-5);margin-bottom:var(--s-4)}
+.aibar__k{display:flex;flex-direction:column;line-height:1.05;flex:none}
+.aibar__logo{font-weight:900;font-size:22px;letter-spacing:-.02em}
+.aibar__k span:last-child{font-size:11px;font-weight:500;color:rgba(243,247,242,.8)}
+.aibar__t{flex:1 1 260px;min-width:0}
+.aibar__t b{display:block;font-size:18px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
+.aibar__t p{font-size:14px;line-height:1.45;margin-top:4px;color:rgba(243,247,242,.88)}
+.aibar__back{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 22px;border-radius:9999px;background:var(--ai-amber);color:var(--ai-canopy);font-weight:800;font-size:14px;text-decoration:none;white-space:nowrap}
+.aibar__back:hover{background:#ffc566}
+.aibar__back:focus-visible{outline:3px solid var(--ai-mist);outline-offset:2px}
+.aitag{background:#0E2B26;color:#F3F7F2;border-color:#0E2B26;vertical-align:middle;margin-left:4px}
+@media (max-width:560px){.aibar{padding:var(--s-4)}.aibar__back{width:100%}}
 
 /* ---- share: link preview + meet-up check ---- */
 .ogprev{display:flex;flex-direction:column;gap:6px;margin:var(--s-3) 0}
@@ -692,6 +709,18 @@ main{flex:1;display:flex;flex-direction:column}
 .doc,.cal,.kb{background:var(--paper);color:var(--black);border:var(--bw) solid var(--black);padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3);box-shadow:6px 6px 0 var(--black);margin-top:var(--s-5)}
 .doc--good{box-shadow:6px 6px 0 var(--lime)} .doc--warn{box-shadow:6px 6px 0 var(--yellow)} .doc--bad{box-shadow:6px 6px 0 var(--pink)}
 .cal{box-shadow:6px 6px 0 var(--orange)} .kb{box-shadow:6px 6px 0 var(--cyan)}
+/* Big days (ui-extras.js X.bigdays): the nights worth building a trip around, in the same card system as What's on */
+.bigd{background:var(--black);color:var(--paper);border:var(--bw) solid var(--black);padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3);box-shadow:6px 6px 0 var(--yellow);margin-top:var(--s-5)}
+.bigd .doc__tag{background:var(--yellow);color:var(--black)} .bigd .cal__hd h3{color:var(--paper)} .bigd .fine{color:var(--ink-dim-on-black)}
+.bigd__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--s-2)}
+.bigd__i{display:grid;grid-template-columns:104px 1fr;gap:var(--s-3);border:2px solid var(--paper);padding:var(--s-3);background:#1a1a1a}
+.bigd__k{font-size:10.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;align-self:start;padding:4px 6px;text-align:center;border:2px solid var(--paper);background:var(--black);color:var(--paper)}
+.bigd__i--on{border-color:var(--yellow)} .bigd__i--on .bigd__k{background:var(--yellow);border-color:var(--yellow);color:var(--black)}
+.bigd__i b{font-weight:900;text-transform:uppercase;font-size:15px;display:block;line-height:1.15}
+.bigd__i .cal__w{color:var(--ink-dim-on-black)} .bigd__i p{font-size:13.5px;margin:2px 0 var(--s-2);color:#e8e4da}
+.bigd__i .btn{--shadow-on:var(--yellow)}
+@media (max-width:560px){.bigd__i{grid-template-columns:1fr}.bigd__k{justify-self:start}}
+@media print{.bigd .btn{display:none}}
 .doc__tag{display:inline-block;font-family:var(--f-sticker);font-size:14px;background:var(--black);color:var(--lime);padding:3px 10px;transform:rotate(-2deg);align-self:flex-start}
 .doc__hd{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:var(--s-3)}
 .doc__label{font-size:clamp(30px,5vw,46px);margin-top:6px}
