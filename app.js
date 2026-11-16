@@ -672,7 +672,7 @@
     function push(title, from, to, desc) { ev.push({ t: title, a: from, b: U.addDays(to, 1), d: desc || '' }); }
     pl.days.forEach(function (d) {
       if (!d.date || d.kind === 'depart') return;
-      var name = d.kind === 'move' ? 'Overnight travel' : d.kind === 'epic' ? d.epic.n : d.kind === 'block' ? 'ALL IN ' + d.blockTrip.n : 'Mad Monkey ' + P[d.loc].n;
+      var name = d.kind === 'move' ? 'Overnight travel' : d.kind === 'away' ? 'Away on your ALL IN trip' : d.kind === 'epic' ? d.epic.n : d.kind === 'block' ? 'ALL IN ' + d.blockTrip.n : 'Mad Monkey ' + P[d.loc].n;
       var key = d.kind + ':' + d.si + ':' + name;
       if (cur && cur.key === key && U.isoDate(U.addDays(cur.last, 1)) === U.isoDate(d.date)) cur.last = d.date; else { cur = { key: key, name: name, first: d.date, last: d.date, kind: d.kind }; ev.push(cur); cur.__raw = true; }
       if (d.travel && d.kind === 'stay') push('Travel: ' + P[d.travel.from].n + ' → ' + P[d.travel.to].n, d.date, d.date, d.travel.chosen.modeLabel + ' · about ' + hours(d.travel.chosen.h) + ' · arrives about ' + d.travel.chosen.arrive);

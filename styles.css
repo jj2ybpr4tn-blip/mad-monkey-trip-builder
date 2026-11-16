@@ -371,7 +371,7 @@ main{flex:1;display:flex;flex-direction:column}
 .day__n{background:var(--black);color:var(--lime);text-align:center;font-weight:900;padding:6px 0;line-height:1}
 .day__n b{display:block;font-size:22px;letter-spacing:-.03em} .day__n span{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--paper)}
 .day--move .day__n,.day--epic .day__n{background:var(--pink);color:var(--black)} .day--move .day__n span,.day--epic .day__n span{color:var(--black)}
-.day--block .day__n{background:var(--lime);color:var(--black)} .day--block .day__n span{color:var(--black)}
+.day--block .day__n,.day--away .day__n{background:var(--lime);color:var(--black)} .day--block .day__n span,.day--away .day__n span{color:var(--black)}
 .day h4{font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:-.005em;line-height:1.15}
 .day .dl{font-size:11.5px;font-weight:700;color:var(--ink-dim);letter-spacing:.04em}
 .day ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}

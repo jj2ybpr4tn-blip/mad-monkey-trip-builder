@@ -27,7 +27,7 @@ The builder's old preview address (the top of the GitHub Pages site, and any old
 | `trip` | The trip's id on the site | Lowercase letters, digits and dashes, 40 at most. A bad id drops the trip, its name and its stops |
 | `tn` | The trip's name, shown on the builder | Letters (accents included), spaces and `& ' ’ , : ( ) + -` only, 60 at most. No digits or dots, so a link can't put a price or a web address on our page |
 | `part` | Which stops are the ALL IN trip: first stop (from 0) `.` how many | Clamped to 40. Stops either side are days the guest added |
-| `away` | Nights on the trip the builder can't see (a night boat or bus, a partner hotel) | Clamped to 9 |
+| `away` | Nights on the trip away from a Mad Monkey (a night boat or bus, a partner hotel) | Clamped to 9. The builder counts them as days, after the ALL IN part's last stop, at no price: the crew prices them |
 | `ref` | Ambassador or campaign code, as before | Unchanged |
 | `#/build/…` | The trip itself, in the builder's usual share-link format | Unchanged |
 
@@ -41,7 +41,12 @@ anyone pays.
 ## What the builder does with it (ui-allin.js)
 
 - A bar at the top of the trip, in the ALL IN site's colours, names the trip and says which stops are the ALL IN trip, what the
-  guest added either side, anything they changed inside it, and the nights it can't show. Those stops carry an **ALL IN** tag.
+  guest added either side and anything they changed inside it. Those stops carry an **ALL IN** tag.
+- The trip is as long as the site says: its `away` nights go in as days of their own ("Away on your ALL IN trip") straight after the
+  ALL IN part's last stop, so the day count, the end date and every date after it match the site. The link doesn't say where inside
+  the trip they really fall, so dates inside the ALL IN part can be a night or two early; the crew's text says so. They cost nothing
+  in the builder (the crew prices them), and no beds are held for them. Once the guest changes the ALL IN part's stops, it's their
+  own route and the crew is simply told about the nights.
 - The "this looks a lot like ALL IN Cambodia, swap it in" card stays away while the trip is there: it would push a different trip on
   someone who has just picked one.
 - **Back to the trip** goes to `<ALLIN_SITE>#trip-<id>` in the same tab, which opens that trip's page on the site.

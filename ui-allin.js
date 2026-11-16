@@ -48,6 +48,20 @@
   /* ---------- where the ALL IN part is now ---------- */
   function found() { var c = A.allin; return c && c.mark ? MM.allinFind(A.state.items, c.mark) : null; }
   A.allinFound = found;
+
+  /* ---------- nights away from a Mad Monkey (away) count as days ----------
+     The site counts them in the trip's length (a night boat or bus, a partner hotel), so the builder does too: they go in after the
+     ALL IN part's last stop (the link doesn't say where inside it they fall), so the trip is as long as the site says and every date
+     after it is right. They cost nothing here; the crew prices them. Only while the ALL IN part is still there: once the guest has
+     changed its stops it's their own route, and the crew is told about the nights instead. */
+  if (ctx && ctx.away > 0 && ctx.mark && MM.plan && !MM.plan.withAway) {
+    var basePlan = MM.plan;
+    MM.plan = function (st) {
+      var c = A.allin, f = c && c.away > 0 && c.mark && st && st.items ? MM.allinFind(st.items, c.mark) : null;
+      return basePlan(f ? Object.assign({}, st, { away: { after: f.i + f.n - 1, n: c.away } }) : st);
+    };
+    MM.plan.withAway = true;
+  }
   // The swap card ("this looks a lot like ALL IN Cambodia") would push a different trip on someone who just picked one on the site.
   A.allinHides = function () { return !!found(); };
   A.allinTag = function (i) {
@@ -70,7 +84,7 @@
       bits.push(f.before || f.after ? 'Stops ' + (f.i + 1) + ' to ' + (f.i + f.n) + ' are your ALL IN trip' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '. You\'ve added ' + list([f.before ? plu(f.before, 'stop') + ' before it' : '', f.after ? plu(f.after, 'stop') + ' after it' : ''].filter(Boolean)) + '.'
         : 'This is the ALL IN trip, stop for stop' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '. Add days before or after it, or change anything, then send it to the crew.');
       if (!f.intact) bits.push('You\'ve changed ' + (f.changed.length === 1 ? 'one thing' : f.changed.length + ' things') + ' inside it (' + f.changed.slice(0, 2).join('; ') + (f.changed.length > 2 ? '…' : '') + '). That\'s fine: the crew checks it as you\'ve built it.');
-      if (c.away) bits.push('It also has ' + plu(c.away, 'night') + ' we can\'t show here (on a night boat or bus, or in a partner hotel), so the ALL IN site counts ' + plu(c.away, 'more day') + '. The crew adds ' + (c.away === 1 ? 'it' : 'them') + ' when they check your trip.');
+      if (c.away) { var lastP = (MM.PLACES || {})[(A.state.items[f.i + f.n - 1] || {}).p]; bits.push('It includes ' + plu(c.away, 'night') + ' away from a Mad Monkey (a night boat or bus, or a partner hotel), so it\'s as long here as on the ALL IN site: ' + (c.away === 1 ? 'it sits' : 'they sit') + ' after ' + (lastP ? lastP.n : 'its last stop') + ' in your days. The crew prices ' + (c.away === 1 ? 'it' : 'them') + ' when they check your trip.'); }
       bits.push('Prices here are estimates: the crew confirms the real price before you pay a thing.');
       h += '<p>' + esc(bits.join(' ')) + '</p>';
     } else if (c.trip && name && c.mark) {
@@ -88,7 +102,7 @@
   A.allinMeta = function () {
     var c = A.allin; if (!c) return null;
     var f = found();
-    return { site: 'all-in', trip: c.trip, name: c.name, stops: f ? [f.i + 1, f.i + f.n] : null, intact: f ? f.intact : false, changed: f ? f.changed.slice(0, 8) : [], before: f ? f.before : 0, after: f ? f.after : 0, away: c.away };
+    return { site: 'all-in', trip: c.trip, name: c.name, stops: f ? [f.i + 1, f.i + f.n] : null, intact: f ? f.intact : false, changed: f ? f.changed.slice(0, 8) : [], before: f ? f.before : 0, after: f ? f.after : 0, away: c.away, awayIn: !!(f && c.away) };
   };
 
   /* ---------- Start over: forget the trip (they're still a guest from the ALL IN site) ---------- */
