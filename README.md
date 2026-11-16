@@ -42,7 +42,7 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 | **Pay your way** | After the crew approves a trip and sets the price, the guest chooses how to pay: all now, a week before they leave (a card is saved, nothing charged until then), or in instalments when they leave 60+ days out. See [docs/PAYMENTS.md](docs/PAYMENTS.md). |
 | **Edit it your way** | **Start building** is always a blank sheet (with a short walk-around, and "Pick up where you left off" if you had a trip). Every stop has worded **Remove stop** / **Swap place** buttons, **+ Add a stop** asks where it goes, the day-by-day plan is editable, and Undo/Redo covers everything. A guest can also **change a trip after sending it**: it replaces the one the crew is checking, so they never review an outdated plan. See [docs/EDITING.md](docs/EDITING.md). |
 | **Crew review** | What the team receives when a trip is sent: the whole trip as the guest built it (stops, tours, travel, money, heads-up) in the email, with **Approve / Not approved / Edit it** buttons that open a review page. See [docs/CREW-REVIEW.md](docs/CREW-REVIEW.md). |
-| **From the ALL IN site** | The new ALL IN site hands a trip over with **Carry on in the trip builder**: the builder names it, tags which stops are the ALL IN trip, stops suggesting a different trip, links **Back to the trip** (`ALLIN_SITE`) and tells the crew which trip it started from and what the guest changed. Nothing in the link is priced or trusted. See [docs/ALL-IN-SITE.md](docs/ALL-IN-SITE.md). |
+| **Inside the ALL IN site** | The builder lives inside the new ALL IN site, at `<site>/trip-builder/` (`ALLIN_SITE '../'`), and wears the site's own bar and menu (ui-site.js; the menu is read from the site, never written into these public files). The site hands a trip over with **Carry on in the trip builder**, in the same tab: the builder names it, tags which stops are the ALL IN trip, stops suggesting a different trip, links **Back to the trip** and tells the crew which trip it started from and what the guest changed. Nothing in the link is priced or trusted. See [docs/ALL-IN-SITE.md](docs/ALL-IN-SITE.md). |
 | **Find your crew** | A tick on the send form: travelling solo or keen for company? The crew sees who else is in the same towns on the same nights and fits what they asked for (women only, around my age, solo only), and a real person introduces them once both say yes. See [docs/FIND-YOUR-CREW.md](docs/FIND-YOUR-CREW.md). |
 | **Group mode** | Share a link; mates vote Yes / Maybe / No per stop and tap "I'm in"; the Squad Leader meter ticks up (3 = 50% off, 6 = free). Demo mode until `GROUP_ENDPOINT` is set: [docs/GROUP.md](docs/GROUP.md). |
 | **Currencies** | USD, GBP, EUR, AUD and CAD at indicative rates (set 22 Oct 2026; `FX_ENDPOINT` in `config.js` refreshes them from a free feed). Real conversion belongs to the booking engine. |
@@ -124,9 +124,9 @@ docs/PAYMENTS.md    free to send, approval, then pay your way (now / a week befo
 docs/EDITING.md     editing your trip, the blank start + walk-around, changing a trip after sending it
 docs/PLANNING.md    search ("Where to?"), best order, plan in stages + log in, Ask Ewan
 docs/FIND-YOUR-CREW.md  "Find your crew": opting in, how matches work, the crew console tab, privacy
-docs/ALL-IN-SITE.md the hand-off from the new ALL IN site: the link it sends, what the builder does with it
+docs/ALL-IN-SITE.md the builder inside the new ALL IN site: where it lives, the link the site sends, the site's bar and menu, publishing, launch
 docs/REVIEW.md      the big review (Oct 2026): what was found, what was fixed, what is still open
-scripts/            lint, audit-data, make-thumbs, mirror-photos, build-pages, sync-allin, deploy-demo, seed-crew-demo
+scripts/            lint, audit-data, make-thumbs, mirror-photos, build-pages, sync-allin, publish-preview (the ALL IN site preview with the builder inside it, one command; deploy-demo runs it too), seed-crew-demo
 test/               logic + fuzz tests (node, no dependencies); ui-smoke.js and ui-lint.js run in a browser tab
 ```
 

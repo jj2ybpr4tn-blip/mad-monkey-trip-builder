@@ -7,7 +7,7 @@
  */
 import fs from 'node:fs'; import path from 'node:path'; import { execFileSync } from 'node:child_process'; import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SKIP = new Set(['node_modules', '.git', '.demo-build', 'handoff', 'assets', 'hostels', 'guides', 'trips', 'routes', 'server-data']);
+const SKIP = new Set(['node_modules', '.git', '.demo-build', '.site', 'drafts', 'handoff', 'assets', 'hostels', 'guides', 'trips', 'routes', 'server-data']);
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => SKIP.has(e.name) ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
 const files = walk(ROOT), js = files.filter((f) => /\.(m?js)$/.test(f)), problems = [];
 const rel = (f) => path.relative(ROOT, f);
