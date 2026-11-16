@@ -440,5 +440,17 @@
     return { bar: bar.length ? bar : menu.slice(0, 8), menu: menu.length ? menu : bar };
   };
 
+  /* The ALL IN site's approved prices for its own trips, for a trip it hands over (ui-allin.js). They come from
+     the site itself, left in this browser ({v:1, at, trips: {<id>: {usd}}}, same origin), never from a link, so a link can't set a price.
+     Only a sane per-person figure for that trip id, and nothing older than 30 days. 0 means "no approved price": the builder estimates. */
+  MM.sitePrice = function (raw, id, now) {
+    var o = raw;
+    if (typeof o === 'string') { try { o = JSON.parse(o); } catch (e) { return 0; } }
+    if (!o || o.v !== 1 || !o.trips || typeof o.trips !== 'object' || !AI_ID.test(String(id || ''))) return 0;
+    if (o.at && (+now || Date.now()) - o.at > 30 * 864e5) return 0;
+    var t = Object.prototype.hasOwnProperty.call(o.trips, id) ? o.trips[id] : null, v = t && typeof t === 'object' ? +t.usd : 0;
+    return v >= 50 && v <= 20000 ? Math.round(v) : 0;
+  };
+
   if (typeof module !== 'undefined') module.exports = MM;
 })(typeof window !== 'undefined' ? window : globalThis);

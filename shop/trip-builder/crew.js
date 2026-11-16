@@ -144,6 +144,8 @@
       else if (ai.trip) L.push('They started from ' + (ai.name || 'an ALL IN trip') + ' (' + ai.trip + ' on the site), then changed its stops, so this is their own route now.');
       else L.push('They came from the ALL IN site and built this from scratch.');
       if (ai.stops && (ai.before || ai.after)) L.push('Added: ' + [ai.before ? ai.before + (ai.before === 1 ? ' stop' : ' stops') + ' before it' : '', ai.after ? ai.after + (ai.after === 1 ? ' stop' : ' stops') + ' after it' : ''].filter(Boolean).join(' and ') + '.');
+      if (ai.approvedUsd) L.push('Priced at the site\'s approved $' + ai.approvedUsd + ' per person for the ALL IN part, as the site sells it' + (ai.approvedEst ? ' (the builder\'s own figure for those days: about $' + ai.approvedEst + ')' : '') + '. Anything added around it is the builder\'s estimate.');
+      else if (ai.sitePriceUsd && ai.stops && !ai.intact) L.push('The site\'s approved price is $' + ai.sitePriceUsd + ' per person for the trip as it is. They changed it, so the total is the builder\'s estimate: price it.');
       if (ai.away && ai.awayIn) L.push('It includes ' + ai.away + (ai.away === 1 ? ' night' : ' nights') + ' away from a Mad Monkey (a night boat or bus, or a partner hotel). They\'re in its days and dates, after the ALL IN trip\'s last stop (where they really fall, the site knows), but not in its price: price them.');
       else if (ai.away) L.push('Plus ' + ai.away + (ai.away === 1 ? ' night' : ' nights') + ' on the ALL IN trip that the builder can\'t see (a night boat or bus, or a partner hotel). They aren\'t in its price: add them.');
     }

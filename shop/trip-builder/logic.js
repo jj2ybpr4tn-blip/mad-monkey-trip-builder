@@ -227,6 +227,9 @@
     // and after which stop. They count as days, so the trip is as long as the site says and the dates after it are right, but cost nothing here:
     // the crew prices them. Never part of a share link (encodeState), only of the trip the site handed over.
     var away = state.away && +state.away.n >= 1 ? { after: Math.round(+state.away.after), n: Math.min(9, Math.round(+state.away.n)) } : null;
+    // An ALL IN trip from the site at its approved price (ui-allin.js, only while the guest hasn't changed it): those stops are priced at
+    // the site's price, in the "ALL IN trips" line, in place of the builder's beds, tours and journeys between them. Never from a link.
+    var approved = state.approved && +state.approved.usd >= 50 && +state.approved.usd <= 20000 ? { from: Math.round(+state.approved.from), n: Math.round(+state.approved.n), usd: Math.round(+state.approved.usd) } : null;
     if (!isClean(state)) state = sanitizeState(state);               // an old save with a place that has since gone must not blank the page
     var items = state.items || [];
     var start = parseDate(state.start);
@@ -255,6 +258,8 @@
         tickets: MM.TICKETS[a + '|' + b] || MM.TICKETS[b + '|' + a] || null, border: borderNote(a, b), h: chosen.h, u: chosen.u, ovn: chosen.ovn, nights: chosen.nights };
     }
     if (away && !(away.after >= 0 && away.after < segs.length && segs[away.after].kind === 'stop')) away = null;
+    if (approved && !(approved.from >= 0 && approved.n >= 1 && approved.from + approved.n <= segs.length && segs.slice(approved.from, approved.from + approved.n).every(function (s) { return s.kind === 'stop'; }))) approved = null;
+    function inPart(si) { return approved && si >= approved.from && si < approved.from + approved.n; }
     var legBetween = [], originLeg = null;
     for (var i = 0; i < segs.length - 1; i++) {
       var a = segs[i].last, b = segs[i + 1].first, leg = null;
@@ -434,7 +439,7 @@
     });
 
     /* ---- 7. totals ---- */
-    var beds = 0, acts = 0, transport = 0, allin = 0, payDay = 0, estAny = false, bedNights = 0, coveredBed = 0, stopCount = {};
+    var beds = 0, acts = 0, transport = 0, allin = 0, payDay = 0, estAny = false, bedNights = 0, coveredBed = 0, stopCount = {}, partBeds = 0, partActs = 0, partTransport = 0;
     segs.forEach(function (s, si) {
       if (s.kind === 'allin') { allin += s.usd; blockPlaces(s.trip).forEach(function (p) { stopCount[p] = 1; }); return; }
       stopCount[s.p] = 1;
@@ -442,7 +447,8 @@
       var billable = Math.max(0, s.n - covered);
       bedNights += s.n; coveredBed += (s.n - billable);
       beds += billable * P()[s.p].bed;
-      s.acts.forEach(function (a) { if (a.usd == null) payDay++; else acts += a.usd; if (a.est) estAny = true; });
+      if (inPart(si)) partBeds += billable * P()[s.p].bed;
+      s.acts.forEach(function (a) { if (a.usd == null) payDay++; else { acts += a.usd; if (inPart(si)) partActs += a.usd; } if (a.est) estAny = true; });
     });
     // dated flights: once the guest has dates and a live fare feed has answered, price each flight at the lowest fare found for its day
     out.days.forEach(function (d) { if (d.travel && d.date && !d.travel.date) d.travel.date = d.date.toISOString().slice(0, 10); });
@@ -459,7 +465,7 @@
     });
     // Flights are never in the price: the guest books them and we suggest the best ones. Everything else on a leg (transfers, buses, boats, trains) is.
     var flights = 0;
-    out.legs.forEach(function (l) { transport += l.u - l.flightU; flights += l.flightU; });
+    out.legs.forEach(function (l) { transport += l.u - l.flightU; flights += l.flightU; if (approved && l.index >= approved.from && l.index < approved.from + approved.n - 1) partTransport += l.u - l.flightU; });
     // a flight that doesn't fly every day: say so when the day they'd fly has none
     out.legs.forEach(function (l) {
       var d = parseDate(l.date); if (!d) return;
@@ -478,6 +484,10 @@
     if (allin) squad = mates >= 6 ? -allin : mates >= 3 ? -Math.round(allin * 0.5) : 0;
     // squad perk applies per ALL IN block (leader's own ticket) — only the first block is eligible
     if (allin && squad) { var first = segs.filter(function (s) { return s.kind === 'allin'; })[0]; squad = mates >= 6 ? -first.usd : -Math.round(first.usd * 0.5); }
+    if (approved) {                                  // the site's price for its trip, in place of the builder's own figures for those days (flights stay out, as everywhere)
+      out.approved = { from: approved.from, n: approved.n, usd: approved.usd, est: Math.round(partBeds + partActs + partTransport) };
+      beds -= partBeds; acts -= partActs; transport -= partTransport; allin += approved.usd;
+    }
     var total = Math.round(beds + acts + transport + allin + squad + fund);
     // distance + countries + places
     var seq = []; segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (st) { seq.push(st.p); }); else seq.push(s.p); });
