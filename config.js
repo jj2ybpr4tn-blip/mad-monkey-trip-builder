@@ -50,6 +50,11 @@ window.MM_CONFIG = {
   // <ALLIN_SITE>#trip-<id>. A full https address, or a path on this site like '../' if the builder sits inside it. See docs/ALL-IN-SITE.md.
   ALLIN_SITE: '',
 
+  // The look. 'allin' (the default): dressed like the new ALL IN site, its colours, type and rounded cards (look-allin.css).
+  // 'core': the original Mad Monkey poster look. A guest handed over by the ALL IN site always gets 'allin'.
+  // The live copy keeps 'core' until it's switched (scripts/sync-allin.mjs adds LOOK: 'core' to its config and leaves its page alone).
+  LOOK: 'allin',
+
   // Optional. The crew review page (#/crew/<ref>, opened from the buttons in the new-trip email) calls this: POST JSON { action, ref, key, ... }.
   // With the ALL IN backend it is the trip-builder-admin function. Blank = derived from STATUS_ENDPOINT, or the page says it isn't switched on.
   CREW_ENDPOINT: '',

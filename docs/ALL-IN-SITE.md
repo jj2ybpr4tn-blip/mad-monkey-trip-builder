@@ -43,3 +43,10 @@ way the live copy sits at `/all-in-trips/trip-builder/`). `scripts/sync-allin.mj
 
 The private preview of the site (`drafts/all-in-store`, GitHub Pages `/shop/`) links to the demo builder beside it, so the whole
 round trip can be tried there before anything goes live.
+
+## The look
+
+The builder wears the ALL IN site's look by default (`look-allin.css`, `LOOK: 'allin'` in `config.js`), so a guest moving between
+the two doesn't feel they've changed sites. A guest handed over with `?via=allin` always gets it. The live copy inside today's ALL IN
+site keeps the core Mad Monkey look until its config says `LOOK: 'allin'`: `scripts/sync-allin.mjs` adds `LOOK: 'core'` there and
+leaves its page on the core look until then.

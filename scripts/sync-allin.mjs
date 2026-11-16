@@ -22,7 +22,7 @@ if (!target) { console.error('usage: node scripts/sync-allin.mjs <path to mm-squ
 const DEST = path.join(path.resolve(target), 'public', 'trip-builder');
 if (!fs.existsSync(DEST)) { console.error('No public/trip-builder in ' + target); process.exit(2); }
 
-const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-wherenext.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'ui-allin.js', 'styles.css', 'crew.css', 'wherenext.css'];
+const SHARED = ['app.js', 'logic.js', 'extras.js', 'crew.js', 'edit.js', 'search.js', 'group.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'ui-crew.js', 'ui-wherenext.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'ui-allin.js', 'styles.css', 'crew.css', 'wherenext.css', 'look-allin.css'];
 const withThumbs = WITH_THUMBS_FLAG || fs.existsSync(path.join(DEST, 'assets', 'photos', 's'));
 const DATA = fs.readdirSync(path.join(ROOT, 'data')).filter((f) => f.endsWith('.js')).map((f) => 'data/' + f);
 const changes = [];
@@ -37,6 +37,9 @@ for (const f of [...SHARED, ...DATA]) put(f, fs.readFileSync(path.join(ROOT, f),
 // index.html: ours, without the SEO footer, and with the live copy's own title of nav unchanged (the ALL IN button is in ours already)
 let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 html = html.replace(/<!--seo:start-->[\s\S]*?<!--seo:end-->/, '  <!-- The Google pages (guides, trips, routes, hostels) aren\'t part of the ALL IN copy, so their footer links are left out. -->\n  <noscript><p style="padding:24px;text-align:center">The trip builder needs JavaScript. <a href="../">See the ALL IN trips</a>.</p></noscript>').replace(/\n\s*<noscript><p style="padding:24px;text-align:center">The trip builder needs JavaScript\. The guides[^\n]*<\/noscript>/, '');
+// the ALL IN look: the live copy keeps the core look until its own config says LOOK: 'allin' (a guest from the new ALL IN site gets it anyway)
+const liveCfg = fs.existsSync(path.join(DEST, 'config.js')) ? fs.readFileSync(path.join(DEST, 'config.js'), 'utf8') : '';
+if (!/^\s*LOOK:\s*'allin'/m.test(liveCfg)) html = html.replace(' data-look="allin"', '');
 put('index.html', html);
 
 // assets: refresh only what the live copy already has
@@ -76,7 +79,7 @@ if (withThumbs) {
 
 // config.js: add any key the live copy doesn't have yet, never touch the ones it has
 const cfgPath = path.join(DEST, 'config.js'), live = fs.readFileSync(cfgPath, 'utf8'), mine = fs.readFileSync(path.join(ROOT, 'config.js'), 'utf8');
-const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", REVISE_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-revise'", LOGIN_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-login'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '0' };
+const ALLIN_DEFAULTS = { CREW_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-admin'", PAY_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-pay'", REVISE_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-revise'", LOGIN_ENDPOINT: "'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-login'", ALLIN_BASE: "'../'", DEPOSIT_PER_PERSON: '0', ALLIN_SITE: "''", LOOK: "'core'" };
 if (withThumbs) ALLIN_DEFAULTS.THUMB_BASE = "'assets/photos'";   // (the key is only added when the small copies are hosted there)
 let cfg = live;
 const missingKeys = Object.keys(ALLIN_DEFAULTS).filter((k) => !new RegExp('^\\s*' + k + '\\s*:', 'm').test(cfg));

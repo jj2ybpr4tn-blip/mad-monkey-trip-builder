@@ -1142,6 +1142,8 @@
   });
 
   app.util = { ask: askLink, askLabel: askLabel, humanLine: HUMAN.line, url: safeUrl, dec: safeUri, timed: timed, addStop: function (id) { addStop(id); }, ics: downloadICS, contactPick: contactPick, readContact: readContact, esc: esc, $: $, $$: $$, money: money, photo: photo, toast: toast, copy: copy, openModal: openModal, closeModal: closeModal, store: store, track: track, shareLink: shareLink, baseUrl: baseUrl, go: go, plural: plural, hours: hours, footer: footer, persist: persist, refresh: refreshBuilder, getPlan: function () { return plan; } };
+  // The look (look-allin.css): index.html ships data-look="allin"; MM_CONFIG.LOOK says which to keep. ui-allin.js puts it back for a guest from the ALL IN site.
+  (function () { var lk = String(C.LOOK || '').toLowerCase(), de = document.documentElement; if (lk === 'core') de.removeAttribute('data-look'); else if (lk === 'allin') de.setAttribute('data-look', 'allin'); })();
   var navAllIn = $('#nav-allin'); if (navAllIn && MM.allInBase) navAllIn.href = MM.allInBase();   // the ALL IN site, wherever this copy lives
   window.addEventListener('hashchange', route);
 

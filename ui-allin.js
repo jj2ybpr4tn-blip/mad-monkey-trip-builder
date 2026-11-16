@@ -31,6 +31,7 @@
     }
   }
   A.allin = ctx;
+  if (ctx) document.documentElement.setAttribute('data-look', 'allin');                 // they came from the ALL IN site: keep its look whatever this copy's LOOK says
 
   /* ---------- the ALL IN site's address (config, so it's trusted, but still only a plain https address or a path on this site) ---------- */
   function site() {

@@ -134,6 +134,8 @@ test/               logic + fuzz tests (node, no dependencies); ui-smoke.js and 
 
 Follows the Mad Monkey core design system: Montserrat 900 uppercase display, the eight poster colours (never more than three at once) on Mad Black / Bone / Paper, 3px outlines, hard-offset shadows with no blur, sharp-or-pill corners, one brand device per layout (ALL IN sticker, lime starburst), official logo files only. Copy is British English and in voice. No decorative emoji.
 
+**The ALL IN look** (`look-allin.css`, on by default): the builder dressed like the new ALL IN site, so the two read as one. Its palette (canopy green, mist, limestone, amber, coral, lagoon), Archivo headings set wide and heavy in sentence case, rounded cards on soft shadows, and no hard shadows, stickers or starbursts. It only overrides the core styles: `LOOK: 'core'` in `config.js` (or removing `data-look="allin"` from `index.html`) brings the core look back. The live copy keeps the core look until its own config says `LOOK: 'allin'`; a guest handed over by the ALL IN site always gets the new look.
+
 ## Still to do
 - **Live fares** from a real provider. Today the crew enters real fares in `/admin`; the built-in table is the fallback. (12Go / Rome2Rio style feeds need paid API keys.)
 - **Real reviews.** The slot, the admin screen and the display are built; Mad Monkey publishes no per-hostel reviews, so add real ones in `/admin`.
