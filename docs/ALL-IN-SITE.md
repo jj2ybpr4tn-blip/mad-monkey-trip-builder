@@ -35,8 +35,8 @@ The site opens it in the same tab, and so does **Trip builder** in its menus (`<
 A trip sent to the crew from the site always carries the live builder's address, whichever copy it was sent from: the backend only
 keeps links to madmonkeyhostels.com.
 
-The builder **never takes a price from the link**. It shows its own estimate, says so, and the crew prices the trip before
-anyone pays.
+The builder **never takes a price from the link**. It shows its own estimate, except where the site has an approved price for its
+trip (below), and the crew prices the trip before anyone pays.
 
 ## What the builder does with it (ui-allin.js)
 
@@ -54,6 +54,17 @@ anyone pays.
   (what the "Trip to check" email shows) gets a **FROM THE ALL IN SITE** section saying the same in words. No backend change needed.
 - What was marked on arrival is kept for the session, so a reload doesn't lose it. **Start over** forgets the trip (they're still a
   guest from the site); **Forget my trip and details** forgets everything.
+
+## The site's approved prices
+
+Where the site sells a trip at a fixed, approved price, that's the price the guest saw, so the builder uses it instead of its own
+figures while the guest keeps the trip as it is. The site leaves its approved prices in the browser on the same origin, each time its
+page opens: `localStorage['allin-site-prices'] = { v: 1, at: <ms>, trips: { <id>: { usd: <per person> } } }`. With an unchanged trip
+(`part` found and intact), those stops are priced at it in the **ALL IN trips** line, in place of the builder's beds, tours and the
+journeys between them; whatever the guest adds around it is estimated as usual, and food and fun money is on top, as everywhere. Change
+anything inside the trip and it goes back to the builder's estimate, and the crew is told to price it. The lead carries
+`allinSite.approvedUsd` and the builder's own figure for those days (`approvedEst`). A price is only read for the trip in the link, only
+between $50 and $20,000 a person, and nothing older than 30 days (`MM.sitePrice`). Never from the link itself.
 
 ## The site's bar and menu on the builder (ui-site.js)
 

@@ -724,6 +724,30 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('away nights: the crew is told they are in the days but not the price', /in its days and dates/.test(lead.crewText) && lead.trip.days === p1.totals.days);
 })();
 
+/* ---------- the ALL IN site's approved price for its trip (extras.js sitePrice, logic.js plan: state.approved, set by ui-allin.js) ---------- */
+(function () {
+  var NOW = 1800000000000, raw = { v: 1, at: NOW - 1000, trips: { 'sample-trip': { usd: 650 }, cheap: { usd: 3 }, huge: { usd: 99999 } } };
+  eq('site price: read for its trip', MM.sitePrice(JSON.stringify(raw), 'sample-trip', NOW), 650);
+  ok('site price: nothing for another trip, a silly figure, a bad id or old news', MM.sitePrice(raw, 'cambodia', NOW) === 0 && MM.sitePrice(raw, 'cheap', NOW) === 0 && MM.sitePrice(raw, 'huge', NOW) === 0 && MM.sitePrice(raw, 'Bad Id!', NOW) === 0 && MM.sitePrice(Object.assign({}, raw, { at: NOW - 31 * 864e5 }), 'sample-trip', NOW) === 0);
+  ok('site price: not JSON or the wrong version gives nothing', MM.sitePrice('{nope', 'sample-trip', NOW) === 0 && MM.sitePrice({ v: 2, trips: raw.trips }, 'sample-trip', NOW) === 0 && MM.sitePrice({ v: 1, trips: { toString: { usd: 650 } } }, 'toString', NOW) === 0);
+
+  var base = st([stop('dumaguete', 2), stop('siquijor', 3), stop('panglao', 3), stop('siargao', 4), stop('manila', 2)], { start: '2027-02-03', crew: 6 });
+  var withPrice = function (o) { return Object.assign({}, base, { approved: o }); };
+  var p0 = MM.plan(base), p1 = MM.plan(withPrice({ from: 0, n: 4, usd: 650 })), t0 = p0.totals, t1 = p1.totals;
+  ok('approved price: those stops go in at the site\'s price, in ALL IN trips', t1.allin === t0.allin + 650 && p1.approved && p1.approved.usd === 650 && p1.approved.est > 0);
+  eq('approved price: in place of the builder\'s own figures for them', t1.total, t0.total - p1.approved.est + 650);
+  eq('approved price: where the money goes still adds up', t1.beds + t1.transport + t1.acts + t1.allin + t1.fund + t1.squad, t1.total);
+  ok('approved price: what\'s added around it is still estimated (Manila and the journey there)', t1.beds > 0 && t1.transport > 0);
+  eq('approved price: the squad perk is only for the builder\'s own ALL IN trips', t1.squad, 0);
+  ok('approved price: a bad range or figure is ignored', MM.plan(withPrice({ from: 2, n: 9, usd: 650 })).totals.total === t0.total && MM.plan(withPrice({ from: 0, n: 4, usd: 5 })).totals.total === t0.total && MM.plan(withPrice({ from: -1, n: 2, usd: 650 })).totals.total === t0.total);
+  eq('approved price: never in a share link', MM.encodeState(withPrice({ from: 0, n: 4, usd: 650 })), MM.encodeState(base));
+  var meta = { site: 'all-in', trip: 'sample-trip', name: 'Sample Trip', stops: [1, 4], intact: true, changed: [], before: 0, after: 1, away: 0, approvedUsd: 650, approvedEst: p1.approved.est, sitePriceUsd: 650 };
+  var lead = MM.leadPayload(base, p1, { name: 'Sam', via: 'email', email: 's@example.com', partySize: 1 }, { link: 'x', allin: meta });
+  ok('approved price: the crew is told it\'s the site\'s price, and what the builder made it', /approved \$650 per person/.test(lead.crewText) && /about \$\d+/.test(lead.crewText) && lead.trip.estTotalUsd === t1.total);
+  var lead2 = MM.leadPayload(base, p0, { name: 'Sam', via: 'email', email: 's@example.com', partySize: 1 }, { link: 'x', allin: Object.assign({}, meta, { intact: false, changed: ['Panglao: 3 to 4 nights'], approvedUsd: 0, approvedEst: 0 }) });
+  ok('approved price: changed, the crew is told to price it', /for the trip as it is\. They changed it/.test(lead2.crewText));
+})();
+
 /* ---------- the ALL IN site's menu on top of the builder (extras.js: siteMenu, ui-site.js) ---------- */
 (function () {
   var SITE = 'https://example.github.io/repo/shop/', HERE = 'https://example.github.io/repo/shop/trip-builder/', NOW = 1800000000000;
