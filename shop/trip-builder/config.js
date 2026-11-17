@@ -9,13 +9,17 @@ window.MM_CONFIG = {
 
   // Where a finished trip + contact gets sent (POST, JSON). See docs/LEADS.md for the payload.
   // Leave blank and the builder runs in DEMO mode: it shows the lead card but sends nothing.
-  LEAD_ENDPOINT: '',
+  LEAD_ENDPOINT: 'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-request',
 
-  // Optional. Digits only with country code, e.g. '447000000000'. Adds a "message the crew" button.
+  // Not used any more: nothing sends a guest to a WhatsApp number or an email address. Every "Ask" and every fallback opens the
+  // Ask form (ui-ask.js), which sends to the crew backend (ASK_ENDPOINT below). Kept so an old config still loads; leave blank.
   WHATSAPP: '',
-
-  // Optional fallback shown in demo mode / when the endpoint fails.
   CREW_EMAIL: '',
+
+  // Where the "Ask ..." form on every screen sends a guest's question (POST, JSON: MM.askPayload in extras.js, the same shape as a
+  // trip, type 'question'). Blank = LEAD_ENDPOINT, so with the ALL IN backend it is trip-builder-request and the question lands in
+  // Admin with an email to the crew. With neither set it runs as a demo and sends nothing.
+  ASK_ENDPOINT: '',
 
   // Used in share links + the story card. Leave blank to use wherever this page is hosted.
   SITE_URL: '',
@@ -62,7 +66,7 @@ window.MM_CONFIG = {
   CREW_ENDPOINT: '',
 
   // Optional. GET <url>?ref=MM-XXXXXX -> { status: 'submitted'|'checking'|'ready'|'approved', note?, payLink? } powers the trip status page.
-  STATUS_ENDPOINT: '',
+  STATUS_ENDPOINT: 'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-status',
 
   // Optional. Enables group mode across devices. Contract in docs/GROUP.md. Blank = demo mode (votes sync between tabs of one browser only).
   GROUP_ENDPOINT: '',
@@ -99,8 +103,8 @@ window.MM_CONFIG = {
   // Optional. Where "Tell me when it launches" signups go (ALL IN trips that aren't live yet). API_BASE fills it in. Blank = demo mode.
   WAITLIST_ENDPOINT: '',
 
-  // Who the "Ask ..." button on every screen says a real person is. Blank = "Ask the crew". It opens WhatsApp (WHATSAPP above) with the trip already in the message,
-  // or an email to CREW_EMAIL if there is no WhatsApp number. With neither, it shows what it would do (demo).
+  // Who the "Ask ..." button on every screen names: 'Ewan' makes it "Ask Ewan". Change it here when the team grows (blank = "Ask the crew").
+  // The button opens a short form (name, email or WhatsApp, the question) that goes to ASK_ENDPOINT with the trip on screen.
   ASK_NAME: 'Ewan',
 
   // Optional. The Mad Monkey app: App Store / Google Play / smart link. When set, trip packs and the crew-checked page show a "Get the app" card.

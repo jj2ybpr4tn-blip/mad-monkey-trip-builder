@@ -88,13 +88,20 @@
     return ds.length ? (last ? ds[ds.length - 1] : ds[0]).date : null;
   }
 
+  // the trip's country and route, right under its name: "Vietnam · Hanoi → Lan Ha Bay → Hoi An"
+  function where(items) {
+    var P = MM.PLACES || {}, C2 = MM.COUNTRIES || {}, names = [], cs = [];
+    items.forEach(function (it) { var pl = it && P[it.p]; if (!pl) return; if (names[names.length - 1] !== pl.n) names.push(pl.n); var cn = C2[pl.c] && C2[pl.c].n; if (cn && cs.indexOf(cn) < 0) cs.push(cn); });
+    return names.length ? '<span class="aibar__where">' + esc((cs.length ? cs.join(' + ') + ' · ' : '') + names.join(' → ')) + '</span>' : '';
+  }
+
   /* ---------- the bar at the top of the builder ---------- */
   A.allinBar = function (pl) {
     var c = A.allin; if (!c) return '';
     var f = found(), back = backHref(), name = c.name, h = '<section class="aibar" aria-label="From the ALL IN site"><div class="aibar__k"><span class="aibar__logo">ALL IN</span><span>by Mad Monkey</span></div><div class="aibar__t">';
     if (c.trip && name && f) {
       var bits = [], plu = U().plural, start = dateOf(pl, f.i, false);
-      h += '<b>' + esc(name) + '</b>';
+      h += '<b>' + esc(name) + '</b>' + where(A.state.items.slice(f.i, f.i + f.n));
       bits.push(f.before || f.after ? 'Stops ' + (f.i + 1) + ' to ' + (f.i + f.n) + ' are your ALL IN trip' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '. You\'ve added ' + list([f.before ? plu(f.before, 'stop') + ' before it' : '', f.after ? plu(f.after, 'stop') + ' after it' : ''].filter(Boolean)) + '.'
         : 'This is the ALL IN trip, stop for stop' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '. Add days before or after it, or change anything, then send it to the crew.');
       if (!f.intact) bits.push('You\'ve changed ' + (f.changed.length === 1 ? 'one thing' : f.changed.length + ' things') + ' inside it (' + f.changed.slice(0, 2).join('; ') + (f.changed.length > 2 ? '…' : '') + '). That\'s fine: the crew checks it as you\'ve built it.');

@@ -11,7 +11,7 @@
      • /api/groups…          group mode (votes, ideas, Route A/B, own routes for meet-ups)
      • POST /api/waitlist    "tell me when it launches" signups for ALL IN trips that aren't live yet
      • POST /api/share       short link + preview image for a trip  →  /t/<code> (rich previews on WhatsApp etc.)
-     • GET  /api/live        trips marked full + price overrides the crew maintains
+     • GET  /api/live        spots left + price overrides the crew maintains
      • GET  /api/fares       ?from=BKK&to=CNX&date=YYYY-MM-DD  lowest + highest real fare for that day (needs AMADEUS_CLIENT_ID/SECRET)
      • GET  /api/reviews     approved guest quotes per hostel
      • /api/admin/crew…      Find your crew: opted-in travellers whose trips cross, for the crew to introduce (docs/FIND-YOUR-CREW.md)
@@ -392,7 +392,7 @@ async function api(req, res, url) {
 
 /* ============================================================ static ============================================================ */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'crew.js', 'edit.js', 'search.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'ui-allin.js', 'ui-site.js', 'ui-crew.js', 'crew.css', 'ui-wherenext.js', 'wherenext.css', 'look-allin.css', 'sitemap.xml', 'robots.txt']);
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'styles.css', 'app.js', 'logic.js', 'extras.js', 'group.js', 'config.js', 'ui-map.js', 'ui-story.js', 'ui-review.js', 'ui-group.js', 'ui-live.js', 'ui-extras.js', 'ui-pack.js', 'crew.js', 'edit.js', 'search.js', 'ui-tour.js', 'ui-search.js', 'ui-stage.js', 'ui-allin.js', 'ui-site.js', 'ui-ask.js', 'ui-crew.js', 'crew.css', 'ui-wherenext.js', 'wherenext.css', 'look-allin.css', 'sitemap.xml', 'robots.txt']);
 const PUBLIC_DIRS = ['data', 'assets', 'trips', 'routes', 'hostels', 'guides'];
 const notFound = (res) => { res.writeHead(404, { 'Content-Type': 'text/plain', 'X-Content-Type-Options': 'nosniff' }); return res.end('Not found'); };
 function serveStatic(req, res, url) {

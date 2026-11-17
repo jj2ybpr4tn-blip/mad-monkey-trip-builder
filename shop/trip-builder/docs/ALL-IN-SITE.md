@@ -103,6 +103,29 @@ with `ALLIN_SITE '../'`, puts the redirect where the builder used to be, carries
 rebuilt from its source with this same builder inside it and locked with the key its link uses (never a new key); anywhere else it's
 kept exactly as it is. So publishing the builder can never wipe the shop, and the other way round.
 
+The preview's builder talks to the same crew backend as the site and the live builder (LEAD_ENDPOINT and STATUS_ENDPOINT on the ALL IN
+backend), the way it will at launch: a trip sent from it, and every Ask question, lands in Admin. `PREVIEW_BACKEND=none npm run
+publish-preview` keeps it a demo that sends nothing.
+
+## Ask Ewan: one button, a short form, the crew backend (ui-ask.js, extras.js)
+
+Every page of the site and the builder has ONE Ask button: in the bar on a laptop, in the corner on a phone (inside a trip page, the
+checkout or a form that covers the page, the button there). It opens a short form: a name, an email or a WhatsApp number in one box
+(`MM.askContact` reads which), and the question. It goes to the crew backend the way a trip does (`MM.askPayload`; the builder posts to
+`ASK_ENDPOINT`, or `LEAD_ENDPOINT` when that's blank, and the site to the same backend), so it lands in Admin and the crew is emailed.
+Nothing opens the guest's own email app or WhatsApp, and no personal number or address is in either.
+
+- With a trip on screen (the trip they're building, a trip page on the site, a trip they sent), the trip goes along. The guest can leave
+  it off with one tap.
+- The payload is a trip request with `type: 'question'` and `question: {text, page, trip}`. The backend saves a request only with a route
+  and at least a day, so a question with no trip carries a stand-in route (`Question, no trip yet`, 1 day) and a question about a trip has
+  `Question: ` in front of its route: Admin and the crew's email tell questions and trips apart. A question never carries a start date,
+  so it holds no beds, and a trip's link gets `q=<time>` on the end, so the same trip sent for checking a minute later isn't taken for a
+  duplicate.
+- The name on the button is `ASK_NAME` in the builder's config ("Ewan" makes "Ask Ewan") and `ASK_NAME` at the top of the site's
+  `shop.js`: change both when the team grows.
+- `WHATSAPP` and `CREW_EMAIL` in config.js are no longer used anywhere: leave them blank.
+
 ## Switching it on at launch
 
 The live copy (`CFSiteDesign/mm-squad-trips`, `public/trip-builder/`) needs two lines in its own `config.js`, then a sync:

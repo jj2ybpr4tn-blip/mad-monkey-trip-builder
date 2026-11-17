@@ -21,7 +21,7 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 |---|---|
 | **Type where you're going** | The home page opens with one question, **"Where to?"**: type a city, a country or something to do (`hanoi`, `viet`, `kayak`, `bali`, `angkor`) and pick. It starts a trip, drafts a country, or adds a place or a tour in the spot on the journey where it adds the least travel. **Best order** re-sequences the stops to cut the travel. See [docs/PLANNING.md](docs/PLANNING.md). |
 | **Plan in stages** | Plan Vietnam now, decide the rest once you're there. **Plan my next stage** starts from where you are, adds the journey from there and never suggests a place you've been; **log in with your email** (a link, no password) on any device. Each stage is its own trip for the crew, marked Stage 2. |
-| **Ask Ewan** | "Plan it here. A real human checks it before anything is booked." on every screen, with an **Ask Ewan** button that opens WhatsApp with the trip in the message. |
+| **Ask Ewan** | "Plan it here. A real human checks it before anything is booked." on every screen, and ONE **Ask Ewan** button (in the bar, or the corner on a phone) that opens a short form: name, email or WhatsApp, the question. It goes to the crew backend like a trip does, with the trip on screen, so it lands in Admin; nothing opens the guest's email app or WhatsApp. Every edit in the builder (a stop, a night, a tour) offers Undo, and each stop shows a couple of tours you can add with one tap. See [docs/ALL-IN-SITE.md](docs/ALL-IN-SITE.md). |
 | **Map builder** | All 23 Mad Monkey hostels (+ Ho Chi Minh City as a partner stop) as pins. Tap to add. Animated route, mode + time on every leg, zoom by country. |
 | **Transport engine** | ~60 ground / sea links + ~35 flights, shortest-path routed. Every leg offers *Smart pick / Cheapest / Fastest*; overnight buses replace a bed night; slow boats add nights. |
 | **152 activities** | Real Mad Monkey tours with live prices, photos and deep links to the booking page. Scheduled onto the right weekday when a start date is set. |
@@ -65,7 +65,7 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 (see **[docs/SERVER.md](docs/SERVER.md)**). It turns on, with no config:
 
 - **Human review + bed holds.** Requests land in `/admin` with a ready-made **bed-hold sheet** (hostel, check-in, check-out). The crew marks them *Checking / Ready / Approved / Can't do it*, writes the guest a note and pastes a payment link, and the guest's status page updates.
-- **Live prices, and trips marked full,** edited by the crew (guests never see a count of spots left); real fares replace the built-in estimates.
+- **Live prices + spots left** edited by the crew; real fares replace the built-in estimates.
 - **Real guest reviews** per hostel, **real "guests go next"** (paste a CSV of stays), **group mode** across devices, and a **funnel** view.
 
 **The other way: your own backend.** Leave `API_BASE` blank and set `LEAD_ENDPOINT` etc. in [config.js](config.js) to endpoints you build. Contracts: [docs/LEADS.md](docs/LEADS.md), [docs/GROUP.md](docs/GROUP.md).
