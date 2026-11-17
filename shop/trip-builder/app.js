@@ -50,7 +50,14 @@
     var el = document.getElementById('humanbar'); if (!el) return;
     el.innerHTML = '<span class="humanbar__ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M7 12.5l3.4 3.4L17 8.6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
       '<p class="humanbar__t"><b>' + esc(HUMAN.line) + '</b> <span class="humanbar__more">' + esc(HUMAN.more) + '</span></p>' + askLink('humanbar__ask');
+    syncAskBar();
   }
+  // The phone's bottom bar (ui-ask.js makes it) on screens without the trip's own bar: Ask Ewan, and "Your trip" once there is one (not mid-quiz).
+  function syncAskBar() {
+    var go = document.getElementById('abar-go'); if (!go) return;
+    go.hidden = !(app.state.items.length && app.view !== 'quiz');
+  }
+  app.syncAskBar = syncAskBar;
   var plural = function (n, w, ws) { return n + ' ' + (n === 1 ? w : (ws || w + 's')); };
   app.revise = null;      // set while a guest is changing a trip they already sent (ui-review.js): { ref, k, base, ... }
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
@@ -336,7 +343,7 @@
 
   function renderQuiz() {
     var q = app.quiz, s = QSTEPS[q.step], a = q.a;
-    var prog = QSTEPS.map(function (_, i) { return '<i class="' + (i < q.step ? 'on' : i === q.step ? 'cur' : '') + '"></i>'; }).join('');
+    var prog = QSTEPS.map(function (_, i) { return '<i class="' + (i < q.step ? 'on' : i === q.step ? 'is-now' : '') + '"></i>'; }).join('');
     var body = '';
     if (s.type === 'single') {
       var opts = s.k === 'start' ? MM.GATEWAYS.map(function (g) { return { v: g.id, t: g.n, s: g.sub }; }) : s.k === 'budget' ? BUDGETS : CREWS;
@@ -405,7 +412,7 @@
   function renderBuilder() {
     root.innerHTML = '<div class="bld"><section class="bmap" id="bmap" aria-label="Map"></section><section class="bpanel" id="bpanel" aria-label="Your trip"></section></div><div class="mbar" id="mbar"></div>';
     var box = $('#bmap'), mapHost = document.createElement('div'); mapHost.style.cssText = 'position:absolute;inset:0'; box.appendChild(mapHost);
-    box.insertAdjacentHTML('beforeend', '<div class="bmap__regions" id="regions"></div><div class="bmap__stats" id="mstats"></div><div class="bmap__hint"><span class="pill pill--sm">Tap a hostel to add it</span></div><div class="bmap__ctl"><button type="button" class="bmap__list" data-act="maplist" aria-label="Show the hostels as a list">List</button><button type="button" data-act="mapzoom" data-f="1.5" aria-label="Zoom in">+</button><button type="button" data-act="mapzoom" data-f="0.67" aria-label="Zoom out">−</button><button type="button" class="fit" data-act="mapfit" aria-label="Fit the map to my trip">FIT</button></div>');
+    box.insertAdjacentHTML('beforeend', '<div class="bmap__regions" id="regions"></div><div class="bmap__stats" id="mstats"></div><div class="bmap__hint"><span class="pill pill--sm">Tap a hostel to add it</span></div><div class="bmap__ctl"><button type="button" class="bmap__list" data-act="maplist" aria-label="Show the hostels as a list">List</button><button type="button" data-act="mapzoom" data-f="1.5" aria-label="Zoom in">+</button><button type="button" data-act="mapzoom" data-f="0.67" aria-label="Zoom out">−</button><button type="button" class="fit" data-act="mapfit" aria-label="Fit the map to my trip">FIT</button><button type="button" class="bmap__replay" data-act="mapreplay" aria-label="Replay the route" title="Replay the route"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg></button></div><button type="button" class="bmap__skip" data-act="mapskip" aria-label="Skip to the whole route">Skip <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg></button>');
     MM.BuilderMap.mount(mapHost, { pin: onPin, leg: onLegTap });
     refreshBuilder({ instant: true });
   }
@@ -434,7 +441,8 @@
     $('#regions').innerHTML = '<button type="button" data-focus="" aria-pressed="' + !app.focus.length + '">Everywhere</button>' + Object.keys(MM.COUNTRIES).map(function (c) { return '<button type="button" data-focus="' + c + '" aria-pressed="' + (app.focus.indexOf(c) > -1) + '">' + MM.COUNTRIES[c].n + '</button>'; }).join('');
     var t = plan.totals;
     $('#mstats').innerHTML = t.days ? '<span class="chip"><b>' + t.days + '</b> days</span><span class="chip"><b>' + t.stops + '</b> stops</span><span class="chip"><b>' + plan.countries.length + '</b> ' + (plan.countries.length === 1 ? 'country' : 'countries') + '</span><span class="chip"><b>' + plan.km.toLocaleString('en-GB') + '</b> km</span>' : '';
-    $('#mbar').innerHTML = t.days ? '<div><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total' + (t.flights ? ' · flights not included' : '') + '</span></div><button class="btn btn--sm btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes' : 'Hold my beds') + '</button>' : '<div><b>' + (app.state.from ? 'Where next?' : 'Where to?') + '</b><span>type a place, or tap the map</span></div><button class="btn btn--sm btn--pink" data-act="focussearch" type="button">Search</button>';
+    // on a phone the bar also carries Ask Ewan, next to the main button, as on the ALL IN site: nothing floats over the page
+    $('#mbar').innerHTML = t.days ? '<div class="mbar__sum"><b>~' + money(t.total) + '</b><span>' + t.days + ' days · est. total' + (t.flights ? ' · flights not included' : '') + '</span></div>' + askLink('btn btn--sm btn--paper mbar__ask') + '<button class="btn btn--sm btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes' : 'Hold my beds') + '</button>' : '<div class="mbar__sum"><b>' + (app.state.from ? 'Where next?' : 'Where to?') + '</b><span>type a place, or tap the map</span></div>' + askLink('btn btn--sm btn--paper mbar__ask') + '<button class="btn btn--sm btn--pink" data-act="focussearch" type="button">Search</button>';
     MM.BuilderMap.update(plan, app.state, app.focus);
     if (!(opts && opts.instant)) window.scrollTo(0, y);
   }
@@ -612,7 +620,7 @@
     var mx = Math.max.apply(0, av), best = [], thr = mx >= 2.6 ? 2.6 : mx - 0.15; av.forEach(function (v, m) { if (v >= thr) best.push(U.MONTHN[m]); });
     var note = cur != null && av[cur] < 2.1 ? 'Your dates are in the wet or rough-sea season for this route.' : (cur != null && av[cur] >= 2.6 ? 'Your dates are prime season for this route.' : '');
     return '<div class="seas-wrap"><div class="over" style="color:var(--ink-dim-on-black)">Best time for this route</div><div class="seas" role="img" aria-label="Best months for this route: ' + best.join(', ') + '">' +
-      av.map(function (v, m) { var k = v >= 2.6 ? 3 : v >= 2.1 ? 2 : 1; return '<i class="s' + k + (cur === m ? ' cur' : '') + '" title="' + U.MONTHN[m] + '"><u style="height:' + (k === 3 ? 100 : k === 2 ? 62 : 28) + '%"></u><span>' + U.MONTHN[m][0] + '</span></i>'; }).join('') + '</div><div class="fine" style="color:var(--ink-dim-on-black)">' + (best.length < 12 ? 'Best: ' + best.slice(0, 5).join(', ') + '. ' : '') + note + '</div></div>';
+      av.map(function (v, m) { var k = v >= 2.6 ? 3 : v >= 2.1 ? 2 : 1; return '<i class="s' + k + (cur === m ? ' is-now' : '') + '" title="' + U.MONTHN[m] + '"><u style="height:' + (k === 3 ? 100 : k === 2 ? 62 : 28) + '%"></u><span>' + U.MONTHN[m][0] + '</span></i>'; }).join('') + '</div><div class="fine" style="color:var(--ink-dim-on-black)">' + (best.length < 12 ? 'Best: ' + best.slice(0, 5).join(', ') + '. ' : '') + note + '</div></div>';
   }
   function timelineHTML(pl) {
     var out = '';
@@ -1021,6 +1029,9 @@
       case 'usereco': { var rl = recos(); if (rl[i]) { applyReco(rl[i]); refreshBuilder(); MM.BuilderMap.reset(); } break; }
       case 'mapzoom': MM.BuilderMap.zoom(+el.getAttribute('data-f')); break;
       case 'mapfit': MM.BuilderMap.reset(); break;
+      case 'mapreplay': MM.BuilderMap.replay(); track('route_replay'); break;
+      case 'abargo': go('build'); break;
+      case 'mapskip': MM.BuilderMap.skip(); break;
       case 'scroll': { var t = document.getElementById(el.getAttribute('data-to')); if (t) t.scrollIntoView({ behavior: 'smooth' }); break; }
       case 'close': closeModal(); break;
       case 'reloadpage': location.reload(); break;

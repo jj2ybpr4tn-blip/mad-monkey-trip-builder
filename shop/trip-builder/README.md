@@ -115,6 +115,7 @@ Share links stay valid when you edit data: activities are referenced by short co
 index.html          shell            config.js     go-live switches
 app.js              views + events   logic.js      routing, plan, costs, matcher, quiz, share
 ui-map.js           SVG map          ui-story.js   story-card canvas
+route-film.js       the moving map: the route draws itself, leg by leg (the builder's map and the ALL IN site's maps)
 styles.css          brand system     scripts/build-map.mjs   regenerates data/map-data.js (Natural Earth)
 data/               places, activities, legs, trips, media, map-data
 assets/logo/        the official wordmarks (downloaded, never redrawn) + favicon
@@ -124,10 +125,10 @@ docs/PAYMENTS.md    free to send, approval, then pay your way (now / a week befo
 docs/EDITING.md     editing your trip, the blank start + walk-around, changing a trip after sending it
 docs/PLANNING.md    search ("Where to?"), best order, plan in stages + log in, Ask Ewan
 docs/FIND-YOUR-CREW.md  "Find your crew": opting in, how matches work, the crew console tab, privacy
-docs/ALL-IN-SITE.md the builder inside the new ALL IN site: where it lives, the link the site sends, the site's bar and menu, publishing, launch
+docs/ALL-IN-SITE.md the builder inside the new ALL IN site: where it lives, the link the site sends, the site's bar and menu, the moving map, publishing, launch
 docs/REVIEW.md      the big review (Oct 2026): what was found, what was fixed, what is still open
 scripts/            lint, audit-data, make-thumbs, mirror-photos, build-pages, sync-allin, publish-preview (the ALL IN site preview with the builder inside it, one command; deploy-demo runs it too), seed-crew-demo
-test/               logic + fuzz tests (node, no dependencies); ui-smoke.js and ui-lint.js run in a browser tab
+test/               logic + fuzz + route film tests (node, no dependencies); ui-smoke.js, ui-lint.js and ui-film.js run in a browser tab
 ```
 
 ## Brand notes

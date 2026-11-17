@@ -161,7 +161,7 @@ main{flex:1;display:flex;flex-direction:column}
 .quiz{flex:1;padding:clamp(20px,4vw,48px) 0 var(--s-8)}
 .qprog{display:flex;gap:6px;margin-bottom:var(--s-5)}
 .qprog i{flex:1;height:10px;background:var(--paper);border:var(--bw) solid var(--black)}
-.qprog i.on{background:var(--pink)} .qprog i.cur{background:var(--lime)}
+.qprog i.on{background:var(--pink)} .qprog i.is-now{background:var(--lime)}
 .qbox{max-width:880px}
 .qbox .over{color:var(--pink);-webkit-text-stroke:0;background:var(--black);display:inline-block;padding:3px 10px;color:var(--lime)}
 .qbox h1,.qbox h2{font-size:clamp(38px,7vw,84px);margin:var(--s-3) 0 var(--s-2)}
@@ -282,7 +282,7 @@ main{flex:1;display:flex;flex-direction:column}
 .stopc{background:var(--paper);border:var(--bw) solid var(--black);box-shadow:6px 6px 0 var(--black);position:relative}
 .stopc__head{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:var(--s-3);padding:var(--s-3);align-items:center}
 .stopc__thumb{width:76px;height:76px;border:var(--bw) solid var(--black);position:relative;background:var(--black)}
-.stopc__thumb .photo{position:absolute;inset:0}
+.stopc__thumb .photo{position:absolute;inset:0} .stopc__thumb.photo{overflow:visible}   /* the photo inside clips itself; the stop number sits over the corner, not cut off by it */
 .stopc__num{position:absolute;left:-1px;top:-1px;background:var(--lime);border:var(--bw) solid var(--black);font-weight:900;font-size:13px;min-width:26px;height:26px;display:grid;place-items:center;transform:translate(-7px,-7px)}
 .stopc h3{font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:-.02em;line-height:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .stopc__sub{font-size:12.5px;font-weight:500;color:var(--ink-dim);margin-top:3px}
@@ -479,6 +479,19 @@ main{flex:1;display:flex;flex-direction:column}
 .bmap__ctl button:hover{background:var(--paper);color:var(--black)}
 .bmap__ctl button.fit{font-size:10px;letter-spacing:.06em}
 @media (max-width:1000px){.bmap__ctl{top:52px;right:8px}.bmap__ctl button{width:34px;height:34px}}
+/* the route film (route-film.js): the trip draws itself, a vehicle rides each leg; Replay in the map's buttons, Skip while it plays */
+.bmap{--rf-veh-bg:var(--black);--rf-veh:var(--lime);--rf-veh-ring:var(--paper);--rf-line:var(--lime);--rf-case:var(--black)}
+.bmap__ctl .bmap__replay{display:none}
+.bmap.rf-can .bmap__ctl .bmap__replay{display:inline-flex;align-items:center;justify-content:center}
+.bmap button svg{position:static;inset:auto;width:auto;height:auto;display:inline-block;flex:none}   /* .bmap svg is the map itself, not a button's icon */
+.bmap__skip{display:none;position:absolute;left:50%;top:60px;transform:translateX(-50%);z-index:4;align-items:center;gap:6px;min-height:40px;padding:8px 16px;border-radius:9999px;background:var(--black);color:var(--paper);border:2px solid var(--paper);font:inherit;font-weight:800;font-size:14px;cursor:pointer;white-space:nowrap}
+.bmap__skip:hover{background:var(--paper);color:var(--black)}
+.bmap.rf-on .bmap__skip{display:inline-flex}
+.bmap.rf-on .bmap__hint{display:none}
+/* a laptop's map can run past the bottom of the screen, so Skip sits up top; on a phone or tablet the map's foot is in view: Skip takes the stats' place there while it plays */
+@media (max-width:1000px){.bmap__skip{left:auto;top:auto;transform:none;right:8px;bottom:8px;min-height:38px;padding:6px 14px;font-size:13px}.bmap.rf-on .bmap__stats{visibility:hidden}}
+@media (prefers-reduced-motion:reduce){.bmap__ctl .bmap__replay,.bmap.rf-on .bmap__skip{display:none!important}}
+@media (pointer:coarse){.bmap__skip{min-height:44px}}
 
 /* ---------- v2 additions ---------- */
 .humans{background:var(--lime);color:var(--black);border:var(--bw) solid var(--black);padding:9px 12px;font-size:13px;font-weight:500;line-height:1.4;margin-top:var(--s-4)}
@@ -492,7 +505,7 @@ main{flex:1;display:flex;flex-direction:column}
 .seas i{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-style:normal;position:relative}
 .seas u{display:block;width:100%;background:#3a3a3a;text-decoration:none} .seas .s3 u{background:var(--lime)} .seas .s2 u{background:#8a8a3a} .seas .s1 u{background:var(--pink)}
 .seas span{position:absolute;bottom:-15px;font-size:9px;font-weight:700;color:var(--ink-dim-on-black)}
-.seas{margin-bottom:20px} .seas .cur u{outline:2px solid var(--paper);outline-offset:1px} .seas .cur span{color:var(--paper)}
+.seas{margin-bottom:20px} .seas .is-now u{outline:2px solid var(--paper);outline-offset:1px} .seas .is-now span{color:var(--paper)}   /* not .cur: that's the currency picker's class */
 .tl{display:flex;align-items:stretch;border:var(--bw) solid var(--black);background:var(--paper);min-height:48px;box-shadow:5px 5px 0 var(--black);overflow:hidden}
 .tl__seg{min-width:0;border:0;border-right:var(--bw) solid var(--black);padding:6px 8px;text-align:left;background:var(--bone);display:flex;flex-direction:column;justify-content:center;line-height:1.1}
 .tl__seg:last-child{border-right:0}
@@ -691,11 +704,13 @@ main{flex:1;display:flex;flex-direction:column}
 .aibar__t b{display:block;font-size:clamp(22px,3vw,30px);font-weight:900;letter-spacing:-.02em;line-height:1.05}
 .aibar__where{display:block;margin-top:6px;font-size:15px;font-weight:800;line-height:1.3;color:var(--ai-amber)}
 .aibar__t p{font-size:14px;line-height:1.45;margin-top:4px;color:rgba(243,247,242,.88)}
-.aibar__back{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 22px;border-radius:9999px;background:var(--ai-amber);color:var(--ai-canopy);font-weight:800;font-size:14px;text-decoration:none;white-space:nowrap}
-.aibar__back:hover{background:#ffc566}
-.aibar__back:focus-visible{outline:3px solid var(--ai-mist);outline-offset:2px}
+.aibar__back{flex:none;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 14px;border-radius:9999px;background:transparent;color:var(--ai-mist);border:1.5px solid rgba(243,247,242,.5);font-weight:700;font-size:13px;line-height:1.2;text-decoration:none;white-space:nowrap}   /* a quiet way back: building stays the main thing */
+.aibar__back::before{content:'\2190';font-weight:800}
+.aibar__back:hover{background:rgba(243,247,242,.12);border-color:rgba(243,247,242,.8)}
+.aibar__back:focus-visible{outline:3px solid var(--ai-amber);outline-offset:2px}
+@media (max-width:560px){.aibar{padding:var(--s-4)}.aibar__back{order:-1}}   /* on a phone: a small link above the trip's name */
+@media (pointer:coarse){.aibar__back{min-height:44px}}   /* small to look at, still a full-size tap */
 .aitag{background:#0E2B26;color:#F3F7F2;border-color:#0E2B26;vertical-align:middle;margin-left:4px}
-@media (max-width:560px){.aibar{padding:var(--s-4)}.aibar__back{width:100%}}
 
 /* ---- share: link preview + meet-up check ---- */
 .ogprev{display:flex;flex-direction:column;gap:6px;margin:var(--s-3) 0}
@@ -1116,14 +1131,25 @@ body[data-view="pack"] .humanbar,body[data-view="crew"] .humanbar{display:none}
 .askf__ref{font-weight:500;margin:0} .askf__ref b{font-weight:900;font-size:1.25em;white-space:nowrap;margin-left:6px}
 .askf [aria-invalid="true"]{border-color:#D6331A!important;box-shadow:0 0 0 2px rgba(214,51,26,.25)}
 @media (max-width:560px){.askf{grid-template-columns:1fr}}
-.askfab{display:none;position:fixed;right:14px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:70;align-items:center;min-height:48px;padding:12px 20px;border-radius:9999px;border:2px solid var(--black);background:var(--lime);color:var(--black);font:inherit;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+/* On a phone, Ask Ewan sits in a bar at the bottom next to the main button, as on the ALL IN site, and the page leaves room for it: it never floats over a button.
+   On the trip itself it's in the trip's own bar (.mbar, beside Hold my beds); on every other screen in .abar, with "Your trip" once there is one. */
+.abar,.mbar__ask{display:none}
 @media (max-width:760px){
-  .askfab{display:inline-flex}
-  .humanbar__ask{display:none}                          /* one Ask button on a phone: the one in the corner */
-  body[data-view="build"] .askfab{bottom:calc(84px + env(safe-area-inset-bottom,0px))}   /* above the price bar */
-  body[data-view="pack"] .askfab,body[data-view="crew"] .askfab{display:none}
-  #toast-root{bottom:calc(76px + env(safe-area-inset-bottom,0px))}                          /* a toast (and its Undo) sits above the Ask button, never under it */
-  body[data-view="build"] #toast-root{bottom:calc(144px + env(safe-area-inset-bottom,0px))}
+  .abar{display:flex;gap:10px;align-items:stretch;position:fixed;left:0;right:0;bottom:0;z-index:60;box-sizing:border-box;min-height:calc(64px + env(safe-area-inset-bottom,0px));padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));background:var(--black);border-top:var(--bw) solid var(--lime)}
+  .abar .btn{justify-content:center;white-space:nowrap}
+  .abar__ask{flex:1 1 auto}
+  .abar__go{flex:1 1 auto}
+  .abar__go[hidden]{display:none}
+  body[data-view="build"] .abar,body[data-view="pack"] .abar,body[data-view="crew"] .abar{display:none}
+  body:not([data-view="build"]):not([data-view="pack"]):not([data-view="crew"]){padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+  .humanbar__ask{display:none}                          /* one Ask button on a phone: the one in the bar at the bottom */
+  .mbar{gap:8px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px))}
+  .mbar__sum{flex:1 1 auto;min-width:0}
+  .mbar__sum b{font-size:21px}
+  .mbar__sum span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mbar .btn{flex:none;white-space:nowrap;padding-left:14px;padding-right:14px}
+  .mbar__ask{display:inline-flex}
+  #toast-root{bottom:calc(76px + env(safe-area-inset-bottom,0px))}                          /* a toast (and its Undo) sits above the bar, never under it */
 }
-body:has(.modal) .askfab,body:has(.tour) .askfab{display:none}
-@media print{.askfab{display:none}}
+@media (max-width:360px){.mbar__sum span{display:none}.mbar .btn,.abar .btn{padding-left:12px;padding-right:12px}}
+@media print{.abar{display:none}}

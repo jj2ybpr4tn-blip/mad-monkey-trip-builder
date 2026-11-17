@@ -53,8 +53,8 @@
 :root[data-look="allin"] .btn--black{background:var(--canopy);color:var(--mist);border-color:var(--canopy)} :root[data-look="allin"] .btn--black:hover{background:var(--canopy-2)}
 :root[data-look="allin"] .btn--paper{background:#fff;color:var(--canopy);border-color:var(--line)} :root[data-look="allin"] .btn--paper:hover{background:var(--mist)}
 :root[data-look="allin"] .btn--ghost{background:transparent;border-color:currentColor} :root[data-look="allin"] .btn--ghost:hover{background:var(--canopy);color:var(--mist);border-color:var(--canopy)}
-:root[data-look="allin"] :is(.on-black,.hero,.bsum,.blockc,.miss,.bigd,.solo,.mbar) .btn--paper{background:transparent;color:var(--mist);border-color:rgba(243,247,242,.55)}
-:root[data-look="allin"] :is(.on-black,.hero,.bsum,.blockc,.miss,.bigd,.solo,.mbar) .btn--paper:hover{background:rgba(243,247,242,.12)}
+:root[data-look="allin"] :is(.on-black,.hero,.bsum,.blockc,.miss,.bigd,.solo,.mbar,.abar) .btn--paper{background:transparent;color:var(--mist);border-color:rgba(243,247,242,.55)}
+:root[data-look="allin"] :is(.on-black,.hero,.bsum,.blockc,.miss,.bigd,.solo,.mbar,.abar) .btn--paper:hover{background:rgba(243,247,242,.12)}
 :root[data-look="allin"] .srch__box .srch__in{border:0;border-radius:0}
 :root[data-look="allin"] .btn[disabled]{opacity:.45}
 :root[data-look="allin"] .pill{font-family:var(--f);border-width:1.5px;font-weight:700;letter-spacing:0;border-color:transparent}
@@ -129,6 +129,9 @@
 :root[data-look="allin"] .m-mode rect{fill:var(--canopy);stroke:var(--amber)}
 :root[data-look="allin"] .bmap__regions button,:root[data-look="allin"] .bmap__ctl button,:root[data-look="allin"] .bmap__stats .chip{background:rgba(14,43,38,.86);border:1.5px solid rgba(243,247,242,.6);color:var(--mist);letter-spacing:.02em;font-weight:700;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 :root[data-look="allin"] .bmap__regions button[aria-pressed="true"]{background:var(--amber);color:var(--canopy);border-color:var(--amber)}
+:root[data-look="allin"] .bmap__skip{background:rgba(14,43,38,.88);border:1.5px solid rgba(243,247,242,.7);color:var(--mist);font-family:var(--f);font-weight:800;font-stretch:110%}
+:root[data-look="allin"] .bmap__skip:hover{background:var(--canopy-2)}
+:root[data-look="allin"] .bmap{--rf-veh-ring:var(--mist)}
 :root[data-look="allin"] .bmap__tip{border-radius:var(--r-md);border:0;box-shadow:var(--lift)!important}
 :root[data-look="allin"] .bmap__tip b{font-weight:900;font-stretch:115%}
 :root[data-look="allin"] .bsum{background:var(--canopy);color:var(--mist)}
@@ -146,7 +149,7 @@
 :root[data-look="allin"] .tl{border-radius:var(--r-md);border-color:transparent}
 :root[data-look="allin"] .stopc{border:0}
 :root[data-look="allin"] .stopc h3{font-weight:900;font-stretch:118%;letter-spacing:-.015em}
-:root[data-look="allin"] .stopc__thumb,:root[data-look="allin"] .stopc__num{border-color:transparent;border-radius:var(--r-sm)}
+:root[data-look="allin"] .stopc__thumb,:root[data-look="allin"] .stopc__num{border-color:transparent;border-radius:var(--r-sm)} :root[data-look="allin"] .stopc__thumb .photo{border-radius:inherit}
 :root[data-look="allin"] .stopc__num{background:var(--amber);color:var(--canopy)}
 :root[data-look="allin"] .stopc__more{border-color:var(--line);background:var(--mist)}
 :root[data-look="allin"] .pick{background:var(--moon);border-color:transparent}
@@ -260,8 +263,7 @@
 @media print{.sitebar,.subnav,.sitemenu{display:none!important}}
 
 /* ---------- Ask Ewan (ui-ask.js): the form, and the button that stays in the corner on a phone ---------- */
-:root[data-look="allin"] .askfab{background:var(--canopy);color:var(--mist);border:2px solid rgba(243,247,242,.9);font-family:var(--f);font-weight:800;font-stretch:110%}
-:root[data-look="allin"] .askfab:hover{background:var(--canopy-2)}
+:root[data-look="allin"] .abar{background:rgba(14,43,38,.96);border-top:1px solid var(--line-on-dark);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 :root[data-look="allin"] .askf__trip{background:var(--mist);border:1.5px solid var(--line);border-radius:16px}
 :root[data-look="allin"] .askf__sum{background:var(--mist);border:1.5px solid var(--line);border-radius:14px}
 :root[data-site] .humanbar__ask{display:none}   /* inside the ALL IN site the Ask button is in the site's bar (or the corner, on a phone) */

@@ -91,6 +91,56 @@ characters, only addresses on the site's own origin (a `#section` of the site pa
 The bar's links go to `<ALLIN_SITE>#<section>`, and Enquire to `<ALLIN_SITE>#enquire`. The site opens on that section, or with its
 enquiry form open; the preview's locked page keeps `#trip-<id>`, `#<section>` and `#enquire` while it unlocks.
 
+## The moving map (route-film.js)
+
+The route draws itself, like a travel film's map: a line runs from stop to stop with the right vehicle on it (bus, boat, scooter or
+plane; train, van and car too), each place's dot pops in and its name fades up as the line arrives. One file, no dependencies, the
+same piece on the builder's map and the site's maps: `MMRouteFilm(map, stops, options)`.
+
+```html
+<script src="trip-builder/route-film.js"></script>   <!-- or inline it with the builder's other files -->
+```
+
+```js
+var film = MMRouteFilm(tripMapSvg, [
+  { place: 'hanoi', by: 'bus' },                                   // `by`: how you get from this stop to the next
+  { place: 'ha-giang', x: 265, y: 61, name: 'Ha Giang', by: 'scooter' },  // a place the builder doesn't know: its spot and name
+  { place: 'hoi-an' }                                              // the last stop needs no `by`
+], { loop: true });                                                // the site's trip maps: replay it while it's on screen
+```
+
+- **Stops.** `place` is a builder place id (data/places.js, when that's loaded): the film takes its spot and name from there, in the
+  builder's map projection (`MM.MAP`), which the site's maps already use. For any other place give `x, y` in the map's own units and a
+  `name`, or pass `project: function (place) { return [x, y]; }` and `name: function (place) { … }`. `by` is read loosely: plane,
+  flight, fly · bus, coach · boat, ferry, speedboat, junk · scooter, motorbike, easy rider · train · van, minivan · taxi, car, transfer,
+  tuk-tuk. Anything else is a bus.
+- **Timing.** Each leg takes 1 to 2 seconds by its length on screen, with a short pause (0.45 s) at each stop, and the whole film is
+  kept to about 24 seconds however long the trip (`speed`, `pause`, `maxTotal` change that).
+- **When it plays.** `autoplay: 'view'` (the default): the first time a third of the map is on screen; until then only the first
+  stop shows. `true`: straight away. `false`: when you call `film.play()`.
+- **Loop** (off unless asked). `loop: true`: when the route has drawn, it holds the finished route for `hold` ms (5000; anything from
+  4000 to 6000 suits), fades it and draws it again, only while the map is on screen. Off screen it waits; back on screen after the
+  hold, it plays at once. Skip stops the loop until Replay. The builder never loops: it plays once when a trip opens, on Replay, and
+  only the new leg when someone adds a stop.
+- **Replay and Skip** sit in the map's bottom-right corner (the map's parent is made `position: relative` if it isn't). Skip shows the
+  finished route at once. `controls: false` hides them: call `film.replay()` and `film.skip()` from your own buttons.
+- **Reduced motion** (the device's setting): the finished route at once. No film, no loop, no buttons.
+- **Our own style only**: no footage, fonts or sound. Colours come from CSS variables on the map or any parent: `--rf-line` (the route,
+  amber `#FFB238`), `--rf-case` (its outline, `#0E2B26`), `--rf-dot`, `--rf-name`, `--rf-halo` (the outline round names),
+  `--rf-veh-bg`, `--rf-veh`, `--rf-veh-ring`. Names use the page's font. Its own rules have no weight (`:where()`), so any rule of yours
+  on `.rf-line`, `.rf-case`, `.rf-dot`, `.rf-name`, `.rf-veh` or `.rf-btn` wins.
+- **Let the film draw the route.** Leave the map's own route line and stop dots out: the film draws the line, the dots and the names,
+  and keeps them when it ends. (A map that draws its own route, like the builder's, uses `keep: false` and the `onHide`, `onLeg`,
+  `onArrive` and `onEnd` callbacks to show its own pieces as the film reaches them.)
+- It adds one small `<style id="rf-style">`. If the page's Content-Security-Policy blocks inline styles, put `MMRouteFilm.CSS` in your
+  stylesheet and give that `<link>` or `<style>` the id `rf-style`, and the film won't add its own.
+
+It returns `{ play(), replay(), skip(), set(stops, how), destroy(), playing, looping }`. `set(stops)` is for a trip that changed: only
+what's new draws (`'all'` plays the lot, `'none'` just shows it). Call `destroy()` before throwing the map away.
+
+Tests: `node test/route-film.test.js` (in `npm test`: vehicles, timing, which legs draw) and, in a tab on the builder,
+`await import('/test/ui-film.js?' + Date.now()); await __film()` (plays, loops only on screen, Skip, Replay, reduced motion).
+
 ## Publishing the preview: one command for both
 
 ```
@@ -109,8 +159,9 @@ publish-preview` keeps it a demo that sends nothing.
 
 ## Ask Ewan: one button, a short form, the crew backend (ui-ask.js, extras.js)
 
-Every page of the site and the builder has ONE Ask button: in the bar on a laptop, in the corner on a phone (inside a trip page, the
-checkout or a form that covers the page, the button there). It opens a short form: a name, an email or a WhatsApp number in one box
+Every page of the site and the builder has ONE Ask button: in the bar on a laptop, and on a phone in the bar along the bottom of the
+screen, as on the site (while building, next to **Hold my beds**; elsewhere next to **Your trip** once there is one; inside a trip page,
+the checkout or a form that covers the page, the button there). Nothing floats over other buttons. It opens a short form: a name, an email or a WhatsApp number in one box
 (`MM.askContact` reads which), and the question. It goes to the crew backend the way a trip does (`MM.askPayload`; the builder posts to
 `ASK_ENDPOINT`, or `LEAD_ENDPOINT` when that's blank, and the site to the same backend), so it lands in Admin and the crew is emailed.
 Nothing opens the guest's own email app or WhatsApp, and no personal number or address is in either.

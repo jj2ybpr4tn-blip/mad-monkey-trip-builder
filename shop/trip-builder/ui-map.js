@@ -49,6 +49,7 @@
   MM.routePx = routePx;
 
   function arc(a, b, bend) {
+    if (r.MMRouteFilm) return r.MMRouteFilm.arc(a, b, bend);                       // route-film.js: the film's line lies exactly on this one
     var dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy);
     if (d < 1) return { d: 'M' + a[0] + ' ' + a[1], mid: a, len: 0 };
     var nx = -dy / d, ny = dx / d; if (ny > 0) { nx = -nx; ny = -ny; }          // bulge upward
@@ -115,9 +116,12 @@
   /* ============================================================
      BUILDER MAP — interactive
      ============================================================ */
+  var BM_PLAYED = {};
   var BM = MM.BuilderMap = (function () {
-    var box, svg, gRoute, gCl, gPins, tip, vb = null, anim, scale = 1, handlers = {}, drawn = {}, focus = [], lastPlan = null, manual = false, selLeg = null,
-      st = {}, ptrs = {}, moved = false, clPool = [], lastKey = '';
+    var box, svg, gRoute, gCl, gPins, tip, vb = null, anim, scale = 1, handlers = {}, focus = [], lastPlan = null, manual = false, selLeg = null,
+      st = {}, ptrs = {}, moved = false, clPool = [], lastKey = '',
+      film = null, fStops = [], fPlaces = null, segEls = [], routeSig = '', pend = { legs: {}, places: {} };
+    var played = BM_PLAYED;                                                          // routes whose film has played on this page, so a trip only plays once a visit
 
     function el(name, attrs, parent) { var e = document.createElementNS(NS, name); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
     function size() { var b = box.getBoundingClientRect(); return { w: Math.max(200, b.width), h: Math.max(200, b.height) }; }
@@ -161,7 +165,33 @@
       svg.addEventListener('pointerdown', onDown); svg.addEventListener('wheel', onWheel, { passive: false });
       window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp); window.removeEventListener('resize', onResize);
       window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp); window.addEventListener('resize', onResize);
-      vb = null; drawn = {}; lastPlan = null; manual = false; selLeg = null; lastKey = '';
+      vb = null; lastPlan = null; manual = false; selLeg = null; lastKey = '';
+      // the route film: draws a trip leg by leg over the map, then hands each leg and stop back to the map's own
+      if (film) film.destroy();
+      film = r.MMRouteFilm ? r.MMRouteFilm(svg, [], { autoplay: false, loop: false, controls: false, labels: false, dots: false, keep: false, lineClass: 'm-route', caseClass: 'm-case', under: gCl,
+        scale: function () { return scale; }, onHide: filmHide, onLeg: filmLeg, onArrive: filmArrive, onEnd: filmEnd }) : null;
+      fStops = []; fPlaces = null; segEls = []; routeSig = ''; pend = { legs: {}, places: {} };
+    }
+    function wrap() { return box && box.parentElement; }
+    function hideEl(e) { if (e) { e.style.transition = 'none'; e.style.opacity = '0'; } }
+    function showEl(e) { if (e) { e.style.transition = ''; e.style.opacity = ''; } }
+    function filmHide(legs, stops) {
+      pend = { legs: {}, places: {} };
+      legs.forEach(function (i) { pend.legs[i] = 1; hideEl(segEls[i]); });
+      stops.forEach(function (i) { var p = fStops[i] && fStops[i].place; if (!p || !st[p]) return; pend.places[p] = 1; hideEl(st[p].el); });
+      var w = wrap(); if (w) w.classList.add('rf-on');
+    }
+    function filmLeg(i) { delete pend.legs[i]; showEl(segEls[i]); }
+    function filmArrive(i) { var p = fStops[i] && fStops[i].place; if (!p) return; delete pend.places[p]; if (st[p]) showEl(st[p].el); }
+    function filmEnd() {
+      Object.keys(pend.legs).forEach(function (i) { showEl(segEls[i]); }); Object.keys(pend.places).forEach(function (p) { if (st[p]) showEl(st[p].el); });
+      pend = { legs: {}, places: {} }; var w = wrap(); if (w) w.classList.remove('rf-on');
+    }
+    // how a leg inside an ALL IN trip travels (the trip doesn't say): the builder's own best route between the two
+    var modeCache = {};
+    function blockMode(a, b) {
+      var k = a + '>' + b; if (modeCache[k]) return modeCache[k];
+      var o = MM.legOptions ? MM.legOptions(a, b) : []; return (modeCache[k] = (o[0] && o[0].main) || 'bus');
     }
     function onResize() { if (!box || !box.isConnected) return; if (manual && vb) { vb.h = vb.w / aspect(); setView(vb); } else refit(true); }
 
@@ -287,39 +317,59 @@
       Array.prototype.forEach.call(svg.querySelectorAll('.m-land'), function (p) { p.classList.toggle('dim', !inFocus(p.getAttribute('data-c'))); });
       Array.prototype.forEach.call(svg.querySelectorAll('.m-lbl'), function (t) { t.style.display = inFocus(t.getAttribute('data-c')) ? '' : 'none'; });
       // route
-      var now = {}; gRoute.innerHTML = '';
       var path = []; if (plan.arrival) path.push({ p: plan.arrival.from, block: false });      // a later stage starts from where they are
       plan.segs.forEach(function (s) { if (s.kind === 'allin') s.trip.stops.forEach(function (x) { path.push({ p: x.p, block: true }); }); else path.push({ p: s.p, block: false }); });
       var legByFrom = {}; plan.legs.forEach(function (l) { legByFrom[l.from + '>' + l.to] = l; });
+      var legsNow = [], stopsNow = [];
       for (var i = 1; i < path.length; i++) {
         var a = path[i - 1].p, b = path[i].p; if (a === b) continue;
-        var A = pp(a), B = pp(b), c = arc(A, B), k2 = a + '>' + b, blk = path[i].block && path[i - 1].block, isNew = !drawn[k2]; now[k2] = 1;
-        var sg = el('g', { 'class': 'm-seg' + (inFocus(MM.PLACES[a].c) && inFocus(MM.PLACES[b].c) ? '' : ' m-faded') + (selLeg === k2 ? ' on' : ''), 'data-key': k2 }, gRoute);
-        el('path', { 'class': 'm-case', d: c.d, 'data-w': 10 }, sg);
-        var rp = el('path', { 'class': 'm-route' + (isNew ? ' m-draw' : ''), d: c.d, 'data-w': 4.6, style: blk ? 'stroke:#ff01aa' : '' }, sg);
-        el('path', { 'class': 'm-hit', d: c.d, 'data-w': 28 }, sg);
-        if (isNew) { rp.style.setProperty('--len', c.len * 1.4); rp.style.strokeDasharray = c.len * 1.4; }
-        var leg = legByFrom[k2];
-        if (leg || blk) {
-          var main = leg ? leg.chosen.main : 'bus', label = leg ? MM.util.hoursLabel(leg.h) : 'ALL IN';
+        var k2 = a + '>' + b, blk = path[i].block && path[i - 1].block, leg = legByFrom[k2], faded = !(inFocus(MM.PLACES[a].c) && inFocus(MM.PLACES[b].c));
+        legsNow.push({ a: a, b: b, k2: k2, blk: blk, leg: leg, faded: faded, main: leg ? leg.chosen.main : blk ? blockMode(a, b) : 'bus' });
+      }
+      legsNow.forEach(function (l, j) { if (!j) stopsNow.push({ place: l.a }); stopsNow[j].by = l.main; stopsNow[j].color = l.blk ? '#ff01aa' : null; stopsNow[j].legClass = l.faded ? 'm-faded' : ''; stopsNow.push({ place: l.b }); });
+      if (!legsNow.length && path.length) stopsNow.push({ place: path[0].p });
+      var sig = legsNow.map(function (l) { return [l.k2, l.blk ? 1 : 0, l.faded ? 1 : 0, l.leg ? l.leg.chosen.main + l.leg.h + (l.leg.index == null ? '' : '#' + l.leg.index) : ''].join(':'); }).join('|') + '/' + selLeg;
+      if (sig !== routeSig) {
+        routeSig = sig; gRoute.innerHTML = ''; segEls = [];
+        legsNow.forEach(function (lg) {
+          var c = arc(pp(lg.a), pp(lg.b)), k2 = lg.k2, leg = lg.leg, blk = lg.blk;
+          var sg = el('g', { 'class': 'm-seg' + (lg.faded ? ' m-faded' : '') + (selLeg === k2 ? ' on' : ''), 'data-key': k2 }, gRoute); segEls.push(sg);
+          el('path', { 'class': 'm-case', d: c.d, 'data-w': 10 }, sg);
+          el('path', { 'class': 'm-route', d: c.d, 'data-w': 4.6, style: blk ? 'stroke:#ff01aa' : '' }, sg);
+          el('path', { 'class': 'm-hit', d: c.d, 'data-w': 28 }, sg);
+          if (leg || blk) {
+            var main = lg.main, label = leg ? MM.util.hoursLabel(leg.h) : 'ALL IN';
           var g2 = el('g', { 'class': 'm-mode', 'data-pos': c.mid[0].toFixed(1) + ',' + c.mid[1].toFixed(1) }, sg);
           var w = Math.max(46, 34 + label.length * 8);
           el('rect', { x: -w / 2, y: -12, width: w, height: 24, rx: 12 }, g2);
           var ic = el('path', { d: ICON[main] || ICON.bus, transform: 'translate(' + (-w / 2 + 6) + ' -8) scale(.66)' }, g2);
           var tx = el('text', { x: -w / 2 + 25, y: 1 }, g2); tx.textContent = label;
-          if (blk) { g2.querySelector('rect').setAttribute('style', 'stroke:#ff01aa'); ic.setAttribute('style', 'fill:#ff01aa'); }
-        }
-        (function (key, lg) { sg.addEventListener('click', function (e) { e.stopPropagation(); if (moved) return; selectLeg(key); handlers.leg && handlers.leg(key, lg ? lg.index : null); }); })(k2, leg);
+            if (blk) { g2.querySelector('rect').setAttribute('style', 'stroke:#ff01aa'); ic.setAttribute('style', 'fill:#ff01aa'); }
+          }
+          (function (key, lgx) { sg.addEventListener('click', function (e) { e.stopPropagation(); if (moved) return; selectLeg(key); handlers.leg && handlers.leg(key, lgx ? lgx.index : null); }); })(k2, leg);
+        });
+        Object.keys(pend.legs).forEach(function (j) { hideEl(segEls[j]); });                 // a film still drawing keeps its legs hidden
       }
-      drawn = now;
-      if (selLeg && !now[selLeg]) selLeg = null;
+      if (selLeg && !legsNow.some(function (l) { return l.k2 === selLeg; })) selLeg = null;
       if (placesChanged && manual) manual = false;                // a new stop should come into view
       applyScale();
       if (!vb) refit(true); else if (keyChanged || !manual) refit(false);
+      // the film: the whole route when a trip opens (once a visit), only the new legs when a stop is added, nothing for other edits
+      var places = stopsNow.map(function (x) { return x.place; }), pkey = places.join('>');
+      var w = wrap(); if (w) w.classList.toggle('rf-can', !!film && places.length > 1 && !r.MMRouteFilm.reduced());
+      if (film) {
+        var first = fPlaces === null, changed = !first && pkey !== fPlaces.join('>');
+        fStops = stopsNow;
+        if (first) { if (film.set(stopsNow, places.length > 1 && !played[pkey] ? 'all' : 'none')) played[pkey] = 1; }
+        else if (changed) { if (film.set(stopsNow, 'auto')) played[pkey] = 1; }
+        fPlaces = places;
+      }
     }
+    function replay() { if (film && fStops.length > 1) { film.set(fStops, 'all'); played[fStops.map(function (x) { return x.place; }).join('>')] = 1; } }
+    function skip() { if (film) film.skip(); }
     function selectLeg(key) { selLeg = key; if (!gRoute) return; Array.prototype.forEach.call(gRoute.querySelectorAll('.m-seg'), function (g) { g.classList.toggle('on', g.getAttribute('data-key') === key); }); }
 
-    return { mount: mount, update: update, refit: refit, zoom: zoom, reset: reset, selectLeg: selectLeg };
+    return { mount: mount, update: update, refit: refit, zoom: zoom, reset: reset, selectLeg: selectLeg, replay: replay, skip: skip, playing: function () { return !!(film && film.playing); } };
   })();
 
   if (typeof module !== 'undefined') module.exports = {};
