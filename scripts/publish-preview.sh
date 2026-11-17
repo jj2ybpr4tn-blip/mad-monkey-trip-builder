@@ -49,6 +49,14 @@ git archive HEAD | tar -x -C "$WORK/b"
   grep -q "^  ALLIN_SITE: '../'," config.js || { echo "config.js: couldn't set ALLIN_SITE to '../'." >&2; exit 3; }
   sed -i.bak 's#<html lang="en-GB" data-look="allin">#<html lang="en-GB" data-look="allin" data-site="allin">#' index.html && rm -f index.html.bak
   grep -q 'data-site="allin"' index.html || { echo "index.html: couldn't mark it as inside the site." >&2; exit 3; }
+  # The preview's builder talks to the same crew backend as the site and the live builder, the way it will at launch: a trip sent
+  # from it, and every Ask Ewan question, lands in Admin and emails the crew. (The other endpoints follow from STATUS_ENDPOINT.)
+  # PREVIEW_BACKEND=none keeps it a demo that sends nothing; PREVIEW_BACKEND=<functions URL> points it somewhere else.
+  if [ "${PREVIEW_BACKEND:-}" != none ]; then
+    BE="${PREVIEW_BACKEND:-https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1}"; BE="${BE%/}"
+    sed -i.bak "s#^  LEAD_ENDPOINT: '',#  LEAD_ENDPOINT: '$BE/trip-builder-request',#; s#^  STATUS_ENDPOINT: '',#  STATUS_ENDPOINT: '$BE/trip-builder-status',#" config.js && rm -f config.js.bak
+    grep -q "^  LEAD_ENDPOINT: '$BE/trip-builder-request'," config.js || { echo "config.js: couldn't point the builder at the crew backend." >&2; exit 3; }
+  fi
 )
 echo "Builder: built from $HEADREV for /$NAME/$BUILDER/"
 

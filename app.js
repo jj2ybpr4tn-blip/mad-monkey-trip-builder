@@ -39,28 +39,13 @@
     before: function () { return dep() ? 'before you pay the rest' : 'before you pay anything'; }
   };
   /* ---------- "Ask Ewan": a real person, one tap away, from every screen ---------- */
-  // Design it here, confirm it with a person. The bar under the header says so on every screen, and the Ask button opens WhatsApp (or email) with the trip in the message.
+  // Design it here, confirm it with a person. The bar under the header says so on every screen, and the Ask button opens a short form
+  // (ui-ask.js) that sends the question to the crew backend, with the trip on screen. No WhatsApp number or email address is used.
   var HUMAN = { line: 'Plan it here. A real human checks it before anything is booked.', more: 'Ewan and the crew read every trip, fix what needs fixing, then say yes.' };
   function askName() { return (C.ASK_NAME === undefined ? 'Ewan' : String(C.ASK_NAME || '')).trim(); }
   function askLabel() { return 'Ask ' + (askName() || 'the crew'); }
-  function askText() {                                                         // what the message says: the trip they're looking at, if there is one
-    var who = askName() || 'Mad Monkey', v = app.view, ref = /#\/trip\/(MM-[A-Z0-9]{6})/.exec(location.hash);
-    // ends on "My question: " so the guest has an obvious place to type it (people were sending the trip link with no question)
-    if (ref) return 'Hi ' + who + ', a question about my trip ' + ref[1] + '.\n\nMy question: ';
-    if (v === 'build' && app.state.items.length) { var pl = MM.plan(app.state); return 'Hi ' + who + ', a question about my trip: ' + MM.routeLine(pl) + ' (' + pl.totals.days + ' days). ' + shareLink() + '\n\nMy question: '; }
-    return 'Hi ' + who + ', I have a question before I build my trip.\n\nMy question: ';
-  }
-  function askHref() {
-    var msg = askText(), wa = String(C.WHATSAPP || '').replace(/\D/g, '');
-    if (wa) return 'https://wa.me/' + wa + '?text=' + encodeURIComponent(msg);
-    if (C.CREW_EMAIL) return 'mailto:' + C.CREW_EMAIL + '?subject=' + encodeURIComponent('A question about my trip') + '&body=' + encodeURIComponent(msg);
-    return '';
-  }
-  // A link (or, in demo with no contact set, a button that explains) in the house style. cls picks where it sits.
-  function askLink(cls) {
-    var h = askHref(), c = cls || 'btn btn--sm btn--pink';
-    return h ? '<a class="' + c + '" href="' + esc(h) + '" target="_blank" rel="noopener" data-act="askewan">' + esc(askLabel()) + '</a>' : '<button class="' + c + '" type="button" data-act="askdemo">' + esc(askLabel()) + '</button>';
-  }
+  // The button in the house style. cls picks where it sits.
+  function askLink(cls) { return '<button class="' + (cls || 'btn btn--sm btn--pink') + '" type="button" data-act="ask" data-ask-label>' + esc(askLabel()) + '</button>'; }
   function renderHumanBar() {
     var el = document.getElementById('humanbar'); if (!el) return;
     el.innerHTML = '<span class="humanbar__ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M7 12.5l3.4 3.4L17 8.6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
@@ -90,7 +75,7 @@
   function toast(msg, o) {
     var t = document.createElement('div'), m = document.createElement('span'); t.className = 'toast' + (o && o.undo ? ' toast--act' : ''); m.textContent = msg; t.appendChild(m);
     if (o && o.undo) { var b = document.createElement('button'); b.type = 'button'; b.setAttribute('data-act', 'undo'); b.textContent = 'Undo'; t.appendChild(b); }
-    while (toastRoot.children.length > 2) toastRoot.removeChild(toastRoot.firstChild);   // never more than three at once
+    while (toastRoot.firstChild) toastRoot.removeChild(toastRoot.firstChild);   // one at a time: Undo always takes back the latest change, so only the latest offers it
     toastRoot.appendChild(t); setTimeout(function () { t.remove(); }, o && o.undo ? 6500 : 2400);
   }
   function safeUri(x) { try { return decodeURIComponent(x); } catch (e) { return x; } }          // a stray % in a pasted link must not throw
@@ -319,7 +304,6 @@
       footer();
   }
   document.addEventListener('click', function (e) {
-    var a = e.target.closest && e.target.closest('a[data-act="askewan"]'); if (a) { var h = askHref(); if (h) a.setAttribute('href', h); track('ask_ewan', { where: app.view }); }
   }, true);
   // Anything this browser remembers about a person: the trip, their name and contact, and the trips they have sent (with the key that lets them change them).
   function remembers() { return !!(savedTrip() || store('mm-lead') || (store('mm-subs') || []).length || store('mm-revise')); }
@@ -329,7 +313,7 @@
     location.hash = '#/'; location.reload();
   }
   function footer() {
-    return '<footer class="foot"><div class="wrap"><p><b class="foot__human">' + esc(HUMAN.line) + '</b> ' + askLink('foot__ask') + '<br>' + (remembers() ? '<span class="forget">On a shared computer? <button class="linkbtn" data-act="forgetme" type="button">Forget my trip and details on this device</button></span><br>' : '') + 'Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (or marked est.). The crew confirms live rates ' + TERMS.before() + '. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
+    return '<footer class="foot"><div class="wrap"><p><b class="foot__human">' + esc(HUMAN.line) + '</b><br>' + (remembers() ? '<span class="forget">On a shared computer? <button class="linkbtn" data-act="forgetme" type="button">Forget my trip and details on this device</button></span><br>' : '') + 'Prices are estimates, not quotes: dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (or marked est.). The crew confirms live rates ' + TERMS.before() + '. Not included in ALL IN trips: flights, travel insurance, personal spending. Check visa rules for your passport.</p><img src="assets/logo/mad-monkey-white.png" alt="Mad Monkey" width="113" height="34"></div></footer>';
   }
 
   /* ============================================================
@@ -477,7 +461,7 @@
       '<div class="field full"><label for="fund">Food + fun fund: ' + money(s.fund) + ' a day</label><input class="range" id="fund" type="range" min="5" max="60" step="1" value="' + s.fund + '" aria-label="Daily spending money"></div>' +
       '<div class="field full"><label for="budget">Budget target: ' + (s.budget ? money(s.budget) : 'not set') + '</label><input class="range" id="budget" type="range" min="0" max="6000" step="50" value="' + (s.budget || 0) + '" aria-label="Total budget target"></div></div>' : '') +
       (items.length && s.budget ? budgetBar(t) : '') + (items.length ? seasonStrip(pl) : '') +
-      '<div class="humans humans--ask"><span><b>Checked by a real person.</b> ' + (app.revise ? 'Send my changes replaces the trip the crew is checking, so they only ever look at your latest plan.' : TERMS.box()) + '</span>' + askLink('btn btn--sm btn--pink') + '</div></div>';
+      '<div class="humans humans--ask"><span><b>Checked by a real person.</b> ' + (app.revise ? 'Send my changes replaces the trip the crew is checking, so they only ever look at your latest plan.' : TERMS.box()) + '</span></div></div>';
 
     if (plannerOn()) h += recoHTML();
 
@@ -528,7 +512,7 @@
     h += X('calendar', pl) + X('guide', pl);
     h += entryHTML(pl);
     /* CTA */
-    h += '<div class="humans humans--cta humans--ask"><span><b>A real person checks every trip.</b> ' + TERMS.cta() + '</span>' + askLink('btn btn--sm btn--pink') + '</div>' +
+    h += '<div class="humans humans--cta humans--ask"><span><b>A real person checks every trip.</b> ' + TERMS.cta() + '</span></div>' +
       '<div class="cta"><button class="btn btn--lg btn--pink" data-act="lead" type="button">' + (app.revise ? 'Send my changes to the crew' : 'Hold my beds + get it checked') + '</button><div class="cta__row"><button class="btn btn--sm btn--paper" data-act="group" type="button">Plan with mates</button><button class="btn btn--sm btn--paper" data-act="share" type="button">Share link</button><button class="btn btn--sm btn--paper" data-act="story" type="button">Story card</button><button class="btn btn--sm btn--paper" data-act="copytext" type="button">Copy for WhatsApp</button><button class="btn btn--sm btn--paper" data-act="openpack" type="button">Trip pack</button><button class="btn btn--sm btn--paper" data-act="ics" type="button">Add to calendar</button><button class="btn btn--sm btn--paper" data-act="print" type="button">Save as PDF</button><button class="btn btn--sm btn--ghost" data-act="reset" type="button">Start over</button></div>' +
       '<p class="fine">Estimates, not quotes. Dorm beds are "from" prices, transport is typical fares (flights switch to the lowest fare found once you add dates), activities are listed prices (est. where marked). The crew confirms live rates, dates and availability ' + TERMS.before() + '.</p></div>';
     return h;
@@ -705,6 +689,13 @@
       '<div class="stopc__acts" role="group" aria-label="Change ' + esc(p.n) + '"><button class="btn btn--sm btn--paper" data-act="swapat" data-i="' + i + '" type="button"><span aria-hidden="true">⇄</span> Swap place</button><button class="btn btn--sm btn--paper stopc__rm" data-act="remove" data-i="' + i + '" aria-label="Remove ' + esc(p.n) + ' from your trip" type="button"><span aria-hidden="true">×</span> Remove stop</button>' +
       '<span class="stopc__move" role="group" aria-label="Move ' + esc(p.n) + '"><span class="stopc__movelbl">Move</span><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="-1" aria-label="Move ' + esc(p.n) + ' up" title="Move up" type="button"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="iconbtn" data-act="move" data-i="' + i + '" data-d="1" aria-label="Move ' + esc(p.n) + ' down" title="Move down" type="button"' + (i === app.state.items.length - 1 ? ' disabled' : '') + '>↓</button><button class="iconbtn grip" data-grip="' + i + '" aria-label="Drag to reorder ' + esc(p.n) + '" title="Drag to reorder" type="button"></button></span></div>';
     if (chosen.length && !open) h += '<div class="stopc__picks">' + chosen.slice(0, 4).map(function (a) { return '<button class="pill pill--sm pick" type="button" data-act="dayrm" data-i="' + i + '" data-a="' + a.id + '" aria-label="Remove ' + esc(a.n) + ' from your trip" title="Remove">' + esc(a.n) + ' <b aria-hidden="true">×</b></button>'; }).join('') + (chosen.length > 4 ? '<span class="pill pill--sm pill--paper">+' + (chosen.length - 4) + ' more</span>' : '') + '</div>';
+    // one tap to add: a couple of the best things to do here that aren't in the trip yet, right on the card (the full list is under "Things to do")
+    if (!open) {
+      var picked = {}; chosen.forEach(function (a) { picked[a.id] = 1; });
+      var sugg = MM.actsAt(sg.p).filter(function (a) { return !picked[a.id] && !(a.multi && a.multi.d > 1); })
+        .sort(function (x, y) { return (y.star ? 1 : 0) - (x.star ? 1 : 0) || (x.usd == null ? 999 : x.usd) - (y.usd == null ? 999 : y.usd); }).slice(0, 2);
+      if (sugg.length) h += '<div class="stopc__picks stopc__adds">' + sugg.map(function (a) { return '<button class="pill pill--sm addpick" type="button" data-act="act" data-i="' + i + '" data-a="' + a.id + '" aria-label="Add ' + esc(a.n) + ' to your trip"><b aria-hidden="true">+</b> ' + esc(a.n) + (a.usd != null ? ' <span class="dim">' + (a.est ? '~' : '') + money(a.usd) + '</span>' : '') + '</button>'; }).join('') + '</div>';
+    }
     h += galleryStrip(p.id) + reviewLine(p.id) + X('local', sg, i);
     h += '<button class="stopc__more" data-act="toggle" data-k="acts' + i + '" aria-expanded="' + open + '" type="button"><span>Things to do at ' + esc(p.n) + '</span><span class="count"><span class="pill pill--sm pill--paper">' + chosen.length + ' picked</span><b>' + (open ? '−' : '+') + '</b></span></button>';
     if (open) h += actsPanel(sg, i);
@@ -1038,7 +1029,7 @@
         app.commit(bo.state, 'Quickest order: ' + MM.routeLine(MM.plan(bo.state)) + '. Saves about ' + hours(bo.savedH) + ' of travel' + (bo.savedUsd >= 5 ? ' and ' + money(bo.savedUsd) : '') + '.');
         break; }
       case 'focussearch': { var si = document.querySelector('#app .srch__in'); if (si) { si.scrollIntoView({ block: 'center' }); si.focus(); } break; }
-      case 'askdemo': toast('Demo: on the live site this opens a message to ' + (askName() || 'the crew') + ', with your trip already in it.'); break;
+      case 'ask': if (app.openAsk) app.openAsk(); break;
       case 'forgetme': forgetMe(); break;
       case 'cleanslate': ['mm-trip', 'mm-trip-last', 'mm-revise', 'mm-quiz', 'mm-nmoff'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }); if (app.allinClear) app.allinClear(true); location.hash = '#/'; location.reload(); break;
       /* quiz */
@@ -1068,8 +1059,8 @@
         break;
       }
       case 'nmoff': { app.nmOff[el.getAttribute('data-k')] = 1; store('mm-nmoff', app.nmOff); track('miss_no', { k: el.getAttribute('data-k') }); refreshBuilder(); break; }
-      case 'nights': mutate(function (s2) { var it = s2.items[i]; it.n = Math.max(1, Math.min(30, it.n + (+el.getAttribute('data-d')))); }); break;
-      case 'move': { var d = +el.getAttribute('data-d'), j = i + d; if (j >= 0 && j < S.items.length) mutate(function (s2) { var tmp = s2.items[i]; s2.items[i] = s2.items[j]; s2.items[j] = tmp; s2.legPick = {}; }); break; }
+      case 'nights': { var nn = 0; mutate(function (s2) { var it = s2.items[i]; it.n = nn = Math.max(1, Math.min(30, it.n + (+el.getAttribute('data-d')))); }); if (S.items[i] && S.items[i].p) toast(P[S.items[i].p].n + ': ' + plural(nn, 'night'), { undo: true }); break; }
+      case 'move': { var d = +el.getAttribute('data-d'), j = i + d; if (j >= 0 && j < S.items.length) { var mvn = S.items[i].kind === 'allin' ? 'your ALL IN trip' : P[S.items[i].p].n; mutate(function (s2) { var tmp = s2.items[i]; s2.items[i] = s2.items[j]; s2.items[j] = tmp; s2.legPick = {}; }); toast('Moved ' + mvn + (d < 0 ? ' up' : ' down'), { undo: true }); } break; }
       case 'remove': { var nm = S.items[i] ? (S.items[i].kind === 'allin' ? 'ALL IN trip' : P[S.items[i].p].n) : 'stop'; mutate(function (s2) { s2.items.splice(i, 1); s2.legPick = {}; }); toast('Removed ' + nm, { undo: true }); break; }
       case 'resume': { var sv = savedTrip(); if (sv) { app.state = sv; app.auto = false; persist(); go('build', MM.encodeState(sv)); } break; }
       case 'undo': app.undo(); { var tt = el.closest('.toast'); if (tt) tt.remove(); } break;
@@ -1079,7 +1070,7 @@
       case 'pickplace': { var pid = el.getAttribute('data-p'), sw = el.getAttribute('data-swap'), pos = +el.getAttribute('data-pos'); closeModal(); if (sw !== null && sw !== '') applyEdit([{ op: 'swap_stop', stop: +sw + 1, place: pid }]); else if (applyEdit([{ op: 'add_stop', place: pid, position: pos }])) { var nc = document.getElementById('stop' + (pos - 1)); if (nc) nc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } break; }
       case 'dayrm': applyEdit([{ op: 'remove_tour', stop: i + 1, tour: el.getAttribute('data-a') }]); break;
       case 'toggle': { var key = el.getAttribute('data-k'); app.open[key] = !app.open[key]; refreshBuilder(); break; }
-      case 'act': { var aid = el.getAttribute('data-a'); mutate(function (s2) { var it2 = s2.items[i], arr = it2.acts, ix2 = arr.indexOf(aid); if (ix2 > -1) { arr.splice(ix2, 1); if (it2.pins) { delete it2.pins[aid]; if (!Object.keys(it2.pins).length) delete it2.pins; } } else arr.push(aid); }); break; }
+      case 'act': { var aid = el.getAttribute('data-a'), had = S.items[i] && S.items[i].acts.indexOf(aid) > -1; mutate(function (s2) { var it2 = s2.items[i], arr = it2.acts, ix2 = arr.indexOf(aid); if (ix2 > -1) { arr.splice(ix2, 1); if (it2.pins) { delete it2.pins[aid]; if (!Object.keys(it2.pins).length) delete it2.pins; } } else arr.push(aid); }); if (MM.ACTS[aid]) toast((had ? 'Removed ' : 'Added ') + MM.ACTS[aid].n, { undo: true }); break; }
       case 'leg': { var lk = el.getAttribute('data-i') === 'o' ? 'o' : i; mutate(function (s2) { s2.legPick = s2.legPick || {}; s2.legPick[lk] = el.getAttribute('data-k'); }); break; }
       case 'pref': mutate(function (s2) { s2.pref = el.getAttribute('data-v'); s2.legPick = {}; }); break;
       case 'crew': mutate(function (s2) { s2.crew = Math.max(0, Math.min(8, (s2.crew || 0) + (+el.getAttribute('data-d')))); }); break;

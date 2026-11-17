@@ -168,19 +168,18 @@
         if (u.url(data.checkoutUrl, true)) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = u.url(data.checkoutUrl, true); }
         else success(rec, payload);
       })
-      .catch(function (x) { btn.disabled = false; btn.textContent = label; show((x && x.message && x.message.indexOf('HTTP') !== 0 ? x.message + ' ' : '') + (dep ? 'Nothing has been charged. ' : '') + 'Try again, or copy your plan and message the crew' + (C.CREW_EMAIL ? ' at ' + C.CREW_EMAIL : '') + '.'); });
+      .catch(function (x) { btn.disabled = false; btn.textContent = label; show((x && x.message && x.message.indexOf('HTTP') !== 0 ? x.message + ' ' : '') + (dep ? 'Nothing has been charged. ' : '') + 'Try again in a minute, or tap ' + u.askLabel() + ' and we\'ll sort it out.'); });
   }
 
   // Confirmation for demo mode (nothing sent, nothing charged) and for a hold-only send.
   function success(rec, payload) {
-    var wa = C.WHATSAPP ? 'https://wa.me/' + C.WHATSAPP + '?text=' + encodeURIComponent('Hi Mad Monkey, I just sent trip ' + rec.ref + ' for checking: ' + payload.trip.route + '. ' + rec.link) : '';
     var statusUrl = u.baseUrl() + '#/trip/' + rec.ref;
     u.openModal('<div class="modal__hd"><div><div class="over">' + (rec.demo ? 'Demo mode' : 'With the crew') + '</div><h2 class="disp">' + (rec.demo ? 'Review request ready.' : 'It\'s with the crew.') + '</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
       (rec.demo ? '<div class="demo">DEMO MODE: nothing was sent, nothing was charged and no beds were held. Set <code>LEAD_ENDPOINT</code> in config.js and this goes straight to the crew.</div>' : '') +
       '<div class="refbox"><span class="over">Your reference</span><b>' + esc(rec.ref) + '</b></div>' +
       (rec.hold ? '<p style="font-weight:600">' + (rec.demo ? 'In live mode we\'d hold your beds until ' : 'We\'re holding your beds until ') + '<b>' + fmtDT(rec.hold.until) + '</b> while a real person checks the trip.</p>' : '') + stepsHTML(rec.status) +
       (payload.findCrew ? crewNote(rec.demo) : '') +
-      '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><a class="btn btn--sm" href="#/trip/' + esc(rec.ref) + '" data-act="close">Track my trip</a>' + (wa ? '<a class="btn btn--sm btn--pink" href="' + wa + '" target="_blank" rel="noopener">' + esc(u.askLabel()) + ' on WhatsApp</a>' : '') +
+      '<div style="display:flex;gap:var(--s-2);flex-wrap:wrap"><a class="btn btn--sm" href="#/trip/' + esc(rec.ref) + '" data-act="close">Track my trip</a>' + u.ask('btn btn--sm btn--pink') +
       '<button class="btn btn--sm btn--paper" data-act="copylead" type="button">Copy review card</button><button class="btn btn--sm btn--ghost" data-act="close" type="button">Done</button></div><input type="hidden" id="statusurl" value="' + esc(statusUrl) + '"></div>');
   }
 
@@ -235,7 +234,7 @@
     u.timed(reviseEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 30000)
       .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || d.ok === false) { var e = new Error(d.error || ('Something went wrong (' + res.status + ')')); e.locked = !!d.locked; throw e; } return d; }); })
       .then(done)
-      .catch(function (e) { show(e.message + (e.locked ? '' : ' Nothing was sent. Try again, or message the crew' + (C.CREW_EMAIL ? ' at ' + C.CREW_EMAIL : '') + '.')); });
+      .catch(function (e) { show(e.message + (e.locked ? '' : ' Nothing was sent. Try again in a minute, or tap ' + u.askLabel() + '.')); });
   }
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act="reviseCancel"]'); if (!b || !A.revise) return;
@@ -303,11 +302,10 @@
         (x.status === 'approved' ? scheduleHTML(x) : '') +
         (x.hold && (x.status === 'submitted' || x.status === 'checking') ? '<div class="humans" style="background:var(--yellow)"><b>Beds held</b> until ' + fmtDT(x.hold.until) + ' while we check it.</div>' : '') +
         changeHTML(x, demo) +
-        (x.crew && x.status !== 'declined' ? '<div class="humans humans--ask" style="margin-top:0"><span><b>Find your crew is on.</b> If someone\'s on your route at the same time, ' + esc(crewWho().replace(/^The /, 'the ')) + ' messages you first. Changed your mind? Ask, and we\'ll switch it off.</span>' + u.ask('btn btn--sm btn--pink') + '</div>' : '') +
+        (x.crew && x.status !== 'declined' ? '<div class="humans humans--ask" style="margin-top:0"><span><b>Find your crew is on.</b> If someone\'s on your route at the same time, ' + esc(crewWho().replace(/^The /, 'the ')) + ' messages you first. Changed your mind? Tap ' + esc(u.askLabel()) + ' and we\'ll switch it off.</span></div>' : '') +
         (['submitted', 'checking', 'ready', 'approved'].indexOf(x.status) > -1 ? '<div class="humans humans--ask" style="margin-top:0"><span><b>Not sure where you\'re heading after this?</b> Decide once you\'re there. Come back, log in with your email, and we\'ll remember where you\'ve been, so we never suggest it twice.</span><button class="btn btn--sm btn--pink" type="button" data-act="nextstage" data-ref="' + esc(x.ref) + '">Plan my next stage</button></div>' : '') +
         '<div class="qnav"><a class="btn" href="' + esc(u.url(x.link) || '#/build') + '">Open my trip</a>' + (x.status === 'declined' ? '' : '<a class="btn btn--paper" href="' + esc(String(u.url(x.link) || '#/build').replace('#/build/', '#/pack/')) + '">Open my trip pack</a>') +
         (x.status === 'pending_payment' && x.payLink && !waiting ? '<a class="btn btn--pink" href="' + esc(u.url(x.payLink, true)) + '">Pay ' + usd(dep.amount) + ' deposit</a>' : '') +
-        (C.WHATSAPP && x.status !== 'pending_payment' ? '<a class="btn btn--paper" href="https://wa.me/' + C.WHATSAPP + '?text=' + encodeURIComponent('Hi Mad Monkey, it\'s about my trip ' + x.ref + ': ' + x.route + '. ' + u.baseUrl() + '#/trip/' + x.ref) + '" target="_blank" rel="noopener">' + esc(u.askLabel()) + ' on WhatsApp</a>' : '') +
         (ready && demo && !x.pay ? '<button class="btn btn--pink" data-act="approve" type="button">Approve plan</button>' : '') + '</div>' +
         '<p class="qerr warn" id="payerr" style="display:none;margin-top:var(--s-3)" role="alert"><i>!</i><span></span></p>' +
         (demo ? '<div class="demo" style="margin-top:var(--s-5)">DEMO: move it along to see each state. <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' + steps().map(function (s) { return '<button class="chip" data-act="demostatus" data-s="' + s.k + '" type="button">' + s.t + '</button>'; }).join('') + '</div></div>' : '') +
