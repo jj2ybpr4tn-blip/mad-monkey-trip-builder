@@ -452,57 +452,5 @@
     return v >= 50 && v <= 20000 ? Math.round(v) : 0;
   };
 
-  /* ---------------- "Ask Ewan": a question for the crew, from any page ----------------
-     A guest asks a real person something from any page of the ALL IN site or the builder: their name, ONE way to reach them
-     (an email or a WhatsApp number, typed in one box) and the question, with the trip they're looking at when there is one.
-     It goes to the crew backend the way a trip does (the builder's ASK_ENDPOINT, else LEAD_ENDPOINT: trip-builder-request on
-     the ALL IN backend), so it lands in Admin and the crew is emailed. Nothing opens the guest's own email app or WhatsApp.
-     That backend only saves a request with a route and at least one day, so a question with no trip carries a stand-in that
-     says so ("Question, no trip yet", 1 day), and a question about a trip has "Question: " in front of its route, so Admin
-     and the crew's email tell questions and trips apart. A question never carries a start date, so it holds no beds, and a
-     trip's link gets q=<time> on the end: the same trip sent for checking a minute later is a new request, not a duplicate. */
-  MM.askContact = function (raw) {
-    var s = String(raw == null ? '' : raw).trim().slice(0, 200);
-    if (!s) return { err: 'empty' };
-    if (s.indexOf('@') > -1) return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/.test(s) ? { via: 'email', email: s, whatsapp: '' } : { err: 'email' };
-    if (/[^\d\s+().\-\/]/.test(s)) return { err: 'contact' };
-    var intl = /^(\+|00)/.test(s), digits = s.replace(/\D/g, '').replace(/^00/, '');
-    if (digits.length < 8 || digits.length > 15) return { err: 'whatsapp' };
-    if (!intl && digits.charAt(0) === '0') return { err: 'country' };
-    return { via: 'whatsapp', email: '', whatsapp: '+' + digits };
-  };
-  MM.askPayload = function (o) {
-    o = o || {};
-    var line = function (v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n); };
-    var c = MM.askContact(o.contact), name = line(o.name, 60);
-    var msg = String(o.message == null ? '' : o.message).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 1500);
-    if (c.err || !name || !msg) return null;
-    var where = line(o.page, 160), tripName = line(o.tripName, 120), tripLine = line(o.tripLine, 300);
-    var reach = c.via === 'whatsapp' ? 'WhatsApp ' + c.whatsapp : 'Email ' + c.email;
-    var contact = { name: name, via: c.via, email: c.email, whatsapp: c.whatsapp, from: '', partySize: Math.max(1, Math.min(20, Math.round(+o.people) || 1)), dates: 'open',
-      notes: ('Question' + (tripName ? ' about ' + tripName : '') + ': ' + msg + (where ? '\n\nAsked from: ' + where : '')).slice(0, 1900), consent: true };
-    var head = ['QUESTION FOR THE CREW', name + ' · ' + reach, '', 'THEIR QUESTION', msg];
-    if (tripName || tripLine) head.push('', 'ABOUT', [tripName, tripLine].filter(Boolean).join('\n'));
-    if (where) head.push('', 'ASKED FROM', where);
-    var out, pl = o.plan;
-    if (o.state && pl && pl.places && pl.places.length && pl.totals && pl.totals.days >= 1) {
-      var link = String(o.link || '');
-      if (link && link.indexOf('#/build/') > -1) link += '&q=' + Date.now().toString(36);
-      out = MM.leadPayload(o.state, pl, contact, { source: o.source || 'trip-builder', ref: o.ref || '', link: link, allin: o.allin, stage: o.stage });
-      out.trip.start = '';                                                    // a question holds no beds
-      out.trip.route = ('Question: ' + out.trip.route).slice(0, 400);
-      out.crewText = head.join('\n') + '\n\n' + (out.crewText || out.itinerary || '');
-    } else {
-      out = { v: 1, createdAt: new Date().toISOString(), source: o.source || 'trip-builder', ref: o.ref || '', fromHostel: '', contact: contact,
-        trip: { link: '', state: '', route: tripName ? ('Question about ' + tripName).slice(0, 400) : 'Question, no trip yet', days: 1, nights: 0, countries: [], stops: [], start: '',
-          estTotalUsd: 0, breakdownUsd: {}, allInBlocks: [], allInMatch: '', crewMates: 0, urgency: 'planning' },
-        itinerary: head.join('\n') };
-      out.crewText = out.itinerary;
-    }
-    out.type = 'question'; out.status = 'submitted'; out.hold = { requested: false, hours: 0 };
-    out.question = { text: msg, page: where, trip: tripName };
-    return out;
-  };
-
   if (typeof module !== 'undefined') module.exports = MM;
 })(typeof window !== 'undefined' ? window : globalThis);

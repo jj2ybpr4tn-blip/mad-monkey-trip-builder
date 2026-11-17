@@ -89,7 +89,7 @@
       answer = function (u) { return /status/.test(u) ? { ref: 'MM-CREW02', status: 'checking', route: 'Siquijor → Panglao', days: 7, link: '#/build/i=s.siquijor.3', findCrew: true } : {}; };
       location.hash = '#/trip/MM-CREW02'; await wait(1300);
       var line = Array.prototype.filter.call(document.querySelectorAll('#app .humans'), function (x) { return /Find your crew is on/.test(words(x)); })[0];
-      expect('the trip page says Find your crew is on, and how to switch it off', !!line && /switch it off/.test(words(line)) && (!!line.querySelector('a,button') || (/Tap Ask /.test(words(line)) && !!document.querySelector('[data-act="ask"]'))), line && words(line));   // the one Ask button on the page (ui-ask.js)
+      expect('the trip page says Find your crew is on, and how to switch it off', !!line && /switch it off/.test(words(line)) && !!line.querySelector('a,button'), line && words(line));
 
       /* ---- demo mode (no backend): offered, so it can be tried ---- */
       C.LEAD_ENDPOINT = ''; C.STATUS_ENDPOINT = ''; C.FIND_CREW = false;

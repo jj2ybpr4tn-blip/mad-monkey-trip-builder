@@ -688,8 +688,7 @@ main{flex:1;display:flex;flex-direction:column}
 .aibar__logo{font-weight:900;font-size:22px;letter-spacing:-.02em}
 .aibar__k span:last-child{font-size:11px;font-weight:500;color:rgba(243,247,242,.8)}
 .aibar__t{flex:1 1 260px;min-width:0}
-.aibar__t b{display:block;font-size:clamp(22px,3vw,30px);font-weight:900;letter-spacing:-.02em;line-height:1.05}
-.aibar__where{display:block;margin-top:6px;font-size:15px;font-weight:800;line-height:1.3;color:var(--ai-amber)}
+.aibar__t b{display:block;font-size:18px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
 .aibar__t p{font-size:14px;line-height:1.45;margin-top:4px;color:rgba(243,247,242,.88)}
 .aibar__back{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 22px;border-radius:9999px;background:var(--ai-amber);color:var(--ai-canopy);font-weight:800;font-size:14px;text-decoration:none;white-space:nowrap}
 .aibar__back:hover{background:#ffc566}
@@ -989,11 +988,7 @@ body[data-view="build"] #toast-root{bottom:88px}
 /* the home page offers the trip you were building */
 .resume{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-3);margin-top:var(--s-5);padding:var(--s-3) var(--s-4);border:var(--bw) solid var(--lime);color:var(--paper);max-width:560px}
 .resume>div{display:flex;flex-direction:column;gap:2px;min-width:0} .resume .over{color:var(--lime)} .resume b{font-weight:900;font-size:15px;overflow-wrap:anywhere} .resume .fine{color:var(--ink-dim-on-black)}
-.stopc__adds{padding-top:0}
-.stopc__adds .addpick{cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:transparent;border:2px dashed currentColor;color:inherit;padding:3px 12px;min-height:30px;font-family:inherit;font-weight:700;text-transform:none;letter-spacing:0;font-size:12.5px}
-.stopc__adds .addpick b{font-size:16px;line-height:1} .stopc__adds .addpick .dim{opacity:.7;font-weight:600}
-.stopc__adds .addpick:hover,.stopc__adds .addpick:focus-visible{background:var(--lime);color:var(--black);border-style:solid}
-@media (max-width:560px){.stopc__move{margin-left:0;width:100%}.stopc__acts .btn{flex:1 1 140px}.stopc__picks .pick,.stopc__adds .addpick{min-height:44px}}
+@media (max-width:560px){.stopc__move{margin-left:0;width:100%}.stopc__acts .btn{flex:1 1 140px}.stopc__picks .pick{min-height:44px}}
 
 /* ---------- quick tour ---------- */
 .linkbtn{background:none;border:0;padding:0 0 0 4px;font:inherit;font-weight:900;text-decoration:underline;color:inherit;cursor:pointer;min-height:44px}
@@ -1098,30 +1093,3 @@ body[data-view="pack"] .humanbar,body[data-view="crew"] .humanbar{display:none}
 .beenpick__i{display:flex;align-items:center;gap:8px;border:2px solid var(--black);padding:8px 10px;font-weight:700;font-size:13.5px;background:var(--paper);cursor:pointer;min-height:44px} .beenpick__i:has(input:checked){background:var(--lime)}
 .beenpick__i input{width:18px;height:18px;accent-color:var(--black);flex:none}
 @media print{.stagebar__act,.yourtrips{display:none}}
-
-/* ============================================================
-   ASK (ui-ask.js): a short form to a real person, and on a phone a button that stays in the corner
-   ============================================================ */
-.askf{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-3)}
-.askf .field{display:flex;flex-direction:column;gap:6px;min-width:0}
-.askf .full{grid-column:1/-1}
-.askf textarea{min-height:110px;resize:vertical}
-.askf .fine{font-size:12px;opacity:.8}
-.askf__lead{font-weight:500;margin:0 0 var(--s-3)}
-.askf__trip{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:10px 14px;background:var(--bone);border:2px solid var(--black)}
-.askf__trip b{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
-.askf__go{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);margin-top:var(--s-2)}
-.askf__sum{padding:12px 14px;background:var(--bone);border:2px solid var(--black);max-height:240px;overflow:auto;margin:var(--s-3) 0}
-.askf__sum p{margin:2px 0 10px;white-space:pre-wrap;overflow-wrap:anywhere;font-weight:500}
-.askf__ref{font-weight:500;margin:0} .askf__ref b{font-weight:900;font-size:1.25em;white-space:nowrap;margin-left:6px}
-.askf [aria-invalid="true"]{border-color:#D6331A!important;box-shadow:0 0 0 2px rgba(214,51,26,.25)}
-@media (max-width:560px){.askf{grid-template-columns:1fr}}
-.askfab{display:none;position:fixed;right:14px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:70;align-items:center;min-height:48px;padding:12px 20px;border-radius:9999px;border:2px solid var(--black);background:var(--lime);color:var(--black);font:inherit;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.28)}
-@media (max-width:760px){
-  .askfab{display:inline-flex}
-  .humanbar__ask{display:none}                          /* one Ask button on a phone: the one in the corner */
-  body[data-view="build"] .askfab{bottom:calc(84px + env(safe-area-inset-bottom,0px))}   /* above the price bar */
-  body[data-view="pack"] .askfab,body[data-view="crew"] .askfab{display:none}
-}
-body:has(.modal) .askfab,body:has(.tour) .askfab{display:none}
-@media print{.askfab{display:none}}
