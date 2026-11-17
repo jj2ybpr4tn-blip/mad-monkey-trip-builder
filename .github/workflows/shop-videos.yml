@@ -5,6 +5,9 @@
 # The page plays these on the live preview and falls back to Mixkit's 720p if one is missing.
 # Run it from GitHub: Actions > Shop videos > Run workflow. Clips already published are kept unless you tick "force".
 # Clips are free under the Mixkit Stock Video Free License (placeholder footage until we have our own).
+# hagiang and thamma are Ha Giang films, free under the Pexels License: riders on a cliff road on the Loop, from a drone
+# (pexels.com/video/30259790, Trent Kloter), and bikes on the Tham Ma hairpins (pexels.com/video/17566213, MapKoi
+# Travel). Each also gets a lighter 720p copy, shop/v/<name>-720.mp4, which phones play.
 name: Shop videos
 on:
   workflow_dispatch:
@@ -38,18 +41,23 @@ jobs:
           mkdir -p shop/v
           M=https://assets.mixkit.co/videos
           A=https://assets.mixkit.co/active_storage/video_items
-          # name, the Mixkit 1080p master, seconds to keep
-          while read -r name url secs; do
+          P=https://videos.pexels.com/video-files
+          # name, the master file, seconds to keep, and the sizes to make (1080 if left out; 720 is the phones' copy)
+          while read -r name url secs sizes; do
             [ -z "$name" ] && continue
-            out="shop/v/$name-1080.mp4"
-            if [ -f "$out" ] && [ "$FORCE" != "true" ]; then echo "keep $out"; continue; fi
-            curl -fsSL --retry 3 --retry-delay 5 -o /tmp/src.mp4 "$url"
-            ffmpeg -nostdin -loglevel error -y -i /tmp/src.mp4 -t "$secs" -an \
-              -vf "scale=w='if(gte(iw,ih),min(1920,iw),-2)':h='if(gte(iw,ih),-2,min(1920,ih))'" \
-              -fpsmax 30 -c:v libx264 -preset slow -crf 23 -maxrate 5M -bufsize 10M \
-              -profile:v high -pix_fmt yuv420p -movflags +faststart "$out"
+            got=""
+            for size in $(echo "${sizes:-1080}" | tr ',' ' '); do
+              out="shop/v/$name-$size.mp4"
+              if [ -f "$out" ] && [ "$FORCE" != "true" ]; then echo "keep $out"; continue; fi
+              if [ -z "$got" ]; then curl -fsSL --retry 3 --retry-delay 5 -A "Mozilla/5.0 (shop-videos workflow)" -o /tmp/src.mp4 "$url"; got=1; fi
+              if [ "$size" = "720" ]; then long=1280; rate="-crf 24 -maxrate 2500k -bufsize 5M"; else long=1920; rate="-crf 23 -maxrate 5M -bufsize 10M"; fi
+              ffmpeg -nostdin -loglevel error -y -i /tmp/src.mp4 -t "$secs" -an \
+                -vf "scale=w='if(gte(iw,ih),min($long,iw),-2)':h='if(gte(iw,ih),-2,min($long,ih))'" \
+                -fpsmax 30 -c:v libx264 -preset slow $rate \
+                -profile:v high -pix_fmt yuv420p -movflags +faststart "$out"
+              echo "made $out: $(du -h "$out" | cut -f1), $(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$out")"
+            done
             rm -f /tmp/src.mp4
-            echo "made $out: $(du -h "$out" | cut -f1), $(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$out")"
           done <<CLIPS
           sunrise $M/1944/1944-1080.mp4 20
           moto $M/39915/39915-1080.mp4 20
@@ -64,6 +72,8 @@ jobs:
           lanterns $A/100516/1725310306/100516-video-1080.mp4 20
           dragon $A/100498/1725309129/100498-video-1080.mp4 20
           splash $A/99789/1716843091/99789-video-1080.mp4 20
+          hagiang $P/30259790/12972476_3840_2160_30fps.mp4 18 1080,720
+          thamma $P/17566213/17566213-uhd_2560_1440_30fps.mp4 11 1080,720
           CLIPS
           du -ch shop/v/*.mp4 | tail -1
       - name: Publish to gh-pages
@@ -73,6 +83,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add shop/v
           if git diff --cached --quiet; then echo "No new clips."; exit 0; fi
-          git commit -qm "Shop preview: sharp 1080p background videos"
+          git commit -qm "Shop preview: sharp background videos"
           for i in 1 2 3; do git pull -q --rebase origin gh-pages && git push -q origin HEAD:gh-pages && exit 0; sleep 10; done
           exit 1
