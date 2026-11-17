@@ -1122,6 +1122,8 @@ body[data-view="pack"] .humanbar,body[data-view="crew"] .humanbar{display:none}
   .humanbar__ask{display:none}                          /* one Ask button on a phone: the one in the corner */
   body[data-view="build"] .askfab{bottom:calc(84px + env(safe-area-inset-bottom,0px))}   /* above the price bar */
   body[data-view="pack"] .askfab,body[data-view="crew"] .askfab{display:none}
+  #toast-root{bottom:calc(76px + env(safe-area-inset-bottom,0px))}                          /* a toast (and its Undo) sits above the Ask button, never under it */
+  body[data-view="build"] #toast-root{bottom:calc(144px + env(safe-area-inset-bottom,0px))}
 }
 body:has(.modal) .askfab,body:has(.tour) .askfab{display:none}
 @media print{.askfab{display:none}}

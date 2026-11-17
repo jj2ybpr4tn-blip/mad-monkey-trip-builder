@@ -110,7 +110,7 @@
     u.openModal('<div class="modal__hd"><div><div class="over">Checked by a human</div><h2 class="disp">Hold my beds.<br>Get it checked.</h2></div><button class="modal__x" data-act="close" aria-label="Close" type="button">×</button></div><div class="modal__bd">' +
       '<p style="font-weight:500">Nobody books this for you by robot. A <b>real Mad Monkey crew member</b> checks your whole trip. ' + (dep
         ? 'A <b>' + usd(per()) + ' deposit per person</b> holds your beds while they do, and it comes off your trip total. If the crew can\'t make it work, you get it back.'
-        : '<b>Sending it is free.</b> You pay nothing until you\'ve seen the checked plan and said yes.') + ' <span class="nowrap">Not sure about something? ' + u.ask('btn btn--sm btn--paper') + ' first.</span></p>' + stepsHTML('submitted') +
+        : '<b>Sending it is free.</b> You pay nothing until you\'ve seen the checked plan and said yes.') + ' Not sure about something? <span class="nowrap">' + u.ask('btn btn--sm btn--paper') + ' first.</span></p>' + stepsHTML('submitted') +
       '<form id="leadf" novalidate><div class="form2"><div class="field"><label for="lf-name">First name</label><input class="input" id="lf-name" name="name" autocomplete="given-name" required value="' + esc(q.name || '') + '"></div>' +
       u.contactPick(q) +
       '<div class="field"><label for="lf-from">Where are you now?</label><input class="input" id="lf-from" name="from" placeholder="city or country" value="' + esc(q.from || '') + '"></div>' +

@@ -68,19 +68,25 @@
     return bdCache.val;
   }
   function bdWhere(x) { return P[x.at] ? P[x.at].n : ''; }
+  // "Songkran: the world's biggest water fight", but "Tet: Vietnamese New Year's Eve in Hanoi" and "Full moon: Hoi An lit only by lanterns" keep their capitals
+  function bdTitle(bd) {
+    var t = String(bd.title || ''), w = t.split(' ');
+    var proper = /^[A-Z]/.test(w[1] || '') || /^(Lao|Thai|Khmer|Vietnamese|Filipino|Balinese|Bali|Hanoi|Hoi|Angkor|Mekong|Siargao|Palawan|Luang|Chiang|Pai|Bangkok)$/.test(w[0]);
+    return proper ? t : t.charAt(0).toLowerCase() + t.slice(1);
+  }
   function fmtY(d) { return fmtD(d) + (d.getUTCFullYear() !== new Date().getFullYear() ? ' ' + d.getUTCFullYear() : ''); }       // the year, once it isn't this one
   function bdWhen(x) { return (x.sp.moon ? 'around ' + fmtY(x.on) : x.sp.from.getTime() === x.sp.to.getTime() ? fmtY(x.sp.from) : fmtD(x.sp.from) + ' to ' + fmtY(x.sp.to)) + (x.sp.conf ? '' : ', expected'); }
   X.bigdays = function (pl) {
     if (!pl || !pl.totals.days) return '';
     var r = bigDays(), rows = [], i;
-    r.caught.slice(0, 3).forEach(function (x) { rows.push('<li class="bigd__i bigd__i--on"><span class="bigd__k">You\'re there</span><div><b>' + esc(x.bd.n) + ': ' + esc(x.bd.title.charAt(0).toLowerCase() + x.bd.title.slice(1)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p></div></li>'); });
+    r.caught.slice(0, 3).forEach(function (x) { rows.push('<li class="bigd__i bigd__i--on"><span class="bigd__k">You\'re there</span><div><b>' + esc(x.bd.n) + ': ' + esc(bdTitle(x.bd)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p></div></li>'); });
     for (i = 0; i < r.near.length && i < 3; i++) (function (x, n) {
       var later = x.shift > 0, d = Math.abs(x.shift);
-      rows.push('<li class="bigd__i"><span class="bigd__k">' + plural(d, 'day') + (later ? ' after you' : ' before you') + '</span><div><b>' + esc(x.bd.n) + ': ' + esc(x.bd.title.charAt(0).toLowerCase() + x.bd.title.slice(1)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p>' +
+      rows.push('<li class="bigd__i"><span class="bigd__k">' + plural(d, 'day') + (later ? ' after you' : ' before you') + '</span><div><b>' + esc(x.bd.n) + ': ' + esc(bdTitle(x.bd)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p>' +
         '<button class="btn btn--sm btn--pink" type="button" data-act="bigfix" data-k="near" data-n="' + n + '">Start ' + plural(d, 'day') + (later ? ' later' : ' earlier') + ' and be there</button></div></li>');
     })(r.near[i], i);
     for (i = 0; i < r.ahead.length && i < 4; i++) (function (x, n) {
-      rows.push('<li class="bigd__i"><span class="bigd__k">' + esc(fmtY(x.on)) + '</span><div><b>' + esc(x.bd.n) + ': ' + esc(x.bd.title.charAt(0).toLowerCase() + x.bd.title.slice(1)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p>' +
+      rows.push('<li class="bigd__i"><span class="bigd__k">' + esc(fmtY(x.on)) + '</span><div><b>' + esc(x.bd.n) + ': ' + esc(bdTitle(x.bd)) + '</b><span class="cal__w">' + esc(bdWhere(x) + ' · ' + bdWhen(x)) + '</span><p>' + esc(x.bd.blurb) + '</p>' +
         '<button class="btn btn--sm btn--pink" type="button" data-act="bigfix" data-k="ahead" data-n="' + n + '">Start ' + esc(fmtY(x.start)) + ' and be there</button></div></li>');
     })(r.ahead[i], i);
     if (!rows.length) return '';

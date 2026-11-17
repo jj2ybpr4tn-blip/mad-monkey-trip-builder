@@ -194,6 +194,9 @@
 :root[data-look="allin"] .toast{background:var(--canopy);color:var(--mist);border-radius:999px;border:0;box-shadow:var(--lift-dark)!important}
 :root[data-look="allin"] .toast button{color:var(--amber)}
 :root[data-look="allin"] .toast--act button{background:var(--amber);color:var(--canopy);border-color:var(--amber);font-weight:800}   /* the Undo button must read "Undo", not amber on amber */
+:root[data-look="allin"] .refbox{flex-direction:column;align-items:flex-start;gap:2px;color:var(--canopy)}   /* the label reads (it was white on white) and the reference stays on one line */
+:root[data-look="allin"] .refbox .over{color:var(--ink-dim)}
+:root[data-look="allin"] .refbox b{color:var(--canopy);white-space:nowrap}
 :root[data-look="allin"] .pack__stamp{transform:none;border-radius:999px}
 :root[data-look="allin"] .skip{border-radius:999px}
 :root[data-look="allin"] .srch__box{border:2px solid var(--canopy);border-radius:var(--r-md);background:#fff}
