@@ -88,11 +88,38 @@
     return ds.length ? (last ? ds[ds.length - 1] : ds[0]).date : null;
   }
 
-  // the trip's country and route, right under its name: "Vietnam · Hanoi → Lan Ha Bay → Hoi An"
+  /* A multi-day trip that leaves from a stop (the Ha Giang Loop from Hanoi) is a stop of its own on the ALL IN site, but here it sits
+     inside the stop it leaves from. So the route line names it the way the site does, and the bar says where to find it. */
+  var AWAY = [[/ha giang/i, 'Ha Giang Loop', 'the Ha Giang Loop'], [/lan ha/i, 'Lan Ha Bay'], [/ha long/i, 'Ha Long Bay'], [/sapa/i, 'Sapa'], [/nong khiaw/i, 'Nong Khiaw'], [/rinjani/i, 'Mount Rinjani']];
+  function awayNames(it) {
+    var out = [];
+    ((it && it.acts) || []).forEach(function (id) {
+      var a = (MM.ACTS || {})[id]; if (!a || !a.multi || !(a.multi.n > 0)) return;
+      var n = String(a.n || ''), hit = AWAY.filter(function (w) { return w[0].test(n); })[0];
+      var nm = hit ? hit[1] : n.split(' · ')[0].replace(/\s*\(.*?\)/g, '').trim(), say = hit && hit[2] || nm;
+      if (nm && !out.some(function (o) { return o.n === nm; })) out.push({ n: nm, say: say });
+    });
+    return out;
+  }
+  // the trip's country and route, right under its name: "Vietnam · Hanoi → Lan Ha Bay → Ha Giang Loop → Hoi An"
   function where(items) {
     var P = MM.PLACES || {}, C2 = MM.COUNTRIES || {}, names = [], cs = [];
-    items.forEach(function (it) { var pl = it && P[it.p]; if (!pl) return; if (names[names.length - 1] !== pl.n) names.push(pl.n); var cn = C2[pl.c] && C2[pl.c].n; if (cn && cs.indexOf(cn) < 0) cs.push(cn); });
+    items.forEach(function (it) {
+      var pl = it && P[it.p]; if (!pl) return;
+      if (names[names.length - 1] !== pl.n) names.push(pl.n);
+      awayNames(it).forEach(function (w) { if (names[names.length - 1] !== w.n) names.push(w.n); });
+      var cn = C2[pl.c] && C2[pl.c].n; if (cn && cs.indexOf(cn) < 0) cs.push(cn);
+    });
     return names.length ? '<span class="aibar__where">' + esc((cs.length ? cs.join(' + ') + ' · ' : '') + names.join(' → ')) + '</span>' : '';
+  }
+  // "Lan Ha Bay and the Ha Giang Loop are trips from Hanoi, so you'll find them inside your Hanoi stop."
+  function inside(items) {
+    var P = MM.PLACES || {};
+    return items.map(function (it) {
+      var pl = it && P[it.p], w = awayNames(it); if (!pl || !w.length) return '';
+      var one = w.length === 1;
+      return list(w.map(function (x) { return x.say; })).replace(/^the /, 'The ') + (one ? ' is a trip' : ' are trips') + ' from ' + pl.n + ', so you\'ll find ' + (one ? 'it' : 'them') + ' inside your ' + pl.n + ' stop.';
+    }).filter(Boolean).join(' ');
   }
 
   /* ---------- the bar at the top of the builder ---------- */
@@ -100,10 +127,10 @@
     var c = A.allin; if (!c) return '';
     var f = found(), back = backHref(), name = c.name, h = '<section class="aibar" aria-label="From the ALL IN site"><div class="aibar__k"><span class="aibar__logo">ALL IN</span><span>by Mad Monkey</span></div><div class="aibar__t">';
     if (c.trip && name && f) {
-      var bits = [], plu = U().plural, start = dateOf(pl, f.i, false);
-      h += '<b>' + esc(name) + '</b>' + where(A.state.items.slice(f.i, f.i + f.n));
-      bits.push(f.before || f.after ? 'Stops ' + (f.i + 1) + ' to ' + (f.i + f.n) + ' are your ALL IN trip' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '. You\'ve added ' + list([f.before ? plu(f.before, 'stop') + ' before it' : '', f.after ? plu(f.after, 'stop') + ' after it' : ''].filter(Boolean)) + '.'
-        : 'This is the ALL IN trip, stop for stop' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '. Add days before or after it, or change anything, then send it to the crew.');
+      var bits = [], plu = U().plural, start = dateOf(pl, f.i, false), mine = A.state.items.slice(f.i, f.i + f.n), inn = inside(mine);
+      h += '<b>' + esc(name) + '</b>' + where(mine);
+      bits.push(f.before || f.after ? 'Stops ' + (f.i + 1) + ' to ' + (f.i + f.n) + ' are your ALL IN trip' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '. You\'ve added ' + list([f.before ? plu(f.before, 'stop') + ' before it' : '', f.after ? plu(f.after, 'stop') + ' after it' : ''].filter(Boolean)) + '.' + (inn ? ' ' + inn : '')
+        : 'This is the ALL IN trip, day for day' + (start ? ', starting ' + MM.util.fmtDate(start) : '') + '.' + (inn ? ' ' + inn : '') + ' Add days before or after it, or change anything, then send it to the crew.');
       if (!f.intact) bits.push('You\'ve changed ' + (f.changed.length === 1 ? 'one thing' : f.changed.length + ' things') + ' inside it (' + f.changed.slice(0, 2).join('; ') + (f.changed.length > 2 ? '…' : '') + '). That\'s fine: the crew checks it as you\'ve built it.');
       if (c.away) { var lastP = (MM.PLACES || {})[(A.state.items[f.i + f.n - 1] || {}).p]; bits.push('It includes ' + plu(c.away, 'night') + ' away from a Mad Monkey (a night boat or bus, or a partner hotel), so it\'s as long here as on the ALL IN site: ' + (c.away === 1 ? 'it sits' : 'they sit') + ' after ' + (lastP ? lastP.n : 'its last stop') + ' in your days. The crew prices ' + (c.away === 1 ? 'it' : 'them') + ' when they check your trip.'); }
       if (PRICE && f.intact) bits.push('Its price is the ALL IN site\'s: ' + U().money(PRICE) + ' per person for the trip as it is, in your total in place of our own figures for those days. Anything you add around it is our estimate, and the crew confirms the real price before you pay a thing.');

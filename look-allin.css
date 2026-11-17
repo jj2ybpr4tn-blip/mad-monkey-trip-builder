@@ -149,7 +149,7 @@
 :root[data-look="allin"] .tl{border-radius:var(--r-md);border-color:transparent}
 :root[data-look="allin"] .stopc{border:0}
 :root[data-look="allin"] .stopc h3{font-weight:900;font-stretch:118%;letter-spacing:-.015em}
-:root[data-look="allin"] .stopc__thumb,:root[data-look="allin"] .stopc__num{border-color:transparent;border-radius:var(--r-sm)}
+:root[data-look="allin"] .stopc__thumb,:root[data-look="allin"] .stopc__num{border-color:transparent;border-radius:var(--r-sm)} :root[data-look="allin"] .stopc__thumb .photo{border-radius:inherit}
 :root[data-look="allin"] .stopc__num{background:var(--amber);color:var(--canopy)}
 :root[data-look="allin"] .stopc__more{border-color:var(--line);background:var(--mist)}
 :root[data-look="allin"] .pick{background:var(--moon);border-color:transparent}

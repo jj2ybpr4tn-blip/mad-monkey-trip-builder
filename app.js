@@ -343,7 +343,7 @@
 
   function renderQuiz() {
     var q = app.quiz, s = QSTEPS[q.step], a = q.a;
-    var prog = QSTEPS.map(function (_, i) { return '<i class="' + (i < q.step ? 'on' : i === q.step ? 'cur' : '') + '"></i>'; }).join('');
+    var prog = QSTEPS.map(function (_, i) { return '<i class="' + (i < q.step ? 'on' : i === q.step ? 'is-now' : '') + '"></i>'; }).join('');
     var body = '';
     if (s.type === 'single') {
       var opts = s.k === 'start' ? MM.GATEWAYS.map(function (g) { return { v: g.id, t: g.n, s: g.sub }; }) : s.k === 'budget' ? BUDGETS : CREWS;
@@ -620,7 +620,7 @@
     var mx = Math.max.apply(0, av), best = [], thr = mx >= 2.6 ? 2.6 : mx - 0.15; av.forEach(function (v, m) { if (v >= thr) best.push(U.MONTHN[m]); });
     var note = cur != null && av[cur] < 2.1 ? 'Your dates are in the wet or rough-sea season for this route.' : (cur != null && av[cur] >= 2.6 ? 'Your dates are prime season for this route.' : '');
     return '<div class="seas-wrap"><div class="over" style="color:var(--ink-dim-on-black)">Best time for this route</div><div class="seas" role="img" aria-label="Best months for this route: ' + best.join(', ') + '">' +
-      av.map(function (v, m) { var k = v >= 2.6 ? 3 : v >= 2.1 ? 2 : 1; return '<i class="s' + k + (cur === m ? ' cur' : '') + '" title="' + U.MONTHN[m] + '"><u style="height:' + (k === 3 ? 100 : k === 2 ? 62 : 28) + '%"></u><span>' + U.MONTHN[m][0] + '</span></i>'; }).join('') + '</div><div class="fine" style="color:var(--ink-dim-on-black)">' + (best.length < 12 ? 'Best: ' + best.slice(0, 5).join(', ') + '. ' : '') + note + '</div></div>';
+      av.map(function (v, m) { var k = v >= 2.6 ? 3 : v >= 2.1 ? 2 : 1; return '<i class="s' + k + (cur === m ? ' is-now' : '') + '" title="' + U.MONTHN[m] + '"><u style="height:' + (k === 3 ? 100 : k === 2 ? 62 : 28) + '%"></u><span>' + U.MONTHN[m][0] + '</span></i>'; }).join('') + '</div><div class="fine" style="color:var(--ink-dim-on-black)">' + (best.length < 12 ? 'Best: ' + best.slice(0, 5).join(', ') + '. ' : '') + note + '</div></div>';
   }
   function timelineHTML(pl) {
     var out = '';

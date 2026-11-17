@@ -161,7 +161,7 @@ main{flex:1;display:flex;flex-direction:column}
 .quiz{flex:1;padding:clamp(20px,4vw,48px) 0 var(--s-8)}
 .qprog{display:flex;gap:6px;margin-bottom:var(--s-5)}
 .qprog i{flex:1;height:10px;background:var(--paper);border:var(--bw) solid var(--black)}
-.qprog i.on{background:var(--pink)} .qprog i.cur{background:var(--lime)}
+.qprog i.on{background:var(--pink)} .qprog i.is-now{background:var(--lime)}
 .qbox{max-width:880px}
 .qbox .over{color:var(--pink);-webkit-text-stroke:0;background:var(--black);display:inline-block;padding:3px 10px;color:var(--lime)}
 .qbox h1,.qbox h2{font-size:clamp(38px,7vw,84px);margin:var(--s-3) 0 var(--s-2)}
@@ -282,7 +282,7 @@ main{flex:1;display:flex;flex-direction:column}
 .stopc{background:var(--paper);border:var(--bw) solid var(--black);box-shadow:6px 6px 0 var(--black);position:relative}
 .stopc__head{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:var(--s-3);padding:var(--s-3);align-items:center}
 .stopc__thumb{width:76px;height:76px;border:var(--bw) solid var(--black);position:relative;background:var(--black)}
-.stopc__thumb .photo{position:absolute;inset:0}
+.stopc__thumb .photo{position:absolute;inset:0} .stopc__thumb.photo{overflow:visible}   /* the photo inside clips itself; the stop number sits over the corner, not cut off by it */
 .stopc__num{position:absolute;left:-1px;top:-1px;background:var(--lime);border:var(--bw) solid var(--black);font-weight:900;font-size:13px;min-width:26px;height:26px;display:grid;place-items:center;transform:translate(-7px,-7px)}
 .stopc h3{font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:-.02em;line-height:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .stopc__sub{font-size:12.5px;font-weight:500;color:var(--ink-dim);margin-top:3px}
@@ -505,7 +505,7 @@ main{flex:1;display:flex;flex-direction:column}
 .seas i{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-style:normal;position:relative}
 .seas u{display:block;width:100%;background:#3a3a3a;text-decoration:none} .seas .s3 u{background:var(--lime)} .seas .s2 u{background:#8a8a3a} .seas .s1 u{background:var(--pink)}
 .seas span{position:absolute;bottom:-15px;font-size:9px;font-weight:700;color:var(--ink-dim-on-black)}
-.seas{margin-bottom:20px} .seas .cur u{outline:2px solid var(--paper);outline-offset:1px} .seas .cur span{color:var(--paper)}
+.seas{margin-bottom:20px} .seas .is-now u{outline:2px solid var(--paper);outline-offset:1px} .seas .is-now span{color:var(--paper)}   /* not .cur: that's the currency picker's class */
 .tl{display:flex;align-items:stretch;border:var(--bw) solid var(--black);background:var(--paper);min-height:48px;box-shadow:5px 5px 0 var(--black);overflow:hidden}
 .tl__seg{min-width:0;border:0;border-right:var(--bw) solid var(--black);padding:6px 8px;text-align:left;background:var(--bone);display:flex;flex-direction:column;justify-content:center;line-height:1.1}
 .tl__seg:last-child{border-right:0}
