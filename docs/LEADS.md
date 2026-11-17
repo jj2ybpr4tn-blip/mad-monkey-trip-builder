@@ -52,7 +52,12 @@ The guest lands on `#/trip/<ref>` after sending. With `STATUS_ENDPOINT` set, it 
     "urgency": "hot | warm | cool | planning"      // from start date: ≤14d hot, ≤60d warm
   },
   "itinerary": "MY MAD MONKEY TRIP\nHanoi → …",    // plain-text day-by-day, ready to paste into WhatsApp / a CRM note
-  "findCrew": { "on": true, "age": "22-25", … }      // only when they ticked "Find your crew": see FIND-YOUR-CREW.md
+  "findCrew": { "on": true, "age": "22-25", … },     // only when they ticked "Find your crew": see FIND-YOUR-CREW.md
+  "freeNight": { "optIn": true, "answered": true, "hostel": "phnom-penh", "hostelName": "Mad Monkey Phnom Penh",
+                 "night": "2027-01-06", "checkOut": "2027-01-07", "beds": 1 },   // the front door, when the trip starts with an ALL IN trip:
+                                                   // the free bed the night before, yes or no (the ALL IN site's checkout sends the same)
+  "told": { "words": "…", "tiktok": ["https://www.tiktok.com/…"], "from": "Not sure which one?" }   // the front door: what they told the
+                                                   // ALL IN site (sessionStorage allin-told), also added to crewText and contact.notes
 }
 ```
 

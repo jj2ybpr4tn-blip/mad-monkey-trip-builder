@@ -17,7 +17,7 @@
   var TRIP = '#/build/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10&f=20&b=1500';
   var ALL = [
     { name: 'home', hash: '#/' },
-    { name: 'builder (empty)', hash: '#/build', empty: true },
+    { name: 'builder (empty)', hash: '#/build/i=', empty: true },          // the empty editor (#/build on its own is the front door now: test/ui-start.js)
     { name: 'builder (trip)', hash: TRIP },
     { name: 'builder (trip, no date)', hash: '#/build/i=s.chiang-mai.3~s.luang-prabang.3~s.vang-vieng.3' },
     { name: 'builder (ALL IN block)', hash: '#/build/i=a.vietnam~s.saigon.2&d=2027-02-10' },

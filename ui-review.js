@@ -145,30 +145,62 @@
     if (!v.consent) return show('Tick the box so we\'re allowed to reply.');
     var fc = crewRead(v); if (fc && fc.err) return show(fc.err);
     u.store('mm-lead', { name: v.name, via: ct.via, email: v.email, whatsapp: v.whatsapp, from: v.from });
-    var plan = u.getPlan(), wantHold = !!A.state.start, people = Math.min(8, Math.max(1, +v.size || 1)), dep = deposit();
-    var payload = MM.leadPayload(A.state, plan, { name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: people, dates: v.flex, notes: v.notes || '', consent: true },
+    var people = Math.min(8, Math.max(1, +v.size || 1)), dep = deposit();
+    var btn = $('button[type=submit]', f), label = btn.textContent; btn.disabled = true; btn.textContent = dep && C.LEAD_ENDPOINT ? 'Opening secure payment…' : 'Sending…';
+    sendTrip({ name: v.name, via: ct.via, email: ct.email, whatsapp: ct.whatsapp, from: v.from || '', partySize: people, dates: v.flex, notes: v.notes || '', consent: true }, { findCrew: fc })
+      .then(function (r) { if (!r.paying) success(r.rec, r.payload); })
+      .catch(function (x) { btn.disabled = false; btn.textContent = label; show((x && x.message && x.message.indexOf('HTTP') !== 0 ? x.message + ' ' : '') + (dep ? 'Nothing has been charged. ' : '') + 'Try again in a minute, or tap ' + u.askLabel() + ' and we\'ll sort it out.'); });
+  }
+
+  /* ---------- sending the trip in A.state to the crew: one request (LEAD_ENDPOINT, trip-builder-request on the ALL IN backend) ----------
+     Used by the form above and by the front door's "Hold my beds, it's free" (ui-start.js), so both send exactly the same thing.
+       contact  { name, via, email, whatsapp, from, partySize, dates: 'fixed' | 'flex' | 'open', notes, consent }
+       opts     { findCrew, freeNight, told, flow }   freeNight: the ALL IN free night before, yes or no (the ALL IN site's freeNight field);
+                                                     told: { words, tiktok } from the ALL IN site's "Not sure which one?" (sessionStorage allin-told)
+     Resolves { rec, payload } once it's with the crew (rec.demo with no LEAD_ENDPOINT), or { paying: true } when the backend wants the
+     deposit paid first (the page is already on its way there). Rejects with an Error whose message can be shown. */
+  function sendTrip(contact, opts) {
+    opts = opts || {};
+    var plan = MM.plan(A.state), wantHold = !!A.state.start, people = Math.min(20, Math.max(1, +contact.partySize || 1)), dep = deposit();
+    contact.partySize = people;
+    var payload = MM.leadPayload(A.state, plan, contact,
       { ref: A.meta.ref, fromHostel: A.meta.from, link: u.shareLink(), stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null, allin: A.allinMeta ? A.allinMeta() : null });
     payload.type = 'review_request'; payload.status = 'submitted'; payload.hold = { requested: wantHold, hours: hold() };
     if (dep) payload.deposit = { perPersonUsd: per(), people: people };
-    if (fc) payload.findCrew = fc;
-    u.track('review_request', { stops: plan.places.length, days: plan.totals.days, hold: wantHold, crew: !!fc });
-    var btn = $('button[type=submit]', f), label = btn.textContent; btn.disabled = true; btn.textContent = dep && C.LEAD_ENDPOINT ? 'Opening secure payment…' : 'Sending…';
+    if (opts.findCrew) payload.findCrew = opts.findCrew;
+    if (opts.freeNight) payload.freeNight = opts.freeNight;
+    if (opts.told && opts.told.words) addTold(payload, opts.told);
+    u.track('review_request', { stops: plan.places.length, days: plan.totals.days, hold: wantHold, crew: !!opts.findCrew, flow: opts.flow || 'editor' });
     function record(data, demo) {
       var r = (data && data.ref) || ref(), now = new Date(), had = subs().filter(function (x) { return x.ref === r; })[0], rec = { ref: r, createdAt: now.toISOString(), status: (data && data.status) || 'submitted', route: payload.trip.route, days: payload.trip.days, link: payload.trip.link,
-        hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: !!demo, name: v.name, email: ct.email, whatsapp: ct.whatsapp, via: ct.via,
-        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || (had && had.key) || '', people: people, datesFlex: v.flex || '', stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null, crew: !!fc || !!(had && had.crew) };
+        hold: wantHold ? { until: (data && data.hold && data.hold.until) || new Date(now.getTime() + hold() * 3600000).toISOString() } : null, demo: !!demo, name: contact.name, email: contact.email, whatsapp: contact.whatsapp, via: contact.via,
+        deposit: dep ? { amount: per() * people, paid: false } : null, payLink: (data && data.checkoutUrl) || '', key: (data && data.key) || (had && had.key) || '', people: people, datesFlex: contact.dates || '', stage: A.stage ? { n: A.stage.n, parent: A.stage.parent } : null, crew: !!opts.findCrew || !!(had && had.crew) };
       saveRec(rec); return rec;
     }
-    if (!C.LEAD_ENDPOINT) return setTimeout(function () { A._lastLead = payload; success(record(null, true), payload); }, 400);
-    u.timed(C.LEAD_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 30000)
+    if (!C.LEAD_ENDPOINT) return new Promise(function (ok) { setTimeout(function () { A._lastLead = payload; ok({ rec: record(null, true), payload: payload }); }, 400); });
+    return u.timed(C.LEAD_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 30000)
       .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { if (!res.ok || (dep && d.status !== 'submitted' && !u.url(d.checkoutUrl, true))) throw new Error(d.error || ('HTTP ' + res.status)); return d; }); })
       .then(function (data) {
         var rec = record(data, false); A._lastLead = payload;
         // The backend decides: a `checkoutUrl` means it wants the deposit paid first (the trip isn't with the crew until it is); without one the trip is already with them.
-        if (u.url(data.checkoutUrl, true)) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = u.url(data.checkoutUrl, true); }
-        else success(rec, payload);
-      })
-      .catch(function (x) { btn.disabled = false; btn.textContent = label; show((x && x.message && x.message.indexOf('HTTP') !== 0 ? x.message + ' ' : '') + (dep ? 'Nothing has been charged. ' : '') + 'Try again in a minute, or tap ' + u.askLabel() + ' and we\'ll sort it out.'); });
+        if (u.url(data.checkoutUrl, true)) { try { sessionStorage.setItem('mm-paying', data.ref + ':pending_payment'); } catch (x) { /* private mode */ } window.location.href = u.url(data.checkoutUrl, true); return { paying: true, rec: rec, payload: payload }; }
+        return { rec: rec, payload: payload, duplicate: !!data.duplicate };
+      });
+  }
+  // What they told the ALL IN site goes with the trip, as the site sends it: the crew's text, the notes (the backend keeps 2,000 characters) and payload.told.
+  function addTold(p, t) {
+    var words = String(t.words || '').slice(0, 4000), links = (t.tiktok || []).slice(0, 5);
+    var block = '\n\nIN THEIR OWN WORDS ("Not sure which one?" on the ALL IN site)\n' + words + (links.length ? '\n\nTIKTOK THEY SHARED\n' + links.join('\n') : '');
+    if (typeof p.crewText === 'string') p.crewText += block;
+    if (typeof p.itinerary === 'string') p.itinerary += block;
+    var c = p.contact;
+    if (c) {
+      var have = String(c.notes || ''), room = 1990 - have.length, tk = links.length ? ' TikTok they shared: ' + links.join(' ') + '.' : '';
+      var add = tk + ' In their words: \u201C' + words + '\u201D';
+      if (add.length > room) add = room > tk.length + 40 ? add.slice(0, room - 1) + '\u2026' : (tk.length < room ? tk : '');
+      c.notes = have + add;
+    }
+    p.told = { words: words, tiktok: links, from: 'Not sure which one?' };
   }
 
   // Confirmation for demo mode (nothing sent, nothing charged) and for a hold-only send.
@@ -359,5 +391,5 @@
     A._unwatch = function () { alive = false; root.removeEventListener('change', onChange); root.removeEventListener('click', onClick); };
   };
 
-  A.review = { open: open };
+  A.review = { open: open, send: sendTrip, fmtWhen: fmtDT };
 })();
