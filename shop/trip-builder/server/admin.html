@@ -62,7 +62,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
   }
   function fmtLeft(ms) { if (ms == null) return ''; if (ms <= 0) return 'expired'; var h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000); return h + 'h ' + m + 'm left'; }
   function shell(inner) {
-    var tabs = [['reviews', 'Reviews + holds'], ['crew', 'Find your crew'], ['live', 'Live prices + spots'], ['quotes', 'Guest reviews'], ['waitlist', 'Waitlist'], ['hostels', 'Hostel details'], ['flow', 'Where guests go'], ['funnel', 'Funnel']];
+    var tabs = [['reviews', 'Reviews + holds'], ['crew', 'Find your crew'], ['live', 'Live prices + full trips'], ['quotes', 'Guest reviews'], ['waitlist', 'Waitlist'], ['hostels', 'Hostel details'], ['flow', 'Where guests go'], ['funnel', 'Funnel']];
     app.innerHTML = '<header><div><img src="/assets/logo/mad-monkey-white.png" alt="Mad Monkey"> &nbsp;<b>Crew console</b></div><button class="btn" id="out">Sign out</button></header><nav>' + tabs.map(function (t) { return '<button data-t="' + t[0] + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</nav><main>' + inner + '</main>';
     document.getElementById('out').onclick = function () { sessionStorage.removeItem('mm-admin'); TOKEN = ''; login(); };
     Array.prototype.forEach.call(app.querySelectorAll('nav button'), function (b) { b.onclick = function () { tab = b.getAttribute('data-t'); CREWFOCUS = ''; render(); }; });
@@ -230,7 +230,7 @@ textarea{min-height:80px} pre{background:var(--black);color:#e6e2d6;padding:12px
   /* ---------- live ---------- */
   function renderLive() {
     api('/live').then(function (L) {
-      var h = '<div class="card"><h2 style="font-size:22px;margin-bottom:6px">Spots left on ALL IN trips</h2><p class="muted">Leave blank to hide. Shown on the trip cards as "N spots left".</p><table><tr><th>Trip</th><th>Spots left</th><th>Next departure (override)</th></tr>' +
+      var h = '<div class="card"><h2 style="font-size:22px;margin-bottom:6px">Full ALL IN trips</h2><p class="muted">Guests never see a number of spots. Put 0 to show a trip as full, with the waitlist. Any other number is for the crew only; leave it blank when the trip is not full.</p><table><tr><th>Trip</th><th>Spots left (crew only)</th><th>Next departure (override)</th></tr>' +
         TRIPS.map(function (t) { var v = (L.spots || {})[t.id] || {}; return '<tr><td><b>' + esc(t.n) + '</b> <span class="muted">' + t.days + ' days</span></td><td><input data-spot="' + t.id + '" type="number" min="0" value="' + (v.left == null ? '' : v.left) + '"></td><td><input data-next="' + t.id + '" type="date" value="' + esc(v.next || '') + '"></td></tr>'; }).join('') + '</table>' +
         '<label>Banner shown on the site (optional)</label><input id="notice" value="' + esc(L.notice || '') + '" placeholder="e.g. Monsoon season: Koh Rong boats may be rough this week"></div>' +
         '<div class="card"><h2 style="font-size:22px;margin-bottom:6px">Real fares: transport</h2><p class="muted">The builder ships with typical fares. Type a real one over any row and guests see it straight away, tagged "live". Clear a box to go back to the estimate. <b>u</b> = price in USD, <b>h</b> = door-to-door hours. Flights run airport-to-airport; the app adds the airport transfers.</p><input id="ef" placeholder="filter: hanoi, flight, DPS, boat…" style="margin-bottom:8px"><div style="max-height:380px;overflow:auto"><table id="et"><tr><th>Leg</th><th>Mode</th><th>USD</th><th>Hours</th></tr>' +
