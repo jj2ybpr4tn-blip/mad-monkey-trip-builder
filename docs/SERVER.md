@@ -19,7 +19,7 @@ The server rewrites `config.js` on the fly so the site talks to `/api` automatic
 | Approves | (your payment link takes them to pay) | Marks *Approved* (hold becomes a booking) |
 | Plans with mates | Stores the group; every vote/“I'm in” is its own write, so simultaneous voters never overwrite each other | |
 | Ticks **Find your crew** when sending | Keeps their answers with the trip (cleaned), and works out who matches whom | Sees matches and hot spots in **Find your crew**, asks each traveller first with a written message, records each introduction, switches people off on request ([FIND-YOUR-CREW.md](FIND-YOUR-CREW.md)) |
-| Browses | Serves **live data** the crew edits: spots left on ALL IN trips, a site banner, real fares for any transport leg, real activity prices (these replace the built-in estimates and show a "live" tag) | Edits them in **Live prices + spots** |
+| Browses | Serves **live data** the crew edits: which ALL IN trips are full (guests never see a count of spots), a site banner, real fares for any transport leg, real activity prices (these replace the built-in estimates and show a "live" tag) | Edits them in **Live prices + full trips** |
 | Reads reviews | Serves approved quotes per hostel | Adds / removes them in **Guest reviews** (only add ones you have permission to use) |
 | Sees "guests go next" | Mixes your **imported real stays** with what guests are planning right now | Pastes a `from,to,count` CSV in **Where guests go** |
 | Anything | Records anonymous funnel events | Reads the **Funnel** (visit → add stop → plan → review request) and which home door is used |

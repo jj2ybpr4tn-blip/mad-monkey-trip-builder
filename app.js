@@ -234,8 +234,10 @@
      ============================================================ */
   var HERO_ROUTES = [['bangkok', 'chiang-mai', 'luang-prabang', 'vang-vieng', 'hanoi', 'hoi-an', 'phnom-penh', 'koh-rong'], ['uluwatu', 'nusa-lembongan', 'gili-trawangan', 'kuta-lombok'], ['manila', 'panglao', 'siargao']];
   function spotsPill(t) {
-    var s = MM.LIVE && MM.LIVE.spots && MM.LIVE.spots[t.id]; if (!s || s.left == null) return '';
-    return '<div class="tcard__spots pill pill--sm ' + (s.left <= 5 ? 'pill--pink' : 'pill--lime') + '">' + (s.left === 0 ? 'Full: join the waitlist' : s.left + (s.left === 1 ? ' spot left' : ' spots left')) + '</div>';
+    // Never a count of spots left: guests book a trip, they don't watch it fill up (no scarcity claims, 17 Nov 2026).
+    // Only a trip the crew marks full (0 in Admin) says so, with the waitlist; any other number stays with the crew.
+    var s = MM.LIVE && MM.LIVE.spots && MM.LIVE.spots[t.id]; if (!s || s.left == null || s.left === '' || +s.left !== 0) return '';
+    return '<div class="tcard__spots pill pill--sm pill--pink">Full: join the waitlist</div>';
   }
   function liveNotice() { return MM.LIVE && MM.LIVE.notice ? '<div class="livebar">' + esc(MM.LIVE.notice) + '</div>' : ''; }
   function tripCard(t) {

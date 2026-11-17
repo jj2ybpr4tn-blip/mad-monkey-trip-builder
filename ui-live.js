@@ -1,5 +1,5 @@
 /* ============================================================
-   LIVE DATA — spots left, real fares, real reviews, real "guests go next", analytics.
+   LIVE DATA — trips marked full (never a count of spots left), real fares, real reviews, real "guests go next", analytics.
    Everything here is optional and fails quietly: with no API the builder uses its built-in
    estimates. Fed by the crew console (/admin) when the bundled server is running.
    ============================================================ */
