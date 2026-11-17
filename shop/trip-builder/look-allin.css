@@ -150,6 +150,7 @@
 :root[data-look="allin"] .stopc__num{background:var(--amber);color:var(--canopy)}
 :root[data-look="allin"] .stopc__more{border-color:var(--line);background:var(--mist)}
 :root[data-look="allin"] .pick{background:var(--moon);border-color:transparent}
+:root[data-look="allin"] .stopc__adds .addpick{border-color:rgba(14,43,38,.35);color:var(--canopy)} :root[data-look="allin"] .stopc__adds .addpick:hover{background:var(--amber);border-color:var(--amber)}
 :root[data-look="allin"] .gal__i,:root[data-look="allin"] .gal__more{border-color:transparent;border-radius:var(--r-sm)}
 :root[data-look="allin"] .gal__more{background:var(--amber)}
 :root[data-look="allin"] .legc{background:transparent!important;box-shadow:none!important;border:0}
@@ -192,6 +193,7 @@
 :root[data-look="allin"] .modal__x{border-width:1.5px;border-color:var(--line);border-radius:50%}
 :root[data-look="allin"] .toast{background:var(--canopy);color:var(--mist);border-radius:999px;border:0;box-shadow:var(--lift-dark)!important}
 :root[data-look="allin"] .toast button{color:var(--amber)}
+:root[data-look="allin"] .toast--act button{background:var(--amber);color:var(--canopy);border-color:var(--amber);font-weight:800}   /* the Undo button must read "Undo", not amber on amber */
 :root[data-look="allin"] .pack__stamp{transform:none;border-radius:999px}
 :root[data-look="allin"] .skip{border-radius:999px}
 :root[data-look="allin"] .srch__box{border:2px solid var(--canopy);border-radius:var(--r-md);background:#fff}
@@ -249,7 +251,14 @@
 @media (pointer:coarse){:root[data-site]{--hdr:108px} :root[data-site] .subnav{height:48px} .sitebar__r .sbtn,.sitebar__menu,.sitemenu__foot .sbtn,.subnav .navbtn{min-height:44px}}
 @media (max-width:1180px){.sitebar__links{display:none}.sitebar__menu{display:inline-flex}}
 @media (max-width:1000px){:root[data-site]{--hdr:60px} :root[data-site] .subnav{position:relative;top:0;z-index:2}}
-@media (max-width:760px){.sitebar__enq{display:none}}
+@media (max-width:760px){.sitebar__ask{display:none}}   /* on a phone the Ask button stays in the corner instead (ui-ask.js) */
 @media (max-width:560px){:root[data-site] .sitebar{gap:10px}.subnav__t{display:none}.subnav .navbtn{padding:6px 11px}}
 @media (max-width:360px){.sitebar__r{gap:6px}.sitebar__r .sbtn,.sitebar__menu{padding-left:12px;padding-right:12px;font-size:13px}}
 @media print{.sitebar,.subnav,.sitemenu{display:none!important}}
+
+/* ---------- Ask Ewan (ui-ask.js): the form, and the button that stays in the corner on a phone ---------- */
+:root[data-look="allin"] .askfab{background:var(--canopy);color:var(--mist);border:2px solid rgba(243,247,242,.9);font-family:var(--f);font-weight:800;font-stretch:110%}
+:root[data-look="allin"] .askfab:hover{background:var(--canopy-2)}
+:root[data-look="allin"] .askf__trip{background:var(--mist);border:1.5px solid var(--line);border-radius:16px}
+:root[data-look="allin"] .askf__sum{background:var(--mist);border:1.5px solid var(--line);border-radius:14px}
+:root[data-site] .humanbar__ask{display:none}   /* inside the ALL IN site the Ask button is in the site's bar (or the corner, on a phone) */

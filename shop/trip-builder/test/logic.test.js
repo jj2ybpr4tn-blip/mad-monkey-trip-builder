@@ -770,4 +770,32 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('site menu: a long label is cut short', MM.siteMenu({ v: 1, bar: [['x'.repeat(90), '#a']] }, SITE, HERE, NOW).bar[0].t.length === 40);
 })();
 
+/* ---------- "Ask Ewan": a question for the crew from any page (extras.js: askContact, askPayload) ---------- */
+(function () {
+  eq('ask: an email is an email', MM.askContact(' sam@example.com ').email, 'sam@example.com');
+  eq('ask: a number with a country code is WhatsApp', MM.askContact('+44 7700 900123').whatsapp, '+447700900123');
+  eq('ask: 00 in front counts as the country code', MM.askContact('0044 7700 900123').whatsapp, '+447700900123');
+  eq('ask: digits without + are read with their country code', MM.askContact('447700900123').whatsapp, '+447700900123');
+  eq('ask: a local number asks for the country code', MM.askContact('07700 900123').err, 'country');
+  eq('ask: a broken email is caught', MM.askContact('sam@example').err, 'email');
+  eq('ask: too short to be a number', MM.askContact('12345').err, 'whatsapp');
+  eq('ask: words are neither', MM.askContact('call me maybe').err, 'contact');
+  eq('ask: empty is empty', MM.askContact('  ').err, 'empty');
+  var q = MM.askPayload({ name: 'Sam <b>Lee</b>', contact: '+44 7700 900123', message: 'Is the Ha Giang Loop OK if I can\'t ride?\nThanks', page: 'ALL IN site, Trips' });
+  ok('ask: a question with no trip still has a route and a day, so the backend keeps it', q && q.trip.route === 'Question, no trip yet' && q.trip.days === 1 && q.trip.start === '');
+  ok('ask: it is a question, sent free, holding nothing', q.type === 'question' && q.status === 'submitted' && q.hold.requested === false && q.contact.consent === true);
+  ok('ask: WhatsApp only, no email', q.contact.via === 'whatsapp' && q.contact.whatsapp === '+447700900123' && q.contact.email === '');
+  ok('ask: the name loses any markup', q.contact.name.indexOf('<') < 0 && q.contact.name.indexOf('Sam') === 0);
+  ok('ask: the question is in the notes and the crew text, with where it was asked', /Ha Giang Loop OK/.test(q.contact.notes) && /Asked from: ALL IN site, Trips/.test(q.contact.notes) && /^QUESTION FOR THE CREW/.test(q.crewText) && /THEIR QUESTION\nIs the Ha Giang/.test(q.crewText));
+  ok('ask: nothing personal of ours rides along', JSON.stringify(q).indexOf('wa.me') < 0 && JSON.stringify(q).indexOf('mailto') < 0);
+  ok('ask: no name, no way to reply or no question gives nothing to send', MM.askPayload({ name: '', contact: 'a@b.co', message: 'hi' }) === null && MM.askPayload({ name: 'A', contact: 'nope', message: 'hi' }) === null && MM.askPayload({ name: 'A', contact: 'a@b.co', message: '  ' }) === null);
+  var s = st([stop('hanoi', 3), stop('hoi-an', 4)], { start: '2027-03-03' }), pl = MM.plan(s);
+  var t = MM.askPayload({ name: 'Sam', contact: 'sam@example.com', message: 'Can I add Pai?', state: s, plan: pl, link: 'https://madmonkeyhostels.com/all-in-trips/trip-builder/#/build/' + MM.encodeState(s), tripName: 'My trip', page: 'Trip builder' });
+  ok('ask: a question about a trip carries the trip, marked as a question', t.trip.route === 'Question: Hanoi → Hoi An' && t.trip.days === pl.totals.days && t.trip.stops.join() === 'hanoi,hoi-an' && !!t.summary);
+  ok('ask: but never its start date, so no beds are held', t.trip.start === '' && t.hold.requested === false);
+  ok('ask: its link opens the same trip and is never "the trip you already sent"', /#\/build\/i=s\.hanoi.*&q=[0-9a-z]+$/.test(t.trip.link) && MM.decodeState(t.trip.link.split('#/build/')[1]).items.length === 2);
+  ok('ask: the crew text leads with the question, then the trip', /^QUESTION FOR THE CREW[\s\S]*Can I add Pai\?[\s\S]*HANOI/.test(t.crewText));
+  ok('ask: a long question is cut to fit', MM.askPayload({ name: 'A', contact: 'a@b.co', message: 'x'.repeat(5000) }).question.text.length === 1500);
+})();
+
 Promise.all(pending).then(function () { console.log('\n' + pass + '/' + (pass + fail) + ' passed'); process.exit(fail ? 1 : 0); });

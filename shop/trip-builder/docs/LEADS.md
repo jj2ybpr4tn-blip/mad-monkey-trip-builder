@@ -77,6 +77,14 @@ node scripts/test-receiver.mjs
 
 The guest picks **one** way to be contacted: WhatsApp or email. Only that field is filled in and `contact.via` says which (`"whatsapp"` or `"email"`). Reply on that channel. The server accepts a request with either a valid email or a WhatsApp number (8–15 digits); it refuses one with neither.
 
+### Questions ("Ask Ewan")
+
+A question from the Ask button arrives on the same endpoint in the same shape, with `type: "question"`, `hold.requested: false`, no
+`trip.start`, and `question: { text, page, trip }`. `crewText` starts with `QUESTION FOR THE CREW` and the question; `contact.notes` has
+it too. With a trip on screen the trip comes with it (`trip.route` starts `Question: `); without one, `trip.route` is
+`Question, no trip yet` and `trip.days` is 1, because the backend keeps only requests with a route and a day. See
+[ALL-IN-SITE.md](ALL-IN-SITE.md#ask-ewan-one-button-a-short-form-the-crew-backend-ui-askjs-extrasjs).
+
 
 ## What the crew sees: `summary` and `crewText`
 
