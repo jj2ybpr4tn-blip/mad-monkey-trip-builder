@@ -5,9 +5,10 @@
 # The page plays these on the live preview and falls back to Mixkit's 720p if one is missing.
 # Run it from GitHub: Actions > Shop videos > Run workflow. Clips already published are kept unless you tick "force".
 # Clips are free under the Mixkit Stock Video Free License (placeholder footage until we have our own).
-# hagiang and mapileng are Ha Giang films, free under the Pexels License: riders on a cliff road on the Loop
-# (pexels.com/video/30259790, Trent Kloter) and the Ma Pi Leng road over the Nho Que river (pexels.com/video/17566209,
-# MapKoi Travel). They also get a lighter 720p copy, shop/v/<name>-720.mp4, which phones play.
+# hagiang and loop are Ha Giang films, free under the Pexels License: riders on a cliff road on the Loop, from a drone
+# (pexels.com/video/30259790, Trent Kloter), and riders with the flag, arms out, behind them (pexels.com/video/32006798,
+# Daniela). They also get a lighter 720p copy, shop/v/<name>-720.mp4, which phones play. mapileng (the Ma Pi Leng road,
+# pexels.com/video/17566209) was made once and isn't used: it shows a car, and the Loop is ridden.
 name: Shop videos
 on:
   workflow_dispatch:
@@ -73,7 +74,7 @@ jobs:
           dragon $A/100498/1725309129/100498-video-1080.mp4 20
           splash $A/99789/1716843091/99789-video-1080.mp4 20
           hagiang $P/30259790/12972476_3840_2160_30fps.mp4 18 1080,720
-          mapileng $P/17566209/17566209-uhd_2560_1440_30fps.mp4 20 1080,720
+          loop $P/32006798/13641554_3840_2160_30fps.mp4 13 1080,720
           CLIPS
           du -ch shop/v/*.mp4 | tail -1
       - name: Publish to gh-pages
