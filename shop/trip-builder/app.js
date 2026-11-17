@@ -113,13 +113,13 @@
     app.state = Object.assign(MM.defaultState(), back); app.auto = false; persist(); H.cur = next; H.busy = false; refreshBuilder();
     return MM.edit.describe(JSON.parse(was), back);
   }
-  app.undo = function () { var d = stepHist(-1); toast(d ? 'Undone' + (d.length ? ': ' + d[0] : '') : 'Nothing to undo'); return !!d; };
+  app.undo = function () { var d = stepHist(-1); toast(d ? 'Undone' + (d.length ? '. ' + d[0] : '') : 'Nothing to undo'); return !!d; };
   // Take back several steps at once and say so once.
   app.undoMany = function (n) {
     var was = H.cur, k = 0; while (k < n && stepHist(-1)) k++;
-    var d = k ? MM.edit.describe(JSON.parse(was), JSON.parse(H.cur)) : null; toast(k ? 'Undone' + (d && d.length ? ': ' + d[0] : '') : 'Nothing to undo'); return k;
+    var d = k ? MM.edit.describe(JSON.parse(was), JSON.parse(H.cur)) : null; toast(k ? 'Undone' + (d && d.length ? '. ' + d[0] : '') : 'Nothing to undo'); return k;
   };
-  app.redo = function () { var d = stepHist(1); toast(d ? 'Redone' + (d.length ? ': ' + d[0] : '') : 'Nothing to redo'); return !!d; };
+  app.redo = function () { var d = stepHist(1); toast(d ? 'Redone' + (d.length ? '. ' + d[0] : '') : 'Nothing to redo'); return !!d; };
   // Replace the trip with an edited one (from the controls or the AI) and offer an Undo.
   app.commit = function (state, msg, quiet) { app.state = state; app.auto = false; persist(); refreshBuilder(); if (!quiet) toast(msg, { undo: true }); };
   function applyEdit(ops) {
