@@ -65,7 +65,7 @@ npm run audit    # the data audit: prices, legs, tours, ALL IN trips, photos and
 (see **[docs/SERVER.md](docs/SERVER.md)**). It turns on, with no config:
 
 - **Human review + bed holds.** Requests land in `/admin` with a ready-made **bed-hold sheet** (hostel, check-in, check-out). The crew marks them *Checking / Ready / Approved / Can't do it*, writes the guest a note and pastes a payment link, and the guest's status page updates.
-- **Live prices + spots left** edited by the crew; real fares replace the built-in estimates.
+- **Live prices, and trips marked full,** edited by the crew (guests never see a count of spots left); real fares replace the built-in estimates.
 - **Real guest reviews** per hostel, **real "guests go next"** (paste a CSV of stays), **group mode** across devices, and a **funnel** view.
 
 **The other way: your own backend.** Leave `API_BASE` blank and set `LEAD_ENDPOINT` etc. in [config.js](config.js) to endpoints you build. Contracts: [docs/LEADS.md](docs/LEADS.md), [docs/GROUP.md](docs/GROUP.md).

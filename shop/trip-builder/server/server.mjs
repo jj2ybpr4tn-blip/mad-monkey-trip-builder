@@ -11,7 +11,7 @@
      • /api/groups…          group mode (votes, ideas, Route A/B, own routes for meet-ups)
      • POST /api/waitlist    "tell me when it launches" signups for ALL IN trips that aren't live yet
      • POST /api/share       short link + preview image for a trip  →  /t/<code> (rich previews on WhatsApp etc.)
-     • GET  /api/live        spots left + price overrides the crew maintains
+     • GET  /api/live        trips marked full + price overrides the crew maintains
      • GET  /api/fares       ?from=BKK&to=CNX&date=YYYY-MM-DD  lowest + highest real fare for that day (needs AMADEUS_CLIENT_ID/SECRET)
      • GET  /api/reviews     approved guest quotes per hostel
      • /api/admin/crew…      Find your crew: opted-in travellers whose trips cross, for the crew to introduce (docs/FIND-YOUR-CREW.md)
