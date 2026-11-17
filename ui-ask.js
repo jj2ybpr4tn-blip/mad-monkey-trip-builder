@@ -111,12 +111,16 @@
     });
   };
 
-  // every Ask button carries the name from the config, and a phone gets one that stays in the corner
+  // Every Ask button carries the name from the config. On a phone Ask sits in a bar at the bottom, next to the main button, as on the ALL IN site,
+  // so it never floats over another button: on the trip itself in the trip's own bar (app.js), on every other screen in this one, with "Your trip" once there is one.
   Array.prototype.forEach.call(document.querySelectorAll('[data-ask-label]'), function (b) { b.textContent = label(); });
-  if (!document.getElementById('askfab')) {
-    var fab = document.createElement('button');
-    fab.id = 'askfab'; fab.className = 'askfab'; fab.type = 'button'; fab.setAttribute('data-act', 'ask'); fab.textContent = label();
-    document.body.appendChild(fab);
+  if (!document.getElementById('abar')) {
+    var bar = document.createElement('div');
+    bar.id = 'abar'; bar.className = 'abar'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Ask or carry on');
+    bar.innerHTML = '<button class="btn btn--sm btn--paper abar__ask" type="button" data-act="ask" data-ask-label></button><button class="btn btn--sm btn--pink abar__go" id="abar-go" type="button" data-act="abargo" hidden>Your trip</button>';
+    bar.querySelector('.abar__ask').textContent = label();
+    document.body.appendChild(bar);
+    if (A && A.syncAskBar) A.syncAskBar();
   }
   // an old link to "#ask" (or the site's "#enquire") opens the form
   function fromHash() { if (/^#(ask|enquire)$/.test(location.hash)) { try { history.replaceState(null, '', location.pathname + location.search + '#/'); } catch (e) { /* ignore */ } A.openAsk(); } }
