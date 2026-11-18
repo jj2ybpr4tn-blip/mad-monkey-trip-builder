@@ -1,8 +1,10 @@
 # ALL IN launch pack
 
 For Charlie. The new ALL IN site, ready to host at madmonkeyhostels.com/all-in-trips, with what it needs around it.
-Private until launch: it names the 2027 trips and their prices, so it lives in its own private repo, never in the public
-trip builder repo. Nothing switches until Ewan says the new site is launching.
+Before launch: it names the 2027 trips and their prices, so please don't share the link. It's on its own branch of the
+trip builder repo (`launch-pack`), which comes down once the site is live. Nothing switches until Ewan says it's launching.
+
+To get it: `git clone -b launch-pack --single-branch https://github.com/jj2ybpr4tn-blip/mad-monkey-trip-builder.git all-in-launch`
 
 Built 18 Nov 2026 from concept v21 (the same page as the private preview, without the preview's bar, notes or code
 comments) with the trip builder at main `ab38894`. `BUILD.txt` says exactly what went in and how to build it again.
