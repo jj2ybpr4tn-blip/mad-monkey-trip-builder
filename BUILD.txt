@@ -1,0 +1,28 @@
+ALL IN launch pack: what's in it and how to build it again
+
+Built      18 Nov 2026, 14:40 (Phnom Penh), by the admin chat: the 2027 prices (approved by Kyle; ALL ASIA $4,999) and the map fixes,
+           with no developer notes in the page source (14:16's build, cleaned)
+Page       concept v21 from drafts/all-in-store/src, with the set prices, three trip fixes and the map fixes (18 Nov), the same
+           source as the private preview (republished 14:19, gh-pages d2936e0)
+Builder    the trip builder's engine at main ab38894 (the one-stop-at-a-time start), inside the page
+Launch     ALLIN_LAUNCH=1: no preview bar, no preview notes, no comments in the page (src/launchclean.py; the scripts
+           are checked the same as before with tools/launchclean_check.mjs) except the two where the site's tags go,
+           and our films loaded from /all-in-trips/v/ (ALLIN_FILMS to change that)
+Off        instant booking (no trip listed yet: set ALLIN_LIVE_JSON once trips are in the booking system, see src/v14.js)
+
+Checksums (md5)
+34cba3e920b91c741d2d4d692f5e095c  all-in-trips/index.html
+85cdbff57c0ae4867ed6b888bcce8a9c  all-in-trips/v/dragon-1080.mp4    Tết's lion dance (stock, Mixkit)
+4e4334b8e85514e3d6ad20cc97f8226b  all-in-trips/v/falls-1080.mp4     Cambodia's waterfall (stock, Mixkit)
+e508ab316ec8921ccb5198431bde60cb  all-in-trips/v/hgloop-1080.mp4    Ewan's Ha Giang Loop clip, laptops
+5d134983ed1c4a737d19d6a1eab41a6a  all-in-trips/v/hgloop-720.mp4     Ewan's Ha Giang Loop clip, phones
+d1b58dc4aee33fa674c428ab51399ca3  all-in-trips/v/sunsea-1080.mp4    the sunset in the story (stock, Mixkit)
+900a57f76e4df222e01aeb03fb6046bb  all-in-trips/v/surf-1080.mp4      the Philippines' surf (stock, Mixkit)
+The films are the preview's own copies (gh-pages shop/v/), made by .github/workflows/shop-videos.yml or, for Ewan's clip,
+in drafts/ha-giang-media.
+
+To build it again, from the trip builder repo on the Mac (pull first):
+  npm run -s publish-preview -- --dry-run        (builds the builder into .site/, publishes nothing)
+  ALLIN_LAUNCH=1 python3 drafts/all-in-store/src/build.py drafts/all-in-concept/ALL-IN-concept-v4.html \
+      .site/mad-monkey-trip-builder/shop/trip-builder drafts/launch-pack/all-in-trips/index.html
+Then copy any new films into all-in-trips/v/, update the checksums above, and check it with tools/launch21.py.
