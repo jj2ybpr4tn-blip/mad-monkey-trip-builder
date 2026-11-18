@@ -6581,6 +6581,7 @@ const HI = {"crewhg":["m:destinations/14/1790054018145-1.png",1920,1080],"hgcrew
       ['Koh Rong','Jungle trek to an empty beach; final dinner, awards and trip film','Night swim in glowing plankton',4,'a'],
       ['Koh Rong','Farewell','',1,'r']]}
   ];
+  { const i = FEST.findIndex(f=>f.id === 'sinulog'); if(i > -1) FEST.splice(i, 1); }
 
   
 
@@ -6655,7 +6656,6 @@ const HI = {"crewhg":["m:destinations/14/1790054018145-1.png",1920,1080],"hgcrew
   const FESTNIGHTS = [
     {id:'yipeng', short:'Yi Peng', places:['chiang-mai'], w:3, dates:[{s:'2027-11-13', e:'2027-11-14', conf:'expected'}], eve:'Yi Peng and Loy Krathong: lanterns and the river'},
     {id:'tet', short:'Tết', places:['hanoi'], w:3, dates:[{s:'2027-02-05', e:'2027-02-06', conf:'fixed'},{s:'2028-01-25', e:'2028-01-26', conf:'fixed'}], eve:'Tết: New Year’s Eve in Hanoi'},
-    {id:'sinulog', short:'Sinulog', places:['cebu'], w:3, dates:[{s:'2027-01-17', conf:'fixed'},{s:'2028-01-16', conf:'fixed'}], eve:'Sinulog: the grand parade in Cebu'},
     {id:'pimai', short:'Pi Mai', places:['luang-prabang'], w:2, dates:[{s:'2027-04-14', e:'2027-04-16', conf:'fixed'},{s:'2028-04-14', e:'2028-04-16', conf:'fixed'}], eve:'Pi Mai, the Lao new year'},
     {id:'lightboats', short:'Fire boats', places:['luang-prabang'], w:3, dates:[{s:'2027-10-15', e:'2027-10-16', conf:'expected'}], eve:'Lai Heua Fai: fire boats on the Mekong'},
     {id:'xmas', short:'Christmas Day', places:'*', w:1, dates:[{s:'2027-12-25', conf:'fixed'}], eve:'Christmas Day with the crew'},
@@ -6971,7 +6971,7 @@ const HI = {"crewhg":["m:destinations/14/1790054018145-1.png",1920,1080],"hgcrew
    
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const CAL = [
-    {fest:['sinulog'], moon:'2027-01-17', also:[]},
+    {fest:[], moon:null, also:[], note:'Dry season on the islands, and the Island Hopper’s first departures of the year.'},
     {fest:['tet'], moon:'2027-02-05', also:[['Chinese New Year','Yaowarat, Bangkok, 6 to 7 Feb'],['Chiang Mai Flower Festival','5 to 7 Feb, expected'],['Bau Nyale','Kuta Lombok, set by Sasak elders'],['Hoi An’s first full moon','Lanterns on the river, 19 Feb']]},
     {fest:['nyepi'], moon:'2027-03-08', also:[]},
     {fest:['newyear'], moon:'2027-04-13', also:[['Khmer New Year','Angkor Sankranta at Angkor Wat, 14 to 16 Apr']]},

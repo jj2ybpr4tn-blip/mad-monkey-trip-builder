@@ -25,7 +25,7 @@ comments) with the trip builder at main `ab38894`. `BUILD.txt` says exactly what
    pages, and the first six are today's addresses, so links already in ads, bios and creator posts keep working.
 
    `/all-in-trips/vietnam` `/cambodia` `/indonesia` `/laos` `/thailand` `/all-asia`, and the new ones:
-   `/philippines` `/sinulog` `/tet` `/nyepi` `/newyear` `/lightboats` `/yipeng` `/raceday`
+   `/philippines` `/tet` `/nyepi` `/newyear` `/lightboats` `/yipeng` `/raceday`
 
    Only those. Everything else under `/all-in-trips/` stays as it is: the trip builder (`/all-in-trips/trip-builder/`),
    Admin, and anything else today's app serves there. A trailing slash (`/all-in-trips/vietnam/`) should redirect to the
@@ -81,8 +81,8 @@ kept in their browser for that visit, and they reach Mad Monkey only if the gues
 ## Before it goes live
 
 - **Prices.** Every trip has its set price per person, flights not included (Ewan, 18 Nov 2026): Cambodia $749, Vietnam
-  $849, Indonesia $849, Thailand $899, Laos $499, the Island Hopper $800, its Sinulog edition $1,049 (Cebu nights in it), Tết
-  $699, Nyepi $649, Songkran & Pi Mai $749, Lai Heua Fai $499, Yi Peng $599, Bon Om Touk $649 and ALL ASIA $4,999. Today's
+  $849, Indonesia $849, Thailand $899, Laos $499, the Island Hopper $800, Tết $699,
+  Nyepi $649, Songkran & Pi Mai $749, Lai Heua Fai $499, Yi Peng $599, Bon Om Touk $649 and ALL ASIA $4,999. Today's
   trips keep their live prices. Instant booking stays off until each trip is loaded into the booking system; then this
   pack is rebuilt with it on.
 - **Footage.** Four stock films are still in use (Cambodia's waterfall, the Philippines' surf, Tết's lion dance, the sunset in
