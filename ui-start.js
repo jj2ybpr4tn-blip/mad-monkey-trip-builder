@@ -64,6 +64,10 @@
   function trip(id) { return MM.ALL_IN.filter(function (t) { return t.id === id; })[0]; }
   function priceOf(t) { var d = A.state.start ? MM.util.parseDate(A.state.start) : null; return MM.allInPrice(t, d); }
   function fmtDay(d, yr) { return d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) + (yr ? ' ' + d.getUTCFullYear() : '') : ''; }
+  // the day the trip finishes: the engine's last day (you check out and move on), a date once they've picked when they go
+  function endDate(pl) { var d = pl && pl.days && pl.days.length ? pl.days[pl.days.length - 1].date : null; return d || null; }
+  function startDate() { return A.state.start ? MM.util.parseDate(A.state.start) : null; }
+  function dateRange(pl) { var a = startDate(), b = endDate(pl); if (!a || !b) return ''; var yr = a.getUTCFullYear() !== b.getUTCFullYear(); return fmtDay(a, yr) + ' to ' + fmtDay(b, true); }
 
   /* ============================================================
      THE TRIP: the builder's own (MMApp.state). The extras, mm-start: how long they've got, who's coming, the screen they were on.
@@ -409,7 +413,8 @@
   // reaches: 3 nights in Bangkok takes you to day 4, when you move on. The trip page and its day by day count the same way.
   function bar(pl, animate) {
     var days = pl.totals.days, t = S.target, over = t && days > t;
-    $('#daysT').innerHTML = t ? '<b>Day ' + days + '</b> of ' + t + (over ? ' · ' + (days - t) + ' over' : '') : 'Up to <b>day ' + days + '</b>';
+    var end = endDate(pl), on = end ? '<span class="days__d"> · ' + esc(fmtDay(end)) + '</span>' : '';       // with a date: the day it reaches
+    $('#daysT').innerHTML = (t ? '<b>Day ' + days + '</b> of ' + t + (over ? ' · ' + (days - t) + ' over' : '') : 'Up to <b>day ' + days + '</b>') + on;
     var m = $('#meter'); m.classList.toggle('over', !!over); m.style.visibility = t ? '' : 'hidden';
     m.firstChild.style.width = t ? Math.min(100, days / t * 100) + '%' : '0';
     countTo($('#priceB'), G.price, pl.totals.total, animate ? 1400 : 0); G.price = pl.totals.total;
@@ -616,24 +621,28 @@
   function viewTrip() {
     var pl = plan(); if (!pl || !pl.places.length) return nav('');
     var tot = pl.totals, cs = countriesIn(pl), stops = pl.segs.length, st = A.state;
-    var start = st.start ? MM.util.parseDate(st.start) : null, day = 1, h = '';
+    var start = st.start ? MM.util.parseDate(st.start) : null, h = '';
+    // each stop's days from the engine's own day by day (pl.days): it counts every night, on a sleeper bus, on a multi-day tour, and the
+    // free night before an ALL IN trip, so the day by day ends on the same day the trip page counts to
     pl.segs.forEach(function (sg, i) {
-      var len = sg.kind === 'stop' ? sg.n : MM.allInNights(sg.trip), d0 = start ? MM.util.fmtDate(MM.util.addDays(start, day - 1)) : null;
-      var when = d0 ? d0 + ' to ' + MM.util.fmtDate(MM.util.addDays(start, day - 1 + len)) : 'Day ' + day + ' to ' + (day + len);
+      var ds = pl.days.filter(function (d) { return d.si === i && d.kind !== 'move'; }), from = ds.length ? ds[0].n : 1, to = ds.length ? ds[ds.length - 1].n + 1 : from;
+      var when = start ? MM.util.fmtDate(MM.util.addDays(start, from - 1)) + ' to ' + MM.util.fmtDate(MM.util.addDays(start, to - 1)) : 'Day ' + from + ' to ' + to;
       if (sg.kind === 'stop') {
         var acts = (sg.acts || []).map(function (a) { return a.n; });
         h += '<li><span class="tl__d">' + esc(when) + '</span><span class="tl__n">' + esc(P[sg.p].n) + '</span><span class="tl__x">' + sg.n + (sg.n === 1 ? ' night' : ' nights') + (P[sg.p].partner ? ' at a partner hostel' : ' at Mad Monkey') + (acts.length ? ' · ' + esc(acts.join(', ')) : '') + '</span>';
       } else {
-        h += '<li class="tl--allin"><span class="tl__d">' + esc(when) + '</span><span class="tl__n">ALL IN ' + esc(sg.trip.n) + '</span><span class="tl__x">' + esc(sg.trip.tag) + '. Planned for you, with a crew.</span>';
+        h += '<li class="tl--allin"><span class="tl__d">' + esc(when) + '</span><span class="tl__n">ALL IN ' + esc(sg.trip.n) + '</span><span class="tl__x">' + esc(sg.trip.tag) + '. Planned for you, with a crew.' + (sg.pre ? ' You get there the day before it leaves, and that night is on us.' : '') + '</span>';
       }
       var L = pl.legs.filter(function (l) { return l.index === i; })[0];
       if (L && L.chosen && i < pl.segs.length - 1) h += '<span class="tl__ride">' + icon(L.chosen.main) + esc(hrs(L.chosen.h)) + ' ' + esc(modeWord(L.chosen)) + ' to ' + esc(P[L.to] ? P[L.to].n : L.to) + ', ~' + money(L.chosen.u) + '</span>';
       h += '</li>';
-      day += len + (L && i < pl.segs.length - 1 ? (L.nights || 0) : 0);          // a night on a sleeper bus, train or boat is a day of the trip too
     });
+    var end = endDate(pl), fin = lastPlace(pl), day = pl.days.length ? pl.days[pl.days.length - 1].n : tot.days;     // the last day: you check out and move on
+    h += '<li class="tl--end"><span class="tl__d">' + esc(end ? MM.util.fmtDate(end) : 'Day ' + day) + '</span><span class="tl__n">Your trip ends</span><span class="tl__x">Day ' + day + ', in ' + esc(P[fin].n) + '. Check out, then head home or keep going. Flights aren\'t included: the crew suggests the right one.</span></li>';
     V.innerHTML = '<section class="trip"><div class="trip__top"><button class="back" data-act="keep">‹ Keep building</button><button class="link pro" data-act="editor" style="font-size:14px">Every detail: full editor</button></div>' +
       '<div class="tmap" id="tmap"></div>' +
       '<div class="trip__b"><p class="over">Your trip</p><h1>' + tot.days + ' days · ' + cs.length + (cs.length === 1 ? ' country' : ' countries') + ' · ' + stops + (stops === 1 ? ' stop' : ' stops') + '</h1>' +
+      '<p class="tdates">' + (dateRange(pl) ? esc(dateRange(pl)) : 'Pick when you go (below) to see the day it finishes.') + '</p>' +
       vibeBar(pl) +
       '<div class="tprice"><b>' + money(tot.total) + '</b><span>each, about</span></div>' +
       '<p class="small" style="margin-top:8px">Beds, rides, the things you picked and ' + money(st.fund) + ' a day for food and fun' + (tot.flights ? ', plus about ' + money(tot.flights) + ' in flights' : '') + '. <button class="link" data-act="money" style="padding:0;font-size:13px">What\'s in it</button></p>' +
@@ -666,64 +675,65 @@
   }
 
   /* ---------- hold my beds: the trip goes to the crew (the same request as the editor's form) ---------- */
-  function told() { try { var t = JSON.parse(sessionStorage.getItem('allin-told') || 'null'); return t && typeof t.text === 'string' && t.text.trim() && Array.isArray(t.tiktok) ? t : null; } catch (e) { return null; } }
-  // Every ALL IN trip comes with a free bed the night before it starts, at the Mad Monkey where it starts, subject to availability
-  // (the ALL IN site asks the same at checkout). A trip that starts with an ALL IN trip is asked here too, and the answer goes as freeNight.
-  function freeNightOf() {
-    var first = items()[0]; if (!first || first.kind !== 'allin') return null;
-    var t = trip(first.trip); if (!t) return null;
-    var p0 = t.stops[0].p, mm = P[p0] && !P[p0].partner, start = A.state.start ? MM.util.parseDate(A.state.start) : null;
-    return { first: p0, hostel: mm ? 'Mad Monkey ' + P[p0].n : (P[p0] ? P[p0].n : 'where your trip starts'), night: start ? MM.util.addDays(start, -1) : null, out: start, beds: people() };
-  }
-  function freeNightData(f, pick) { return { optIn: pick === 'yes', answered: !!pick, hostel: f.first, hostelName: f.hostel, night: f.night ? MM.util.isoDate(f.night) : '', checkOut: f.out ? MM.util.isoDate(f.out) : '', beds: f.beds }; }
-  function freeNightNote(f, pick) {
-    if (pick !== 'yes') return 'FREE NIGHT BEFORE: NO. They said no thanks, so there’s no bed to book.';
-    return 'FREE NIGHT BEFORE: YES. Book ' + f.beds + (f.beds === 1 ? ' bed' : ' beds') + ' at ' + f.hostel +
-      (f.night ? ' for the night of ' + fmtDay(f.night, true) + ' (in ' + fmtDay(f.night) + ', out ' + fmtDay(f.out) + ')' : ' for the night before the trip starts (date to confirm)') + ', on the house.';
-  }
+  // What they told the ALL IN site, and the ALL IN free night: the same helpers as the editor's form (ui-review.js), so both ask and send alike.
+  function told() { return A.review && A.review.told ? A.review.told() : null; }
+  function freeNightOf() { return A.review && A.review.freeNight ? A.review.freeNight.of(people()) : null; }
   function openHold() {
     var pl = plan(); if (!pl || !pl.places.length) return;
     u.track('start_hold_open', { days: pl.totals.days });
-    var q = u.store('mm-lead') || {}, fn = freeNightOf(), tw = told(), leaveTold = false, dep = +C.DEPOSIT_PER_PERSON > 0, live = !!C.LEAD_ENDPOINT, n = people(), cs = countriesIn(pl);
+    var q = u.store('mm-lead') || {}, FN = A.review.freeNight, fn = freeNightOf(), pick = '', tw = told(), leaveTold = false,
+      dep = +C.DEPOSIT_PER_PERSON > 0, live = !!C.LEAD_ENDPOINT, n = people(), cs = countriesIn(pl), form = {};
     var whoLine = S.who === 'friends' ? n + ' of you, everyone paying their own share' : S.crew ? 'Just you, and find you a crew going your way' : 'Just you';
-    var html = '<div class="sh__b" style="padding-top:22px"><button class="sh__x" data-close aria-label="Close" style="background:var(--canopy-2)">×</button><p class="over">Hold my beds</p>' +
-      '<h2 style="margin:8px 0 10px">Send it to the crew. It\'s free.</h2>' +
-      '<p style="font-size:15.5px;line-height:1.5">Ewan and the crew check every stop, ride and date, fix anything that needs fixing' + (A.state.start ? ' and hold your beds for ' + (C.HOLD_HOURS || 48) + ' hours while they do' : '') + '. Then they send you the price. ' + (dep ? 'A deposit holds your beds, and it comes off your trip.' : 'You pay nothing until you say yes.') + '</p>' +
-      '<ul class="incl" style="margin-top:14px"><li>' + pl.totals.days + ' days, ' + cs.length + (cs.length === 1 ? ' country' : ' countries') + ', about ' + money(pl.totals.total) + ' each</li><li>' + esc(whoLine) + '</li></ul>' +
-      '<form class="hold" id="holdf" novalidate>' +
-      '<div class="field"><label for="h-when">When do you go?</label><input type="date" id="h-when" name="when" value="' + esc(A.state.start) + '" min="' + MM.util.isoDate(new Date()) + '"><span class="small">Not sure yet? Leave it, and the crew will help you pick.</span></div>' +
-      (fn ? '<fieldset class="free" id="h-free"><legend>Your first night is on us</legend><p class="small" id="h-freed"></p>' +
-        '<label class="radio"><input type="radio" name="freeNight" value="yes"><span id="h-freey">' + (n > 1 ? 'Yes, book our free beds' : 'Yes, book my free night') + '</span></label>' +
-        '<label class="radio"><input type="radio" name="freeNight" value="no"><span>No thanks, I’ll arrive on the day</span></label></fieldset>' : '') +
-      '<div class="field"><label for="h-name">First name</label><input id="h-name" name="name" autocomplete="given-name" maxlength="60" required value="' + esc(q.name || '') + '"></div>' +
-      '<div class="field"><label for="h-email">Email</label><input id="h-email" name="email" type="email" autocomplete="email" maxlength="200" required placeholder="you@example.com" value="' + esc(q.email || '') + '"><span class="small">The crew sends your checked trip and price here.</span></div>' +
-      '<div class="field"><label for="h-wa">WhatsApp <small>(if you\'d like it there too)</small></label><input id="h-wa" name="whatsapp" type="tel" autocomplete="tel" maxlength="30" placeholder="with the country code, e.g. +44 7700 900123" value="' + esc(q.whatsapp || '') + '"></div>' +
-      (tw ? '<div class="told" id="h-told"><p class="over">Sent with your trip: what you told us' + (tw.tiktok.length ? ', with your TikTok link' : '') + '</p><p class="told__w"></p><button type="button" class="link" data-leave>Leave it off</button></div>' : '') +
-      '<div style="display:none"><label>Leave empty <input name="website" tabindex="-1" autocomplete="off"></label></div>' +
-      '<label class="check" style="margin-top:14px"><input type="checkbox" name="consent" required><span>It\'s OK for Mad Monkey to contact me about this trip. We only use your details to plan it with you.' + (C.PRIVACY_URL ? ' <a href="' + esc(C.PRIVACY_URL) + '" target="_blank" rel="noopener" style="color:var(--amber)">Privacy</a>' : '') + '</span></label>' +
-      '<p class="err" id="h-err" role="alert" hidden></p>' +
-      '<div class="sh__ft"><button class="btn btn--go btn--block" type="submit" data-focus>' + (dep && live ? 'Hold my beds' : 'Send it to the crew, free') + '</button>' +
-      (live ? '' : '<p class="small center demo">Demo: no crew backend is set (LEAD_ENDPOINT), so nothing will really be sent.</p>') + '</div></form></div>';
-    sheet(html, function (s) {
-      var f = $('#holdf', s), err = $('#h-err', s);
-      function freeText() {
-        if (!fn) return;
-        fn = freeNightOf();
-        $('#h-freed', s).textContent = 'A free bed' + (fn.beds > 1 ? ' for each of you' : '') + ' at ' + fn.hostel + (fn.night ? ' on ' + fmtDay(fn.night) + ', the night before you start' : ' the night before you start') + ', subject to availability. Want it?';
-      }
-      freeText();
-      if (tw) { var w = $('.told__w', s); w.textContent = (tw.text.length > 220 ? tw.text.slice(0, 220).replace(/\s+\S*$/, '') + '…' : tw.text) + (tw.tiktok.length ? ' ' + tw.tiktok.join(' ') : ''); }
-      s.addEventListener('change', function (e) { if (e.target.id === 'h-when') { A.state.start = e.target.value || ''; save(); freeText(); } });
+    var X = '<button class="sh__x" data-close aria-label="Close" style="background:var(--canopy-2)">×</button>';
+    // step 1, whenever there's an ALL IN trip in it: the free bed the night before, yes or no (it comes with every ALL IN trip)
+    function stepFree() {
+      return '<div class="sh__b" style="padding-top:22px">' + X + '<p class="over">ALL IN ' + esc(fn.trip.n) + ' comes with it</p>' +
+        '<h2 style="margin:8px 0 10px">Your first night is on us</h2>' +
+        '<p style="font-size:16px;line-height:1.5" id="h-freed">' + esc(FN.text(fn)) + '</p>' +
+        '<div class="sh__ft"><button class="btn btn--go btn--block" data-free="yes" data-focus>' + (n > 1 ? 'Yes, book our free beds' : 'Yes, book my free night') + '</button>' +
+        '<button class="btn btn--ghost btn--block" data-free="no">No thanks, I’ll arrive on the day</button></div></div>';
+    }
+    // step 2: who they are, and send it
+    function stepForm() {
+      var range = dateRange(plan());
+      return '<div class="sh__b" style="padding-top:22px">' + X + '<p class="over">Hold my beds</p>' +
+        '<h2 style="margin:8px 0 10px">Send it to the crew. It\'s free.</h2>' +
+        '<p style="font-size:15.5px;line-height:1.5">Ewan and the crew check every stop, ride and date, fix anything that needs fixing' + (A.state.start ? ' and hold your beds for ' + (C.HOLD_HOURS || 48) + ' hours while they do' : '') + '. Then they send you the price. ' + (dep ? 'A deposit holds your beds, and it comes off your trip.' : 'You pay nothing until you say yes.') + '</p>' +
+        '<ul class="incl" style="margin-top:14px"><li>' + pl.totals.days + ' days, ' + cs.length + (cs.length === 1 ? ' country' : ' countries') + ', about ' + money(pl.totals.total) + ' each</li><li id="h-range">' + (range ? esc(range) : 'No date yet: the crew will help you pick one') + '</li><li>' + esc(whoLine) + '</li>' +
+        (fn ? '<li>Free night before ALL IN: <b>' + (pick === 'yes' ? 'yes please' : 'no thanks') + '</b> <button type="button" class="link" data-free-change style="padding:0 0 0 6px;font-size:14px">Change</button></li>' : '') + '</ul>' +
+        '<form class="hold" id="holdf" novalidate>' +
+        '<div class="field"><label for="h-when">When do you go?</label><input type="date" id="h-when" name="when" value="' + esc(A.state.start) + '" min="' + MM.util.isoDate(new Date()) + '"><span class="small">Not sure yet? Leave it, and the crew will help you pick.</span></div>' +
+        '<div class="field"><label for="h-name">First name</label><input id="h-name" name="name" autocomplete="given-name" maxlength="60" required value="' + esc(form.name != null ? form.name : q.name || '') + '"></div>' +
+        '<div class="field"><label for="h-email">Email</label><input id="h-email" name="email" type="email" autocomplete="email" maxlength="200" required placeholder="you@example.com" value="' + esc(form.email != null ? form.email : q.email || '') + '"><span class="small">The crew sends your checked trip and price here.</span></div>' +
+        '<div class="field"><label for="h-wa">WhatsApp <small>(if you\'d like it there too)</small></label><input id="h-wa" name="whatsapp" type="tel" autocomplete="tel" maxlength="30" placeholder="with the country code, e.g. +44 7700 900123" value="' + esc(form.whatsapp != null ? form.whatsapp : q.whatsapp || '') + '"></div>' +
+        (tw && !leaveTold ? '<div class="told" id="h-told"><p class="over">Sent with your trip: what you told us' + (tw.tiktok.length ? ', with your TikTok link' : '') + '</p><p class="told__w">' + esc(A.review.toldShort(tw)) + '</p><button type="button" class="link" data-leave>Leave it off</button></div>' : '') +
+        '<div style="display:none"><label>Leave empty <input name="website" tabindex="-1" autocomplete="off"></label></div>' +
+        '<label class="check" style="margin-top:14px"><input type="checkbox" name="consent" required' + (form.consent ? ' checked' : '') + '><span>It\'s OK for Mad Monkey to contact me about this trip. We only use your details to plan it with you.' + (C.PRIVACY_URL ? ' <a href="' + esc(C.PRIVACY_URL) + '" target="_blank" rel="noopener" style="color:var(--amber)">Privacy</a>' : '') + '</span></label>' +
+        '<p class="err" id="h-err" role="alert" hidden></p>' +
+        '<div class="sh__ft"><button class="btn btn--go btn--block" type="submit" data-focus>' + (dep && live ? 'Hold my beds' : 'Send it to the crew, free') + '</button>' +
+        (live ? '' : '<p class="small center demo">Demo: no crew backend is set (LEAD_ENDPOINT), so nothing will really be sent.</p>') + '</div></form></div>';
+    }
+    function keep(s) { var f = $('#holdf', s); if (!f) return; ['name', 'email', 'whatsapp'].forEach(function (k) { form[k] = f.elements[k].value; }); form.consent = f.elements.consent.checked; }
+    function draw(s, step) { s.innerHTML = step === 'free' ? stepFree() : stepForm(); s.scrollTop = 0; var x = s.querySelector('[data-focus]'); if (x) try { x.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    sheet(fn ? stepFree() : stepForm(), function (s) {
+      s.addEventListener('change', function (e) {
+        if (e.target.id !== 'h-when') return;
+        A.state.start = e.target.value || ''; save(); pl = plan();
+        if (fn) fn = freeNightOf();
+        var r = $('#h-range', s); if (r) r.textContent = dateRange(pl) || 'No date yet: the crew will help you pick one';
+      });
       s.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) return closeSheet();
+        var fb = e.target.closest('[data-free]'); if (fb) { pick = fb.getAttribute('data-free'); u.track('start_free_night', { yes: pick === 'yes' }); return draw(s, 'form'); }
+        if (e.target.closest('[data-free-change]')) { keep(s); return draw(s, 'free'); }
         if (e.target.closest('[data-leave]')) { leaveTold = true; var box = $('#h-told', s); if (box) box.remove(); }
       });
-      f.addEventListener('submit', function (e) {
+      s.addEventListener('submit', function (e) {
         e.preventDefault();
-        var v = {}; new FormData(f).forEach(function (val, k) { v[k] = typeof val === 'string' ? val.trim() : val; });
+        var f = e.target, err = $('#h-err', s), v = {}; new FormData(f).forEach(function (val, k) { v[k] = typeof val === 'string' ? val.trim() : val; });
         var show = function (m, at) { err.hidden = false; err.textContent = m; if (at) { var x = $(at, s); if (x) x.focus(); } };
         if (v.website) return;
-        if (fn && !v.freeNight) return show('Choose yes or no for your free night.', '#h-free input');
+        if (fn && !pick) { keep(s); return draw(s, 'free'); }
         if (!v.name) return show('Pop your first name in.', '#h-name');
         var ct = u.readContact({ via: 'email', email: v.email }); if (ct.err) return show(ct.err, '#h-email');
         var wa = '';
@@ -731,11 +741,12 @@
         if (!v.consent) return show('Tick the box so we\'re allowed to reply.', 'input[name=consent]');
         err.hidden = true;
         u.store('mm-lead', Object.assign({}, q, { name: v.name, via: 'email', email: ct.email, whatsapp: wa || q.whatsapp || '' }));
-        var notes = [fn ? freeNightNote(fn, v.freeNight) : '',
+        if (fn) fn = freeNightOf();                                                       // with the date they picked last
+        var notes = [fn ? FN.note(fn, pick) : '',
           S.who === 'solo' ? (S.crew ? 'Travelling solo: happy to be introduced to others on the same route at the same time.' : 'Travelling solo.') : 'Travelling with friends: ' + n + ' of them, everyone paying their own share.',
           wa ? 'WhatsApp: ' + wa + '.' : ''].filter(Boolean).join(' ');
         var contact = { name: v.name.slice(0, 60), via: 'email', email: ct.email, whatsapp: wa, from: '', partySize: n, dates: A.state.start ? 'fixed' : 'open', notes: notes, consent: true };
-        var opts = { flow: 'start', freeNight: fn ? freeNightData(fn, v.freeNight) : null, told: tw && !leaveTold ? { words: tw.text, tiktok: tw.tiktok } : null };
+        var opts = { flow: 'start', freeNight: fn ? FN.data(fn, pick) : null, told: tw && !leaveTold ? { words: tw.text, tiktok: tw.tiktok } : null };
         var btn = $('button[type=submit]', f), label = btn.textContent; btn.disabled = true; btn.textContent = dep && live ? 'Opening secure payment…' : 'Sending…';
         A.auto = false; u.persist();
         A.review.send(contact, opts).then(function (r) { if (!r.paying) sent(r, v.name, ct.email); })
@@ -757,7 +768,7 @@
   function tripText() {
     var pl = plan(); if (!pl) return '';
     return 'My Mad Monkey trip: ' + pl.segs.map(function (sg) { return sg.kind === 'stop' ? P[sg.p].n + ' (' + sg.n + (sg.n === 1 ? ' night)' : ' nights)') : 'ALL IN ' + sg.trip.n + ' (' + sg.trip.days + ' days)'; }).join(' → ') +
-      '. ' + pl.totals.days + ' days, about ' + money(pl.totals.total) + ' each. Who\'s in?';
+      '. ' + pl.totals.days + ' days' + (dateRange(pl) ? ', ' + dateRange(pl) : '') + ', about ' + money(pl.totals.total) + ' each. Who\'s in?';
   }
   function showText(txt) {
     sheet('<div class="sh__b" style="padding-top:22px"><button class="sh__x" data-close aria-label="Close" style="background:var(--canopy-2)">×</button><h2>Send it to your friends</h2><p class="small" style="margin-bottom:10px">Copy this and paste it in your group chat. The link opens your trip.</p><textarea readonly class="copybox">' + esc(txt) + '</textarea><div class="sh__ft"><button class="btn btn--go btn--block" data-close>Done</button></div></div>', function (s) {

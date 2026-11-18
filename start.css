@@ -95,6 +95,8 @@ h1,h2,h3{font-stretch:118%;font-weight:900;letter-spacing:-.025em;line-height:1}
 .days{flex:1;min-width:0;text-align:left;min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:6px}
 .days__t{font-size:13px;font-weight:700;color:var(--dim);white-space:nowrap}
 .days__t b{color:var(--mist);font-size:15px;font-stretch:112%}
+.days__d{font-weight:600}
+@media (max-width:359px){.days__d{display:none}}
 .meter{display:block;height:7px;border-radius:9px;background:rgba(243,247,242,.13);overflow:hidden}
 .meter i{display:block;height:100%;width:0;border-radius:9px;background:var(--amber);transition:width .8s cubic-bezier(.2,.8,.2,1)}
 .meter.over i{background:var(--coral)}
@@ -237,6 +239,8 @@ h1,h2,h3{font-stretch:118%;font-weight:900;letter-spacing:-.025em;line-height:1}
 .tl li::after{content:'';position:absolute;left:11px;top:16px;bottom:0;width:2px;background:rgba(243,247,242,.16)}
 .tl li:last-child::after{display:none}
 .tl li.tl--allin::before{background:var(--coral)}
+.tl li.tl--end::before{background:var(--canopy);box-shadow:0 0 0 3px var(--canopy),inset 0 0 0 2.5px var(--amber)}   /* the day it finishes: a ring, not a stop */
+.tl li.tl--end .tl__n{font-size:17px}
 .tl__d{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
 .tl__n{display:block;font-size:20px;font-weight:900;font-stretch:115%;margin:3px 0 2px}
 .tl__x{font-size:13.5px;color:#DCE6E0;line-height:1.45}
@@ -298,3 +302,5 @@ a.btn{text-decoration:none}
 input[type=email],input[type=tel],input:not([type]){color-scheme:dark}
 .hold .field input{width:100%;min-height:52px;border-radius:var(--r-sm);border:1.5px solid rgba(243,247,242,.4);background:var(--canopy-2);padding:0 14px;font-size:16px}
 .hold .field input:focus{border-color:var(--amber)}
+.tdates{margin:6px 0 0;font-size:15px;font-weight:800;font-stretch:108%;color:var(--amber)}
+[tabindex="-1"]:focus{outline:none}   /* the heading each screen moves focus to, for screen readers: no ring on it */
