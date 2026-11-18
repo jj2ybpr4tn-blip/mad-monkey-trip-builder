@@ -91,6 +91,40 @@ characters, only addresses on the site's own origin (a `#section` of the site pa
 The bar's links go to `<ALLIN_SITE>#<section>`, and Enquire to `<ALLIN_SITE>#enquire`. The site opens on that section, or with its
 enquiry form open; the preview's locked page keeps `#trip-<id>`, `#<section>` and `#enquire` while it unlocks.
 
+## The front door (ui-start.js, start.css)
+
+Where the builder starts since 18 Nov 2026 (Ewan picked the "Trip builder try-out"): you build a trip from nothing, one stop at a time.
+
+- **Screens.** `#/start` where you land (six gateways, any other place, or start with an ALL IN trip; "Carry on with your trip" when
+  one is saved on the device), `#/start/how-long` (six answers, or "Not sure yet"), `#/start/next` (the map with the route drawing
+  itself, three different next stops with photos, the ALL IN trip that fits as a fourth, Surprise me, More places, the nights stepper
+  and Don't miss in each stop's sheet, the price and what's in it), `#/start/trip` (the whole route on the moving map, looping, the day
+  by day, the vibe, who's coming, Hold my beds, Copy my trip). The map is the try-out's, unchanged.
+- **Where you land.** A visit with no address, and `#/build` with no trip open, go to `#/start`. A trip in the address
+  (`#/build/i=...`: a shared link, "Make it yours" from an ALL IN trip) opens the full editor with it, as before, and so does
+  `#/build` once a trip is open. `#/build/i=` is the empty editor. Inside the ALL IN site only the site's bar sits above it.
+- **One trip.** The front door works on the builder's own trip (`MMApp.state`, saved as `mm-trip`), so "Open the full editor"
+  (on the start screen, under the next stops and on the trip page) opens the same trip with every detail. A few extras live in
+  `mm-start`: how long they've got, who's coming, the screen they were on.
+- **Days.** Counted the way every Mad Monkey trip is (14 days is 13 nights): 3 nights in Bangkok takes you to day 4, when you move
+  on, and a night on a sleeper bus, train or boat is a day too. The bar ("Day 4 of 14"), the trip page and its day by day agree: the
+  day by day takes each stop's days from the engine's own (`pl.days`, with multi-day tours and the free night before an ALL IN trip)
+  and ends on the day the trip finishes. With a date picked, the finish date shows too: in the bar ("Day 4 of 14 · Sat 6 Mar"), under
+  the trip page's name ("Sun 27 Dec 2026 to Thu 14 Jan 2027"), at the end of the day by day, in Hold my beds and in Copy my trip.
+- **Hold my beds, it's free** sends the same request as the editor's form (`MMApp.review.send`, LEAD_ENDPOINT: trip-builder-request
+  on the ALL IN backend): first name, email, WhatsApp if they like, the tick, and with it who's coming (partySize, and "Travelling
+  solo: happy to be introduced..." when they ticked Find me a crew), the dates (`contact.dates` fixed or open, `trip.start`, and
+  the beds held when there's a date), `freeNight` and what they told the site's "Not sure which one?" (sessionStorage `allin-told`:
+  shown first, with Leave it off; it goes in `told`, the crew's text and the notes).
+- **The free night.** Every ALL IN trip comes with a free bed the night before it starts, at the Mad Monkey where it starts, subject
+  to availability. Whenever a trip has an ALL IN trip in it (first or later on), Hold my beds asks first, on its own: "Your first
+  night is on us", yes or no. The answer goes as `freeNight` (the same field as the ALL IN site's checkout) and the first line of the
+  crew's notes; mid-trip, the notes say so. The full editor's Hold form asks the same (a required yes or no at the top), and sends
+  the finder's words too, with Leave it off. The shared pieces are in ui-review.js (`MMApp.review.freeNight`, `MMApp.review.told`).
+- **Copy my trip** copies a line about the trip and the share link (`#/build/...`, the same link as the editor's Share).
+- **Its look** is the ALL IN look, in `start.css` inside a shadow root: the editor's styles and its own never touch.
+- **Tests.** `await import('/test/ui-start.js?' + Date.now()); await __startcheck()` in a browser tab (27 checks, about 30 seconds).
+
 ## The moving map (route-film.js)
 
 The route draws itself, like a travel film's map: a line runs from stop to stop with the right vehicle on it (bus, boat, scooter or

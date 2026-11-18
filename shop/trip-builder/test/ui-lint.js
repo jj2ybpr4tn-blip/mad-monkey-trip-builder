@@ -62,7 +62,7 @@
   // Runs the lint over each main screen in turn (builder with trips, home, quiz, results, pack, status).
   window.__lintAll = async function (screens) {
     var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); }, res = {};
-    screens = screens || [['home', '#/'], ['builder: empty', '#/build'], ['builder: 3 stops', '#/build/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10&f=20&b=1500'], ['builder: ALL IN block', '#/build/i=a.vietnam~s.saigon.2&d=2027-02-10'], ['pack', '#/pack/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10']];
+    screens = screens || [['home', '#/'], ['builder: empty', '#/build/i='], ['builder: 3 stops', '#/build/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10&f=20&b=1500'], ['builder: ALL IN block', '#/build/i=a.vietnam~s.saigon.2&d=2027-02-10'], ['pack', '#/pack/i=s.hanoi.4~s.hoi-an.4~s.saigon.3&d=2027-02-10']];
     for (var i = 0; i < screens.length; i++) { location.hash = screens[i][1]; await wait(900); res[screens[i][0]] = window.__lint(); }
     return res;
   };

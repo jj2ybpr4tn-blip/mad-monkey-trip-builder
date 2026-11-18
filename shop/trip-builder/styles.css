@@ -1089,6 +1089,18 @@ body[data-view="pack"] .humanbar,body[data-view="crew"] .humanbar{display:none}
 .foot__human{color:var(--paper)} .foot__ask{color:var(--lime);font-weight:900;text-decoration:underline;background:none;border:0;padding:0;font:inherit;font-weight:900;cursor:pointer}
 @media (pointer:coarse){.foot__ask{display:inline-flex;align-items:center;min-height:44px}}
 @media print{.humanbar{display:none}}
+/* The front door (ui-start.js, #/start). Its own look is in start.css, inside its shadow root; the page round it goes canopy green. Inside
+   the ALL IN site only the site's bar stays above it (the builder's own bar and the "checked by humans" strip belong to the editor). */
+body[data-view="start"]{background:#0E2B26;color:#F3F7F2}
+body[data-view="start"] .humanbar{display:none}
+:root[data-site] body[data-view="start"]{--hdr:60px}
+:root[data-site] body[data-view="start"] .subnav{display:none}
+#tbs{display:block;min-height:70vh}
+/* The editor's Hold form: the ALL IN free night before (every ALL IN trip comes with one), and what they told the ALL IN site */
+fieldset.freebed{border:var(--bw) solid var(--pink);border-radius:var(--r-md,12px);padding:var(--s-3) var(--s-3) var(--s-2);display:flex;flex-direction:column;gap:6px;margin:0}
+fieldset.freebed legend{font-weight:800;padding:0 6px;margin-left:-6px}
+fieldset.freebed .chk{font-size:14px;font-weight:600;min-height:40px;align-items:center}
+.told q{font-style:italic;overflow-wrap:anywhere}
 .m-pin.been circle.dot{fill:#6b675c;stroke:var(--paper)} .m-pin.been text.n{fill:var(--paper);font-size:11px} .m-pin.been{opacity:.75}
 .m-pin.here circle.dot{fill:var(--pink);stroke:var(--paper);r:12} .m-pin.here text.n{fill:var(--black);font-size:11px} .m-pin.here text.nm{fill:var(--pink);display:block}
 

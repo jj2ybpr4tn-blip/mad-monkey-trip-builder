@@ -55,7 +55,7 @@
   // The phone's bottom bar (ui-ask.js makes it) on screens without the trip's own bar: Ask Ewan, and "Your trip" once there is one (not mid-quiz).
   function syncAskBar() {
     var go = document.getElementById('abar-go'); if (!go) return;
-    go.hidden = !(app.state.items.length && app.view !== 'quiz');
+    go.hidden = !(app.state.items.length && app.view !== 'quiz' && app.view !== 'start');          // the front door has its own way on
   }
   app.syncAskBar = syncAskBar;
   var plural = function (n, w, ws) { return n + ' ' + (n === 1 ? w : (ws || w + 's')); };
@@ -162,7 +162,7 @@
      ============================================================ */
   function parseHash() {
     var h = location.hash.replace(/^#\/?/, ''), seg = h.split('/'), view = seg[0] || 'home';
-    return { view: ['home', 'quiz', 'results', 'build', 'group', 'trip', 'pack', 'crew', 'crewfind', 'wherenext', 'wherenext-crew'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
+    return { view: ['home', 'start', 'quiz', 'results', 'build', 'group', 'trip', 'pack', 'crew', 'crewfind', 'wherenext', 'wherenext-crew'].indexOf(view) > -1 ? view : 'home', rest: seg.slice(1).join('/') };
   }
   function sameAddress(a, b) { try { return decodeURIComponent(a) === decodeURIComponent(b); } catch (e) { return a === b; } }
   // Setting the address to what it already is fires no hashchange, so the screen would never redraw: buttons like "start from a classic",
@@ -217,18 +217,22 @@
   }
   var levelTimer = 0;
   if (window.MutationObserver) new MutationObserver(function () { clearTimeout(levelTimer); levelTimer = setTimeout(levelHeadings, 60); }).observe(root, { childList: true, subtree: true });
-  var TITLES = { home: 'Trip Builder', quiz: 'Build it for me', results: 'Your routes', build: 'Your trip', group: 'Group trip', trip: 'Trip status', pack: 'Trip pack', crew: 'Crew review', crewfind: 'Find your crew', wherenext: 'Where next?', 'wherenext-crew': 'Where next? · crew' };
+  var TITLES = { home: 'Trip Builder', start: 'Build your trip', quiz: 'Build it for me', results: 'Your routes', build: 'Your trip', group: 'Group trip', trip: 'Trip status', pack: 'Trip pack', crew: 'Crew review', crewfind: 'Find your crew', wherenext: 'Where next?', 'wherenext-crew': 'Where next? · crew' };
   function routeNow() {
+    // The front door (ui-start.js, #/start) is where the builder starts: a visit with no address, and "the trip builder" with no trip open
+    // (#/build on its own). A trip in the address (#/build/i=...: a shared link, "Make it yours" on the ALL IN site) opens the full editor
+    // with it, and so does #/build once a trip is open. A trip saved on this device is offered on the front door ("Carry on with your trip").
+    if (!location.hash || location.hash === '#') history.replaceState(null, '', '#/start');
     var r = parseHash(); closeModal();
     if (r.view === 'results' && !app.results) r.view = 'quiz';
     if (r.view === 'build') {
       if (r.rest) { var st = MM.decodeState(r.rest); if (st.items.length || r.rest.indexOf('i=') === 0) app.state = st; }
-      else { var saved = store('mm-trip'); if (saved && saved.state && !app.state.items.length) app.state = MM.sanitizeState(saved.state); }
+      else if (!app.state.items.length && !app.revise) { history.replaceState(null, '', '#/start'); r = { view: 'start', rest: '' }; }
     }
     if (r.view === 'build') syncHist();
     app.view = r.view; document.body.setAttribute('data-view', r.view);
     if (r.view === 'build' && app.state.items.length) history.replaceState(null, '', '#/build/' + MM.encodeState(app.state));
-    $$('.navbtn[data-go]').forEach(function (b) { b.setAttribute('aria-current', b.getAttribute('data-go') === r.view ? 'true' : 'false'); });
+    $$('.navbtn[data-go]').forEach(function (b) { b.setAttribute('aria-current', b.getAttribute('data-go') === (r.view === 'start' ? 'build' : r.view) ? 'true' : 'false'); });
     window.scrollTo(0, 0);
     if (app.views[r.view]) app.views[r.view](r.rest); else ({ home: renderHome, quiz: renderQuiz, results: renderResults, build: renderBuilder })[r.view]();
     track('view', { view: r.view });
