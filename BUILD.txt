@@ -1,6 +1,7 @@
 ALL IN launch pack: what's in it and how to build it again
 
-Built      18 Nov 2026, 15:30 (Phnom Penh), by the admin chat: the Sinulog edition taken off (Ewan: no partner hotels).
+Built      18 Nov 2026, 18:10 (Phnom Penh), by the admin chat: photos on the eight Big days cards that had drawings (free
+           Unsplash photos, credited in the footer), and clearer wording on their trip buttons. 15:30: the Sinulog edition taken off (Ewan: no partner hotels).
            Before that, 14:40: the 2027 prices (approved by Kyle; ALL ASIA $4,999) and the map fixes,
            with no developer notes in the page source (14:16's build, cleaned)
 Page       concept v21 from drafts/all-in-store/src, with the set prices, three trip fixes and the map fixes (18 Nov), the same
@@ -12,7 +13,7 @@ Launch     ALLIN_LAUNCH=1: no preview bar, no preview notes, no comments in the 
 Off        instant booking (no trip listed yet: set ALLIN_LIVE_JSON once trips are in the booking system, see src/v14.js)
 
 Checksums (md5)
-49e61548dd216cf9c58820958cd372fe  all-in-trips/index.html
+8f89bb65a1163c94fc4a8c1aa3620617  all-in-trips/index.html
 85cdbff57c0ae4867ed6b888bcce8a9c  all-in-trips/v/dragon-1080.mp4    Tết's lion dance (stock, Mixkit)
 4e4334b8e85514e3d6ad20cc97f8226b  all-in-trips/v/falls-1080.mp4     Cambodia's waterfall (stock, Mixkit)
 e508ab316ec8921ccb5198431bde60cb  all-in-trips/v/hgloop-1080.mp4    Ewan's Ha Giang Loop clip, laptops
