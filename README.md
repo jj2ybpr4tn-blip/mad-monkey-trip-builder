@@ -7,7 +7,7 @@ trip builder repo (`launch-pack`), which comes down once the site is live. Nothi
 To get it: `git clone -b launch-pack --single-branch https://github.com/jj2ybpr4tn-blip/mad-monkey-trip-builder.git all-in-launch`
 
 Built 19 Nov 2026 from concept v22 (the same page as the private preview, without the preview's bar, notes or code
-comments) with the trip builder at main `ab38894`. New in v22: today's ALL IN trips have their own pages inside the site and
+comments) with the trip builder at main `fcaf458` (rebuilt 21 Nov with the builder's latest). New in v22: today's ALL IN trips have their own pages inside the site and
 book right through to Stripe, the way today's pages do (below). `BUILD.txt` says exactly what went in and how to build it again.
 
 ## What's in it

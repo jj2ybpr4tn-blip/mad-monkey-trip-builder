@@ -1,11 +1,13 @@
 ALL IN launch pack: what's in it and how to build it again
 
-Built      19 Nov 2026, 22:40 (Phnom Penh), by the admin chat: concept v22, today's trips inside the site (their own
+Built      21 Nov 2026, 01:05 (Phnom Penh), by the admin chat: the same page with the trip builder's latest main (land and
+           sea first, the overland legs, Koh Sdach on its island). 19 Nov, 22:40: concept v22, today's trips inside the site (their own
            pages, booked through to Stripe as today's pages book), at the addresses Ewan settled on 19 Nov.
            Before that, 18 Nov: photos on the Big days cards, the Sinulog edition off (it needed a new hotel partner in
            Cebu), the 2027 prices (approved by Kyle; ALL ASIA $4,999), the map fixes, and no developer notes in the source
 Page       concept v22 from drafts/all-in-store/src, the same source as the private preview once it's republished
-Builder    the trip builder's engine at main ab38894 (the one-stop-at-a-time start), inside the page
+Builder    the trip builder's engine at main fcaf458 (20 Nov: land and sea first, today's trips' new addresses, the free
+           night for Make it yours, Koh Sdach on its island), inside the page
 Launch     ALLIN_LAUNCH=1: no preview bar, no preview notes, no comments in the page (src/launchclean.py; the scripts
            are checked the same as before with tools/launchclean_check.mjs) except the two where the site's tags go,
            and our films loaded from /all-in-trips/v/ (ALLIN_FILMS to change that)
@@ -13,7 +15,7 @@ Booking    today's trips book once the site's public key is in the page (README,
            requests to the crew (none in LIVE.slugs yet: set ALLIN_LIVE_JSON once they're in the booking system, src/v14.js)
 
 Checksums (md5)
-f97485f5461662c4b22b64d969c5744f  all-in-trips/index.html
+cb4078931b0aad81a8b5f399723fe5de  all-in-trips/index.html
 85cdbff57c0ae4867ed6b888bcce8a9c  all-in-trips/v/dragon-1080.mp4    Tết's lion dance (stock, Mixkit)
 4e4334b8e85514e3d6ad20cc97f8226b  all-in-trips/v/falls-1080.mp4     Cambodia's waterfall (stock, Mixkit)
 e508ab316ec8921ccb5198431bde60cb  all-in-trips/v/hgloop-1080.mp4    Ewan's Ha Giang Loop clip, laptops
