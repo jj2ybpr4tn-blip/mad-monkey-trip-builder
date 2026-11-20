@@ -6,6 +6,10 @@ Who does what is in brackets. Nothing goes live until Ewan says go.
 
 - [x] The 2027 prices are set and approved by Kyle (18 Nov), and the pack is rebuilt with them. Today's trips keep their
       live prices.
+- [x] Today's trips' addresses decided (Ewan, 19 Nov): `/vietnam-14`, `/cambodia-14`, `/indonesia-12`, `/laos-10`,
+      `/thailand-11`; `/vietnam-7` and `/indonesia-7` keep theirs.
+- [ ] One test booking of a today's trip on staging, with the site's key in the page and Stripe in test mode (Charlie).
+- [ ] Optional: today's backend builds Stripe's "back" link and Admin's one-click links with the new addresses (Charlie).
 - [ ] Each trip loaded into the booking system is switched on for instant booking in a rebuild of the pack (Ewan).
 - [ ] The Island Hopper's $99 deposit, the free night yes or no, and the Ask Ewan question type are live and tested (Charlie,
       briefs in the launch switch doc).
@@ -13,12 +17,14 @@ Who does what is in brackets. Nothing goes live until Ewan says go.
       The site's `Permissions-Policy` allows the microphone on `/all-in-trips/` (`microphone=(self)`), or sets nothing for it
       (Charlie or Dhany).
 - [ ] A line in the privacy notice about talking instead of typing (whoever looks after it; wording in README).
-- [ ] The test requests MM-B2UDR5 and MM-WRHXG5 are cleared in Admin (Ewan).
+- [x] The test requests MM-B2UDR5 and MM-WRHXG5 are cleared in Admin (Ewan, 18 Nov).
 
 ## On the day
 
 - [ ] Ewan says go.
-- [ ] Upload `all-in-trips/`: `index.html` at `/all-in-trips` and the 14 trip addresses, `v/` at `/all-in-trips/v/` (Charlie).
+- [ ] Upload `all-in-trips/`: `index.html` at `/all-in-trips`, the 14 trip addresses and today's 7, `v/` at `/all-in-trips/v/`
+      (Charlie).
+- [ ] The site's public key in the page's `<head>` (`window.ALLIN_LIVE`, README "Hosting it") (Charlie).
 - [ ] Cookiebot and Google Tag Manager pasted where the page's comments say (Charlie).
 - [ ] The builder switch: the two config lines, the sync, commit and deploy (Charlie).
 - [ ] Cloudflare cleared for `/all-in-trips*` (Dhany).
@@ -28,6 +34,8 @@ Who does what is in brackets. Nothing goes live until Ewan says go.
 - [ ] `madmonkeyhostels.com/all-in-trips` opens the new site, with no "Concept" bar and no preview notes.
 - [ ] `/all-in-trips/vietnam` (and a festival one, like `/all-in-trips/yipeng`) opens that trip; Back closes it.
 - [ ] Vietnam's hero slide, card and trip page play Ewan's Ha Giang clip; photos are sharp.
+- [ ] `/all-in-trips/cambodia-14` opens today's Cambodia trip with real dates and prices; pick a date, fill in the details,
+      Continue to payment opens Stripe (don't pay), and Stripe's back link returns to the trip.
 - [ ] "Not sure which one?": tap the mic, allow it, say "two weeks in March, love a waterfall, about 1,000 dollars". The words
       appear as you talk; tap to stop; Find my trip shows trips that fit.
 - [ ] Say no to the mic (or on a phone where it's been turned off): the mic goes, and a note points to the keyboard's mic.
