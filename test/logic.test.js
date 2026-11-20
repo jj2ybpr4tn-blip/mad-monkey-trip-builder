@@ -45,6 +45,28 @@ ok('Koh Rong → Siem Reap lists the Mad Package', !!MM.plan(st([stop('koh-rong'
 ok('Luang Prabang → Vang Vieng lists Mad Monkey train tickets', !!MM.plan(st([stop('luang-prabang', 2), stop('vang-vieng', 2)])).legs[0].tickets);
 ok('route results are always cheaper-or-equal in "cheap" than "fast"', ['hanoi>luang-prabang', 'bangkok>phuket', 'uluwatu>kuta-lombok', 'saigon>siem-reap'].every(function (k) { var q = k.split('>'); return MM.route(q[0], q[1], 'cheap').u <= MM.route(q[0], q[1], 'fast').u; }));
 
+/* ---------- land and sea first (Ewan, 19 Nov 2026): the Smart pick flies only when there's no reasonable way round ---------- */
+function smart(a, b) { return opts(a, b)[0]; }
+function by(o) { return o.route.steps.map(function (s) { return s.from + '>' + s.to; }).join(' '); }
+function flies(o) { return o.route.steps.some(function (s) { return s.e.m === 'flight'; }); }
+ok('the Smart pick is the first option, and a trip\'s leg takes it unless it\'s switched', ['hanoi>hoi-an', 'chiang-mai>luang-prabang', 'bangkok>siem-reap'].every(function (k) { var q = k.split('>'), o = smart(q[0], q[1]), L = MM.plan(st([stop(q[0], 2), stop(q[1], 2)])).legs[0]; return o.key === 'balanced' && L.chosen.key === 'balanced' && by(L.chosen) === by(o); }));
+var cmlp = smart('chiang-mai', 'luang-prabang');
+ok('Chiang Mai → Luang Prabang: the Friendship Bridge and the 2-day slow boat from Huay Xai, 2 nights on the way, getting in on day 3', !flies(cmlp) && by(cmlp) === 'chiang-mai>HUAYXAI HUAYXAI>luang-prabang' && cmlp.nights === 2 && cmlp.arriveDays === 2 && +cmlp.arrive.slice(0, 2) >= 12, by(cmlp) + ' ' + cmlp.arrive);
+ok('...and the other way, Luang Prabang → Chiang Mai, the same 2 nights', smart('luang-prabang', 'chiang-mai').nights === 2 && by(smart('luang-prabang', 'chiang-mai')) === 'luang-prabang>HUAYXAI HUAYXAI>chiang-mai');
+ok('...with the flight a tap away as "Quicker"', opts('chiang-mai', 'luang-prabang').some(function (o) { return o.label === 'Quicker' && flies(o); }));
+var hha = smart('hanoi', 'hoi-an');
+ok('Hanoi → Hoi An goes by sleeper, not a flight', !flies(hha) && hha.ovn && hha.nights === 1);
+var ssr = smart('saigon', 'siem-reap');
+ok('Saigon → Siem Reap: the night bus (leaves 15:45, in about 05:15 the next morning, flagged as an odd hour)', by(ssr) === 'saigon>siem-reap' && ssr.ovn && ssr.arrive === '05:15' && ssr.arriveDays === 1 && ssr.odd, by(ssr) + ' ' + ssr.arrive);
+var ppvv = smart('phnom-penh', 'vang-vieng');
+ok('Phnom Penh → Vang Vieng overland: Kratie, a night on Don Det, Pakse and the night bus to Vientiane, then the train; in the morning of day 3', by(ppvv) === 'phnom-penh>KRATIE KRATIE>DONDET DONDET>PAKSE PAKSE>VTE VTE>vang-vieng' && ppvv.nights === 2 && ppvv.arriveDays === 2 && +ppvv.arrive.slice(0, 2) < 12, by(ppvv) + ' ' + ppvv.arrive);
+var mnp = smart('manila', 'nacpan-beach');
+ok('Manila → Nacpan Beach: the night ferry to Coron, then the fast ferry to El Nido, about midday', by(mnp) === 'manila>CORON CORON>nacpan-beach' && mnp.nights === 1 && mnp.arriveDays === 1 && +mnp.arrive.slice(0, 2) >= 9 && +mnp.arrive.slice(0, 2) <= 14, by(mnp) + ' ' + mnp.arrive);
+ok('it flies where there\'s no reasonable way: Bangkok → Siem Reap (the border), Hanoi → Saigon (two sleepers in a row), Bangkok → Hanoi (four nights of buses), Hoi An → Siem Reap (32 hours on the road)', ['bangkok>siem-reap', 'hanoi>saigon', 'bangkok>hanoi', 'hoi-an>siem-reap'].every(function (k) { var q = k.split('>'); return flies(smart(q[0], q[1])); }));
+ok('no Smart pick takes more than two nights on the way or two night journeys', (function () { var bad = []; ids.forEach(function (a) { ids.forEach(function (b) { if (a === b) return; var r = MM.route(a, b, 'balanced'); if (r.nights > MM.LAND.nights || (r.ovnSteps > 1 && !flies({ route: r }))) bad.push(a + '>' + b); }); }); return !bad.length; })());
+ok('a leg switched to Quicker survives the share link and a reload', (function () { var s0 = st([stop('chiang-mai', 2), stop('luang-prabang', 2)], { legPick: { 0: 'quick' } }), s1 = MM.decodeState(MM.encodeState(s0)), s2 = MM.sanitizeState(JSON.parse(JSON.stringify(s0))); return s1.legPick[0] === 'quick' && s2.legPick[0] === 'quick' && flies(MM.plan(s1).legs[0].chosen); })());
+ok('a trip\'s travel style is still Smart, Cheapest or Fastest (Quicker is for one leg)', MM.sanitizeState({ items: [], pref: 'quick' }).pref === 'balanced');
+
 /* ---------- itinerary maths ---------- */
 var p1 = MM.plan(st([stop('hanoi', 3)]));
 eq('1 stop, 3 nights = 4 days', p1.totals.days, 4);
@@ -190,7 +212,7 @@ profiles.forEach(function (pp) {
   ok('"make it cheaper" costs less, and does not mutate the original', MM.plan(cheaper).totals.total < MM.plan(s).totals.total && s.pref === 'balanced');
   ok('"make it faster" picks fast legs and clears manual leg picks', faster.pref === 'fast' && Object.keys(faster.legPick).length === 0);
   var sn = MM.suggestNext(s);
-  ok('suggest-next returns up to 3 unused, reachable hostels with reasons', sn.length >= 1 && sn.length <= 3 && sn.every(function (x) { return ['hanoi', 'hoi-an'].indexOf(x.id) < 0 && x.why.length && x.leg.h <= 16; }));
+  ok('suggest-next returns up to 3 unused, reachable hostels with reasons', sn.length >= 1 && sn.length <= 3 && sn.every(function (x) { return ['hanoi', 'hoi-an'].indexOf(x.id) < 0 && x.why.length && MM.withinReach(x.leg, 16); }));
   var bm = MM.bestMonths(['hoi-an', 'hanoi']); ok('best months: 12 values, Hoi An + Hanoi are better in spring than November', bm.length === 12 && bm[3] > bm[10]);
   var b = st([stop('hanoi', 3)], { budget: 500 }), bt = MM.plan(b).totals; ok('budget target tracked: left = budget - total', bt.budget === 500 && bt.budgetLeft === 500 - bt.total);
   ok('budget survives the share link', MM.decodeState(MM.encodeState(b)).budget === 500);
@@ -226,10 +248,10 @@ profiles.forEach(function (pp) {
 /* ---------- don't miss ---------- */
 (function () {
   var mk = function (ps) { return { items: ps.map(function (p) { return { kind: 'stop', p: p, n: 3, acts: [] }; }), start: '', pref: 'balanced', legPick: {}, fund: 18, crew: 0, budget: 0 }; };
-  var m = MM.missed(mk(['siem-reap', 'kampot']));
-  ok("don't miss: a hostel the bus drives through is flagged first", m[0] && m[0].k === 'via:phnom-penh' && m[0].after === 0 && m[0].dDays > 0);
-  ok("don't miss: the standout activity at a stop is suggested", m.some(function (x) { return x.k === 'act:siem-reap' && x.dCost > 0; }));
-  ok("don't miss: dismissed items stay hidden", !MM.missed(mk(['siem-reap', 'kampot']), { 'via:phnom-penh': 1 }).some(function (x) { return x.k === 'via:phnom-penh'; }));
+  var m = MM.missed(mk(['bangkok', 'pai']));
+  ok("don't miss: a hostel the bus drives through is flagged first", m[0] && m[0].k === 'via:chiang-mai' && m[0].after === 0 && m[0].dDays > 0);
+  ok("don't miss: the standout activity at a stop is suggested", MM.missed(mk(['siem-reap', 'kampot'])).some(function (x) { return x.k === 'act:siem-reap' && x.dCost > 0; }));
+  ok("don't miss: dismissed items stay hidden", !MM.missed(mk(['bangkok', 'pai']), { 'via:chiang-mai': 1 }).some(function (x) { return x.k === 'via:chiang-mai'; }));
   ok("don't miss: Bali to the Gilis suggests Nusa Lembongan on the way", MM.missed(mk(['uluwatu', 'gili-trawangan'])).some(function (x) { return x.k === 'near:nusa-lembongan'; }));
   var withIt = mk(['siem-reap']); withIt.items[0].acts = [MM.dontMiss('siem-reap').act.id];
   ok("don't miss: nothing nagging once you've added it", !MM.missed(withIt).some(function (x) { return x.k === 'act:siem-reap'; }));
@@ -371,6 +393,25 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('ALL IN links default to the public ALL IN site', MM.allInUrl('loop') === 'https://madmonkeyhostels.com/all-in-trips/vietnam-7');
   global.window = { MM_CONFIG: { ALLIN_BASE: '../' } }; var rel = MM.allInUrl('cambodia'); delete global.window;
   ok('...and use the live copy\'s relative base when configured', rel === '../cambodia');
+  // today's trips' addresses (agreed 20 Nov 2026): the new site's from the launch sync on, today's app's until then, the preview's own page on the preview
+  var NEW = { vietnam: 'vietnam-14', loop: 'vietnam-7', cambodia: 'cambodia-14', indonesia: 'indonesia-12', 'gili-lombok': 'indonesia-7', thailand: 'thailand-11', laos: 'laos-10' };
+  var OLD = { vietnam: 'vietnam', loop: 'vietnam-7', cambodia: 'cambodia', indonesia: 'indonesia', 'gili-lombok': 'indonesia-7', thailand: 'thailand', laos: 'laos' };
+  function at(path, conf, fn) { global.window = { MM_CONFIG: conf }; global.location = { pathname: path }; try { return fn(); } finally { delete global.window; delete global.location; } }
+  var ids = Object.keys(NEW);
+  ok('the seven trips have a page in both tables', ids.every(function (id) { return MM.ALLIN_PAGES.site[id] === NEW[id] && MM.ALLIN_PAGES.today[id] === OLD[id]; }) && Object.keys(MM.ALLIN_PAGES.site).length === 7);
+  var before = at('/all-in-trips/trip-builder/', { ALLIN_BASE: '../', ALLIN_SITE: '' }, function () { return ids.map(function (id) { return MM.allInUrl(id); }); });
+  ok('the live copy before launch (no ALLIN_SITE) keeps today\'s app\'s addresses', before.join() === ids.map(function (id) { return '../' + OLD[id]; }).join(), before.join());
+  var after = at('/all-in-trips/trip-builder/', { ALLIN_BASE: '../', ALLIN_SITE: '../' }, function () { return ids.map(function (id) { return MM.allInUrl(id); }); });
+  ok('...and from the launch sync (ALLIN_SITE set) the new addresses: /all-in-trips/vietnam-14, cambodia-14, indonesia-12, thailand-11, laos-10', after.join() === ids.map(function (id) { return '../' + NEW[id]; }).join(), after.join());
+  var prev = at('/mad-monkey-trip-builder/shop/trip-builder/', { ALLIN_SITE: '../' }, function () { return ids.map(function (id) { return MM.allInUrl(id); }); });
+  ok('on the private preview (one page) a link opens the site\'s own page for today\'s trip, #today-<slug>', prev.join() === ids.map(function (id) { return '../#today-' + OLD[id]; }).join(), prev.join());
+  var msgPrev = at('/mad-monkey-trip-builder/shop/trip-builder/', { ALLIN_SITE: '../' }, function () { return MM.whereNextUrl('cambodia'); });
+  var msgLive = at('/all-in-trips/trip-builder/', { ALLIN_BASE: '../', ALLIN_SITE: '../' }, function () { return MM.whereNextUrl('cambodia'); });
+  var msgNow = at('/all-in-trips/trip-builder/', { ALLIN_BASE: '../' }, function () { return MM.whereNextUrl('cambodia'); });
+  ok('a message to a guest always links an address that\'s served at the time it\'s sent, never the preview\'s page',
+    msgNow === 'https://madmonkeyhostels.com/all-in-trips/cambodia?utm_source=checkin&utm_medium=where-next' && msgPrev === msgNow &&
+    msgLive === 'https://madmonkeyhostels.com/all-in-trips/cambodia-14?utm_source=checkin&utm_medium=where-next', [msgNow, msgPrev, msgLive].join(' '));
+  ok('a bad ALLIN_SITE is ignored (today\'s app\'s address)', at('/all-in-trips/trip-builder/', { ALLIN_BASE: '../', ALLIN_SITE: 'javascript:alert(1)' }, function () { return MM.allInUrl('laos'); }) === '../laos');
   ok('ALL IN prices follow the ALL IN site (Cambodia $650, Indonesia $700, Laos $400) and Thailand stays link-only', MM.ALL_IN.filter(function (t) { return t.id === 'cambodia'; })[0].usd === 650 && MM.ALL_IN.filter(function (t) { return t.id === 'indonesia'; })[0].usd === 700 && MM.ALL_IN.filter(function (t) { return t.id === 'laos'; })[0].usd === 400 && !MM.ALL_IN.some(function (t) { return t.id === 'thailand'; }));
 })();
 
@@ -452,10 +493,13 @@ ok('lead payload carries contact, ref, route + itinerary', lead.contact.email ==
   ok('every place pair prints a clean 24-hour arrival time, and "next day" agrees with the clock', (function () {
     var ids = Object.keys(MM.PLACES), badArr = [];
     ids.forEach(function (a) { ids.forEach(function (b) { if (a === b) return; MM.legOptions(a, b).forEach(function (o) {
-      var tot = Math.round((o.dep + o.h) * 60 / 5) * 5, want = (function () { var m = tot % 1440, hh = Math.floor(m / 60), mm = m % 60; return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; })();
-      if (!/^\d\d:\d\d$/.test(o.arrive) || o.arrive !== want || o.arriveNext !== (tot >= 1440)) badArr.push(a + '>' + b + ' ' + o.arrive + ' vs ' + want);
+      var tot = Math.round(o.arriveAt * 60), want = (function () { var m = tot % 1440, hh = Math.floor(m / 60), mm = m % 60; return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; })();
+      if (!/^\d\d:\d\d$/.test(o.arrive) || o.arrive !== want || o.arriveNext !== (tot >= 1440) || o.arriveDays !== Math.floor(tot / 1440) || tot % 5) badArr.push(a + '>' + b + ' ' + o.arrive + ' vs ' + want);
+      if (o.route.steps.length === 1 && Math.abs(o.arriveAt - (o.dep + o.h)) > 0.15) badArr.push(a + '>' + b + ' one journey: ' + o.arriveAt + ' vs ' + (o.dep + o.h));    // a single journey just takes its hours
+      if (o.arriveAt < o.dep + o.h - 0.15 && !o.route.steps.some(function (s) { return s.e.stay; })) badArr.push(a + '>' + b + ' gets in before its hours are up');
+      if (o.arriveDays < o.nights) badArr.push(a + '>' + b + ' gets in before its nights on the way are spent');
     }); }); });
-    return badArr.length === 0; })());
+    return badArr.length === 0; })(), '');
   ok('a hostel that opens later only warns if you ARRIVE before it opens (not just if the trip starts before)', (function () {
     var late = MM.plan(st([stop('hanoi', 5), stop('koh-rong', 4), stop('kampot', 2)], { start: '2026-10-24' })).warnings.filter(function (w) { return /opens/.test(w.m); });         // Kampot opens 1 Nov 2026: you get there after that
     var early = MM.plan(st([stop('kampot', 2), stop('phnom-penh', 2)], { start: '2026-10-24' })).warnings.filter(function (w) { return /opens/.test(w.m); });

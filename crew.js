@@ -19,7 +19,7 @@
   function niceY(isoStr) { var d = U.parseDate(isoStr); return d ? U.fmtDate(d) + ' ' + d.getUTCFullYear() : ''; }
   function usd(n) { return '$' + Math.round(+n || 0).toLocaleString('en-US'); }
   function clean(s) { return String(s == null ? '' : s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); }
-  var PREFS = { balanced: 'Smart pick', cheap: 'Cheapest', fast: 'Fastest' };
+  var PREFS = { balanced: 'Smart pick', quick: 'Quicker', cheap: 'Cheapest', fast: 'Fastest' };
   var DATES = { fixed: 'Dates are fixed', flex: 'Dates are flexible', open: 'Dates not decided' };
 
   MM.crewSummary = function (state, pl, ctx) {
@@ -57,7 +57,7 @@
 
     pl.legs.forEach(function (l) {
       var c = l.chosen, s = stops[l.index]; if (!s) return;
-      s.next = { to: P()[l.to].n, mode: c.modeLabel, hours: U.hoursLabel(c.h), usd: Math.round(l.u), flightUsd: Math.round(l.flightU || 0), overnight: !!c.ovn, date: l.date || '', pref: PREFS[c.key] || '',
+      s.next = { to: P()[l.to].n, mode: c.modeLabel, hours: U.hoursLabel(c.h), usd: Math.round(l.u), flightUsd: Math.round(l.flightU || 0), overnight: !!c.ovn, nights: c.nights || 0, date: l.date || '', pref: PREFS[c.key] || '',
         lastMinuteFare: l.fare ? { min: l.fare.min, max: l.fare.max } : null, note: l.border || '' };
     });
 
@@ -170,7 +170,7 @@
           L.push('   - ' + t.name + ' · ' + (t.payOnDay ? 'pay on the day' : usd(t.usd) + (t.est ? ' (est.)' : '')) + (t.date ? ' · ' + nice(t.date) : t.day ? ' · day ' + t.day : '') + (t.fits ? '' : ' · DOES NOT FIT, needs another night'));
         });
       }
-      if (s.next) L.push('   Then: ' + s.next.mode + ' to ' + s.next.to + ' · ' + s.next.hours + ' · ' + usd(s.next.usd) + (s.next.flightUsd ? ' (' + usd(s.next.flightUsd) + ' of it is a flight they book, not in the price)' : '') + (s.next.overnight ? ' · overnight' : '') + (s.next.date ? ' · ' + nice(s.next.date) : ''));
+      if (s.next) L.push('   Then: ' + s.next.mode + ' to ' + s.next.to + ' · ' + s.next.hours + ' · ' + usd(s.next.usd) + (s.next.flightUsd ? ' (' + usd(s.next.flightUsd) + ' of it is a flight they book, not in the price)' : '') + (s.next.nights > 1 || (s.next.nights && !s.next.overnight) ? ' · ' + s.next.nights + (s.next.nights === 1 ? ' night' : ' nights') + ' on the way' : s.next.overnight ? ' · overnight' : '') + (s.next.date ? ' · ' + nice(s.next.date) : ''));
     });
     rule('MONEY (per person, US dollars)');
     L.push('Beds             ' + usd(b.beds));

@@ -184,7 +184,10 @@ h1,h2,h3{font-stretch:118%;font-weight:900;letter-spacing:-.025em;line-height:1}
 .sh__photo p{font-size:14px;color:#E3ECE6;margin-top:6px;line-height:1.4}
 .sh__x{position:absolute;right:12px;top:12px;z-index:2;width:44px;height:44px;border-radius:50%;background:rgba(14,43,38,.75);display:grid;place-items:center;font-size:22px;line-height:1}
 .sh__b{padding:16px 18px 0}
-.sh__b > h2{font-size:28px;margin-bottom:8px}
+.sh__b > h2{font-size:28px;margin-bottom:8px;text-wrap:balance}
+/* the close button sits top right, so a sheet's first lines (its small heading and its title) keep clear of it on a phone */
+.sh__b > .sh__x ~ p.over:first-of-type,.sh__b > .sh__x ~ h2:first-of-type{padding-right:48px}
+@media (max-width:420px){.sh__b > .sh__x ~ h2:first-of-type{font-size:26px}}
 .sh__ride{display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:var(--r-sm);background:var(--canopy-2);font-size:14px;font-weight:600;line-height:1.35;margin-bottom:16px}
 .sh__ride .ico{width:22px;height:22px;color:var(--amber)}
 .stepper{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 6px;background:var(--canopy-2);border-radius:var(--r-md);padding:8px}

@@ -87,7 +87,7 @@
   }
 
   /* ---------- timing: about a second or two a leg (longer legs take longer), a short pause at each stop.
-     A very long trip (ALL ASIA's 20-odd legs) is sped up so the whole film stays under maxTotal. ---------- */
+     A very long trip (20-odd legs) is sped up so the whole film stays under maxTotal. ---------- */
   function timing(pxLens, o) {
     o = o || {};
     var speed = o.speed > 0 ? o.speed : 1, pause = o.pause == null ? 450 : +o.pause, max = o.maxTotal || 24000;

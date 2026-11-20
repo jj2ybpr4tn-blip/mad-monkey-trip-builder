@@ -28,10 +28,37 @@
   function S(p, n, frags) { return { p: p, n: n, acts: (frags || []).map(function (f) { return find(p, f); }) }; }
 
   MM.ALLIN_URL = 'https://madmonkeyhostels.com/all-in-trips';
-  // Where "ALL IN details" links go. MM_CONFIG.ALLIN_BASE overrides it (the live copy at all-in-trips/trip-builder/ sets '../').
-  var ALLIN_PAGE = { vietnam: 'vietnam', loop: 'vietnam-7', cambodia: 'cambodia', indonesia: 'indonesia', 'gili-lombok': 'indonesia-7', thailand: 'thailand', laos: 'laos' };
-  MM.allInBase = function () { var c = (typeof window !== 'undefined' && window.MM_CONFIG) || {}, b = c.ALLIN_BASE != null ? c.ALLIN_BASE : MM.ALLIN_URL; return String(b).replace(/\/*$/, '/'); };
-  MM.allInUrl = function (id) { return MM.allInBase() + (ALLIN_PAGE[id] || ''); };
+  // Where "ALL IN details" links go: the page of one of today's ALL IN trips (the ones below).
+  //   ALLIN_PAGE  its address in the new ALL IN site, agreed 20 Nov 2026: madmonkeyhostels.com/all-in-trips/<this>. The 2027 trips take
+  //               /vietnam, /cambodia, /indonesia, /laos and /thailand there, so today's trips have their length on the end, the way
+  //               the 7-day ones were already named.
+  //   TODAY_PAGE  its address on today's ALL IN app, which serves madmonkeyhostels.com/all-in-trips until the new site launches. On the
+  //               private preview, where the site is one page, today's trip is <ALLIN_SITE>#today-<this>.
+  // Which one a link uses follows where this copy is (MM.allInUrl), so the live copy only changes at the launch sync, when its config
+  // gets ALLIN_SITE. docs/ALL-IN-SITE.md has the table.
+  var ALLIN_PAGE = { vietnam: 'vietnam-14', loop: 'vietnam-7', cambodia: 'cambodia-14', indonesia: 'indonesia-12', 'gili-lombok': 'indonesia-7', thailand: 'thailand-11', laos: 'laos-10' };
+  var TODAY_PAGE = { vietnam: 'vietnam', loop: 'vietnam-7', cambodia: 'cambodia', indonesia: 'indonesia', 'gili-lombok': 'indonesia-7', thailand: 'thailand', laos: 'laos' };
+  MM.ALLIN_PAGES = { site: ALLIN_PAGE, today: TODAY_PAGE };
+  function cfg() { return (typeof window !== 'undefined' && window.MM_CONFIG) || {}; }
+  // MM_CONFIG.ALLIN_BASE overrides it (the live copy at all-in-trips/trip-builder/ sets '../').
+  MM.allInBase = function () { var c = cfg(), b = c.ALLIN_BASE != null ? c.ALLIN_BASE : MM.ALLIN_URL; return String(b).replace(/\/*$/, '/'); };
+  // The new ALL IN site's address when this copy lives inside it (MM_CONFIG.ALLIN_SITE, e.g. '../'), '' when it doesn't. It's config,
+  // so it's trusted, but it's still only a plain https address or a path on this site.
+  MM.allInSite = function () {
+    var s = String(cfg().ALLIN_SITE == null ? '' : cfg().ALLIN_SITE).trim();
+    if (/^https:\/\/[^\s"'<>\\`]+$/i.test(s)) return s.replace(/#.*$/, '');
+    if (/^(\.\.?\/)*[\w\-.\/]*$/.test(s) && s.indexOf('//') < 0 && s) return s.replace(/#.*$/, '');
+    return '';
+  };
+  // The new site gives each page its own path at madmonkeyhostels.com/all-in-trips/ (and the launch pack's tests); the private preview is one page.
+  function sitePaths() { return typeof location !== 'undefined' && /^\/all-in-trips(\/|$)/.test(String(location.pathname || '')); }
+  // leaving: the link leaves the site (a message to a guest), so it's never the preview's one-page address: today's app's page instead.
+  MM.allInUrl = function (id, leaving) {
+    var s = MM.allInSite();
+    if (s && sitePaths()) return s.replace(/\/*$/, '/') + (ALLIN_PAGE[id] || '');            // inside the new site, live: the trip's own page
+    if (s && !leaving) return s + (TODAY_PAGE[id] ? '#today-' + TODAY_PAGE[id] : '');      // inside the private preview: the site's page for it
+    return MM.allInBase() + (TODAY_PAGE[id] || '');                                         // main, and the live copy until launch: today's app
+  };
   MM.DEPOSIT = 99;
 
   MM.INCLUDED = ['Dorm beds at Mad Monkey', 'All scheduled transport: transfers, buses, island boats', 'Every activity in the itinerary',

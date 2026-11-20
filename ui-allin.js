@@ -6,12 +6,13 @@
      • stops the "this looks like ALL IN Cambodia, swap it in" card arguing with the trip they just picked
      • links back to the trip's page on the ALL IN site (MM_CONFIG.ALLIN_SITE; no link while that's blank)
      • tells the crew, in the lead (allinSite) and their text, which trip it started from and what the guest changed
+     • (with ui-review.js) asks about the trip's free night in both Hold forms, like any ALL IN trip, while its stops are still there
    Nothing from the address is trusted or priced: the name is a checked label, prices are the builder's own estimates
    and the crew prices the trip before anyone pays.
    ============================================================ */
 (function () {
   'use strict';
-  var MM = window.MM, A = window.MMApp, C = window.MM_CONFIG || {};
+  var MM = window.MM, A = window.MMApp;
   if (!MM || !A || !MM.allinFrom) return;
   var KEY = 'mm-allin', TRIP_KEYS = ['trip', 'tn', 'part', 'away'];
   var U = function () { return A.util; }, esc = function (s) { return U().esc(s); };
@@ -33,13 +34,8 @@
   A.allin = ctx;
   if (ctx) document.documentElement.setAttribute('data-look', 'allin');                 // they came from the ALL IN site: keep its look whatever this copy's LOOK says
 
-  /* ---------- the ALL IN site's address (config, so it's trusted, but still only a plain https address or a path on this site) ---------- */
-  function site() {
-    var s = String(C.ALLIN_SITE == null ? '' : C.ALLIN_SITE).trim();
-    if (/^https:\/\/[^\s"'<>\\`]+$/i.test(s)) return s.replace(/#.*$/, '');
-    if (/^(\.\.?\/)*[\w\-.\/]*$/.test(s) && s.indexOf('//') < 0 && s) return s.replace(/#.*$/, '');   // e.g. '../' when the builder sits inside the ALL IN site
-    return '';
-  }
+  /* ---------- the ALL IN site's address (MM.allInSite, data/trips.js: config, so it's trusted, but still only a plain https address or a path on this site) ---------- */
+  function site() { return MM.allInSite ? MM.allInSite() : ''; }
   A.allinSite = site;
   function backHref() { var b = site(); return b ? b + (A.allin && A.allin.trip ? '#trip-' + A.allin.trip : '') : ''; }
   var nav = document.getElementById('nav-allin');

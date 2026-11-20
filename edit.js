@@ -10,7 +10,8 @@
 (function (r) {
   var MM = r.MM = r.MM || {}, U = MM.util, P = function () { return MM.PLACES; };
   var MAX_STOPS = 14, STYLE = { cheap: 'cheap', cheapest: 'cheap', balanced: 'balanced', smart: 'balanced', fast: 'fast', fastest: 'fast' };
-  var STYLE_NAME = { cheap: 'Cheapest', balanced: 'Smart pick', fast: 'Fastest' };
+  var STYLE_NAME = { cheap: 'Cheapest', balanced: 'Smart pick', fast: 'Fastest', quick: 'Quicker' };
+  var LEG_STYLE = { quick: 'quick', quicker: 'quick' };            // a single journey can also be the quicker way (the Smart pick goes by land and sea)
   function clone(s) { return JSON.parse(JSON.stringify(s)); }
   function has(o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }     // an id, not "constructor" or "__proto__"
   function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
@@ -143,10 +144,10 @@
       s.pref = k; s.legPick = {}; return 'Travel style: ' + STYLE_NAME[k];
     },
     set_travel: function (s, o, e) {
-      var i = needStop(s, o.stop, e); if (i == null) return; var k = STYLE[norm(o.mode)]; if (!k) return e('Mode must be cheapest, smart or fastest.');
+      var i = needStop(s, o.stop, e); if (i == null) return; var k = STYLE[norm(o.mode)] || LEG_STYLE[norm(o.mode)]; if (!k) return e('Mode must be cheapest, smart, quicker or fastest.');
       var pl = MM.plan(s), leg = pl.legs.filter(function (l) { return l.index === i; })[0];
       if (!leg) return e('There is no journey after stop ' + o.stop + '.');
-      var opt = leg.options.filter(function (x) { return x.key === k; })[0];
+      var opt = leg.options.filter(function (x) { return (x.keys || [x.key]).indexOf(k) > -1; })[0];
       if (!opt) return e(P()[leg.from].n + ' to ' + P()[leg.to].n + ' has no separate ' + STYLE_NAME[k].toLowerCase() + ' option. Options: ' + leg.options.map(function (x) { return x.label + ' (' + x.modeLabel + ')'; }).join(', ') + '.');
       s.legPick = s.legPick || {}; s.legPick[i] = k; return P()[leg.from].n + ' to ' + P()[leg.to].n + ': ' + opt.modeLabel.toLowerCase() + ', ' + U.hoursLabel(opt.h) + ', ' + money(opt.u);
     },
@@ -191,7 +192,7 @@
     for (i = 0; i < n; i++) { c[i] = []; for (j = 0; j < n; j++) {
       if (i === j) { c[i][j] = 0; continue; }
       var a = lastOf(items[i]), b = firstOf(items[j]), r = a === b ? { h: 0, u: 0 } : MM.route(a, b, pref);
-      c[i][j] = r ? r.h + r.u / 12 : INF; hop[i + '>' + j] = r ? { h: r.h, u: r.u } : { h: 0, u: 0 };
+      c[i][j] = r ? (MM.awakeH ? MM.awakeH(r) : r.h) + r.u / 12 : INF; hop[i + '>' + j] = r ? { h: r.h, u: r.u } : { h: 0, u: 0 };   // a night journey's sleep doesn't count
     } }
     function pathCost(o) { var t = 0; for (var k = 1; k < o.length; k++) t += c[o[k - 1]][o[k]]; return t; }
     var best;

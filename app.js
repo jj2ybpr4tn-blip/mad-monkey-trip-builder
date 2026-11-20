@@ -455,7 +455,10 @@
   function legIcon(leg, o) { return MM.modeIcon((o || leg.chosen).main); }
   function stepsText(rt) {
     if (rt.steps.length === 1) return rt.steps[0].e.note;
-    return rt.steps.map(function (s) { return (MM.MODE_LABEL[s.e.m] || s.e.m) + ' ' + hours(s.e.h); }).join(' → ');
+    return rt.steps.map(function (s) {
+      var e = s.e, n = e.nights || 1, m = MM.MODE_LABEL[e.m] || e.m;
+      return e.stay ? m + ' ' + (n > 1 ? n + ' days, ' + n + ' nights on the way' : hours(e.h) + ', a night on the way') : (e.ovn ? 'Overnight ' + m.toLowerCase() : m) + ' ' + hours(e.h);
+    }).join(' → ');
   }
 
   function panelHTML(pl) {
@@ -740,7 +743,7 @@
     var h = '<div class="legc' + (leg.origin ? ' legc--origin' : '') + '" id="leg' + (leg.origin ? 'o' : leg.index) + '">' + (leg.origin ? '<div class="over legc__kick">Getting there from where you are</div>' : '') + '<button class="legc__add" data-act="insertat" data-i="' + (leg.index + 1) + '" type="button">' + (leg.origin ? '+ Add a stop on the way' : '+ Add a stop in between') + '</button><div class="legc__hd"><span>' + esc(from) + '</span><span class="arrow">→</span><span>' + esc(to) + '</span>' + (leg.ovn ? chip(leg.nights > 1 ? leg.nights + ' nights on the move' : 'Overnight', 'pill--cyan') : '') + '</div><div class="legopts">';
     leg.options.forEach(function (o) {
       h += '<button class="legopt" type="button" data-act="leg" data-i="' + (leg.origin ? 'o' : leg.index) + '" data-k="' + o.key + '" aria-pressed="' + (o.key === leg.key) + '">' + legIcon(leg, o) +
-        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.fare ? '<i class="live-pill">fare for your date</i>' : o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span>' + (o.flightU ? '<span class="nt">The ~' + money(o.flightU) + ' flight isn\'t included: you book it, and we\'ll suggest the best one.</span>' : '') + (o.fare && o.fare.max > o.fare.min ? '<span class="nt">Fares that day: ' + money(o.fare.min) + ' to ' + money(o.fare.max) + '. We have used the lowest.</span>' : '') + '</div><div class="tm">' + (o.fare ? '' : '~') + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
+        '<div><b>' + o.label + ' · ' + esc(o.modeLabel) + (o.fare ? '<i class="live-pill">fare for your date</i>' : o.route.steps.some(function (s) { return s.e.live; }) ? '<i class="live-pill">live fare</i>' : '') + '</b><span class="nt">' + esc(stepsText(o.route)) + '</span><span class="nt">Arrives about ' + o.arrive + (o.arriveDays > 1 ? ', ' + o.arriveDays + ' days later' : o.arriveNext ? ' next day' : '') + (o.odd ? ' (odd hour)' : '') + '</span>' + (o.flightU ? '<span class="nt">The ~' + money(o.flightU) + ' flight isn\'t included: you book it, and we\'ll suggest the best one.</span>' : '') + (o.fare && o.fare.max > o.fare.min ? '<span class="nt">Fares that day: ' + money(o.fare.min) + ' to ' + money(o.fare.max) + '. We have used the lowest.</span>' : '') + '</div><div class="tm">' + (o.fare ? '' : '~') + money(o.u) + '<small>' + hours(o.h) + '</small></div></button>';
     });
     h += '</div><button class="why" data-act="toggle" data-k="why' + leg.index + '" aria-expanded="' + whyOpen + '" type="button">Why this leg? <b>' + (whyOpen ? '−' : '+') + '</b></button>';
     if (whyOpen) h += '<div class="why__bd"><p><b>' + ex.verdict + '</b></p>' + (ex.lines.length ? ex.lines.map(function (l) { return '<p>' + l + '</p>'; }).join('') : '<p>This is the only sensible way to do it.</p>') + '</div>';

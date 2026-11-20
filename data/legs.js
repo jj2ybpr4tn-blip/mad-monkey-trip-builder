@@ -8,14 +8,21 @@
    them as "~" and the crew confirms live fares before booking.
    Ops: this file is the one to sanity-check before launch.
 
-   Edge: a, b   — place ids or hub/airport codes (both directions)
+   Edge: a, b   — place ids or hub/airport codes (both directions). Hubs in capitals are airports, or towns a journey
+                  passes through that aren't stops of their own (SIHA, KRATIE, DONDET, PAKSE, HUAYXAI, CORON)
          m      — flight | bus | train | boat | van | taxi
          h, u   — door-to-door hours, USD
          ovn    — true if the journey is overnight (replaces a bed night)
-         nights — nights spent on the move (slow boat = 2)
+         stay   — true if the journey takes a night or two in a guesthouse on the way (the slow boat's Pakbeng); its bed is in u,
+                  and h is the hours on the move, not counting the nights
+         nights — nights spent on the way (an overnight journey is 1 unless it says; the slow boat = 2)
          mm     — Mad Monkey sells / arranges this leg (slug on madmonkeyhostels.com)
          dows   — the weekdays a flight runs (0 = Sun), when it doesn't fly every day
          at     — { airport: hour } when a flight leaves at a set time from that end (19.5 = 7:30pm)
+         leaves — { place: hour } when a bus or boat leaves at a known hour from that end
+
+   The Smart pick goes by land and sea wherever there's a reasonable way (logic.js, route): so every overland and sea
+   link the crews use belongs here, with flights only where there's nothing else.
    ============================================================ */
 (function (r) {
   var MM = r.MM = r.MM || {};
@@ -38,7 +45,6 @@
   /* ---------- Laos ---------- */
   E('luang-prabang', 'vang-vieng', 'train', 2.2, 17, 'High-speed train (~1 hr) plus station transfers',
     { mm: 'luang-prabang-to-vang-vieng-second-class-ticket' });
-  E('chiang-mai', 'luang-prabang', 'boat', 54, 80, 'Shuttle to Chiang Khong, border, 2-day slow boat, night in Pakbeng', { ovn: true, nights: 2 });
   E('luang-prabang', 'hanoi', 'bus', 24, 40, 'Cross-border sleeper bus (long)', { ovn: true });
   E('VTE', 'vang-vieng', 'train', 2.2, 15, 'Transfer to Vientiane station + high-speed train (~1 hr)');
 
@@ -67,6 +73,22 @@
   E('DPS', 'nusa-lembongan', 'boat', 2, 28, 'Transfer to Sanur + fast boat');
   E('DPS', 'gili-trawangan', 'boat', 4.5, 45, 'Transfer to Padang Bai + fast boat');
   E('gili-trawangan', 'LOP', 'van', 2.4, 22, 'Boat + transfer to Lombok airport');
+
+  /* ---------- Overland and by sea, the way the crews travel (Nov 2026): typical fares from the booking sites (goasia.cc, 12Go, Giant Ibis,
+     bustickets.ph), rounded ---------- */
+  // Saigon to Siem Reap in one go: Giant Ibis leaves Saigon at 15:45 and gets in about 05:00; Siem Reap to Saigon leaves at 21:45.
+  E('saigon', 'siem-reap', 'bus', 13.5, 50, 'Night bus over the Moc Bai border, through Phnom Penh', { ovn: true, leaves: { saigon: 15.75, 'siem-reap': 21.75 } });
+  // Phnom Penh to southern Laos and Vientiane: Kratie, the border at Trapeang Kriel, the 4,000 Islands, Pakse, then the night bus.
+  E('phnom-penh', 'KRATIE', 'bus', 5.5, 13, 'Bus up the Mekong to Kratie (~5 hrs)');
+  E('KRATIE', 'DONDET', 'van', 6, 28, 'Van over the Trapeang Kriel border and the boat to Don Det, with a night on the island (guesthouse in the price)', { stay: true, nights: 1 });
+  E('DONDET', 'PAKSE', 'boat', 3.5, 11, 'Boat to Nakasong and the van to Pakse (~3 hrs)');
+  E('PAKSE', 'VTE', 'bus', 10.5, 22, 'VIP night bus to Vientiane (~10 hrs, from about 20:00)', { ovn: true });
+  // The Mekong slow boat between Luang Prabang and Huay Xai (2 days), and over the Friendship Bridge to Chiang Mai: together, Chiang Mai to Luang Prabang.
+  E('luang-prabang', 'HUAYXAI', 'boat', 19, 40, 'Slow boat on the Mekong, 2 days, with a night in Pakbeng and one in Huay Xai (guesthouses in the price)', { stay: true, nights: 2 });
+  E('HUAYXAI', 'chiang-mai', 'van', 7, 27, 'Over the Friendship Bridge to Chiang Khong, then the van or bus to Chiang Mai (~6–7 hrs)');
+  // Manila to Palawan by sea: the night ferry to Coron (Atienza or 2GO, a few sailings a week, about 12 hrs, can run late), then the fast ferry to El Nido.
+  E('manila', 'CORON', 'boat', 13, 25, 'Night ferry to Coron (~12 hrs; a few sailings a week, so the crew checks the day)', { ovn: true, leaves: { manila: 16 } });
+  E('CORON', 'nacpan-beach', 'boat', 4.5, 45, 'Fast ferry from Coron to El Nido (~3.5 hrs) and the van up to Nacpan Beach');
 
   /* ---------- Philippines ---------- */
   E('dumaguete', 'siquijor', 'boat', 2, 10, 'Ferry (~1 hr) plus island transfer');

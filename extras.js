@@ -184,21 +184,22 @@
     var transitH = legs.reduce(function (a, l) { return a + l.h; }, 0), ovnLegs = legs.filter(function (l) { return l.ovn; });
     out.stats = { transitH: Math.round(transitH), transitDays: Math.round(transitH / 16 * 10) / 10, overnights: ovnLegs.length, stops: pl.places.length, nights: T.nights, days: T.days, avgNights: pl.places.length ? Math.round(T.nights / pl.places.length * 10) / 10 : 0 };
 
-    // 1. night buses / trains stacked close together
+    // 1. night buses / trains back to back: one night or none in a bed between them (the Smart pick goes overland, so a night bus
+    //    a few days after another is the normal way to travel, not a problem)
     var seen = {};
     for (var i = 0; i < legs.length; i++) for (var j = i + 1; j < legs.length; j++) {
       if (!legs[i].ovn || !legs[j].ovn) continue;
       var between = 0; for (var q = legs[i].index + 1; q <= legs[j].index; q++) between += stops[q] && stops[q].kind === 'stop' ? stops[q].n : 0;
-      if (between <= 4 && !seen[j]) {
+      if (between <= 1 && !seen[j]) {
         seen[i] = seen[j] = 1;
         var alt = legs[j].options.filter(function (o) { return !o.ovn && o.key !== legs[j].key; }).sort(function (a, b) { return a.u - b.u; })[0];
         add({ sev: 'bad', id: 'ovn-stack', title: 'Two overnight journeys back to back', body: 'You travel overnight from ' + P()[legs[i].from].n + ' to ' + P()[legs[i].to].n + ' and again from ' + P()[legs[j].from].n + ' to ' + P()[legs[j].to].n + ', with only ' + plural(between, 'night') + ' between. You\'ll arrive wrecked.',
           fix: alt ? { t: 'leg', i: legs[j].index, k: alt.key, label: 'Fly or go by day on the second one' } : (stops[legs[j].index] && stops[legs[j].index].kind === 'stop' ? { t: 'nights', i: legs[j].index, d: 1, label: 'Add a recovery night in ' + P()[stops[legs[j].index].p].n } : null) });
       }
     }
-    // 2. any single very long journey
+    // 2. any single very long journey by day (one with a night on a sleeper or in a guesthouse on the way breaks it up)
     legs.forEach(function (l) {
-      if (l.h >= 12 && !l.ovn) { var alt = l.options.filter(function (o) { return o.h < l.h - 4 && o.key !== l.key; }).sort(function (a, b) { return a.h - b.h; })[0];
+      if (l.h >= 12 && !l.ovn && !l.nights) { var alt = l.options.filter(function (o) { return o.h < l.h - 4 && o.key !== l.key; }).sort(function (a, b) { return a.h - b.h; })[0];
         add({ sev: 'warn', id: 'long-' + l.index, title: P()[l.from].n + ' to ' + P()[l.to].n + ' is ' + Math.round(l.h) + ' hours', body: 'That is most of a day on the move.', fix: alt ? { t: 'leg', i: l.index, k: alt.key, label: 'Take the quicker option (' + U().hoursLabel(alt.h) + ')' } : null }); }
     });
     // 3. one-night stands

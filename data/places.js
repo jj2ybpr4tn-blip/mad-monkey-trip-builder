@@ -109,7 +109,8 @@
     'Barefoot beach life, fire shows and a jungle rave that goes till sunrise.',
     [], 'koh-sdach kampot phnom-penh siem-reap', '333321111123',
     { note: 'Calm seas Nov–Apr. Rough, wet crossings May–Oct.' });
-  P('koh-sdach', 'Koh Sdach', 'KH', [11.4608, 103.0105], 9, 3, 2, 'beach chill nature',
+  // the island itself (Wikipedia: 10°56′N 103°4′E), where the ALL IN site has it too; it was at 11.46, 103.01, near Koh Kong
+  P('koh-sdach', 'Koh Sdach', 'KH', [10.93, 103.07], 9, 3, 2, 'beach chill nature',
     'A tiny fishing island you will not find on most itineraries. Proper escape.',
     [], 'koh-rong phnom-penh kampot', '333321111123',
     { note: 'Calm seas Nov–Apr. Boats can be rough May–Oct.' });
