@@ -19,4 +19,4 @@ The Trip Doctor, the visa check, the festival calendar and "Know before you go" 
 
 ## Trip Doctor
 
-`MM.doctor(state, { passport })` scores a trip and returns findings, each with an optional one-tap fix (add a night, swap an overnight bus, shift the start date). It flags back-to-back night journeys, very long single journeys, one-night stops, too many stops, odd-hour arrivals, long journeys right after a big activity, visa length and festival or closure clashes. Tune the thresholds in `extras.js`. The eight themed trips are tested to come out clean.
+`MM.doctor(state, { passport })` scores a trip and returns findings, each with an optional one-tap fix (add a night, swap an overnight bus, shift the start date). It flags back-to-back night journeys (one night or none in a bed between them), very long single journeys by day, one-night stops, too many stops, odd-hour arrivals, long journeys right after a big activity, visa length and festival or closure clashes. Tune the thresholds in `extras.js`. The eight themed trips are tested to come out clean.

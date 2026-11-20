@@ -55,6 +55,33 @@ trip (below), and the crew prices the trip before anyone pays.
 - What was marked on arrival is kept for the session, so a reload doesn't lose it. **Start over** forgets the trip (they're still a
   guest from the site); **Forget my trip and details** forgets everything.
 
+## Today's ALL IN trips' pages (data/trips.js)
+
+The builder's ALL IN trips are today's trips. The new site has a page for each, at the addresses agreed on 20 Nov 2026 (its 2027
+trips take `/vietnam`, `/cambodia`, `/indonesia`, `/laos` and `/thailand`, so today's trips have their length on the end, the way
+the 7-day ones were already named). "ALL IN details" links follow where this copy is (`MM.allInUrl`):
+
+| Trip (builder id) | In the new site (`ALLIN_PAGE`) | On today's app (`TODAY_PAGE`) | On the private preview |
+|---|---|---|---|
+| Vietnam (`vietnam`) | `/all-in-trips/vietnam-14` | `/all-in-trips/vietnam` | `shop/#today-vietnam` |
+| Ha Giang Loop (`loop`) | `/all-in-trips/vietnam-7` | `/all-in-trips/vietnam-7` | `shop/#today-vietnam-7` |
+| Cambodia (`cambodia`) | `/all-in-trips/cambodia-14` | `/all-in-trips/cambodia` | `shop/#today-cambodia` |
+| Indonesia (`indonesia`) | `/all-in-trips/indonesia-12` | `/all-in-trips/indonesia` | `shop/#today-indonesia` |
+| Gili T + Lombok (`gili-lombok`) | `/all-in-trips/indonesia-7` | `/all-in-trips/indonesia-7` | `shop/#today-indonesia-7` |
+| Thailand (`thailand`) | `/all-in-trips/thailand-11` | `/all-in-trips/thailand` | `shop/#today-thailand` |
+| Laos (`laos`) | `/all-in-trips/laos-10` | `/all-in-trips/laos` | `shop/#today-laos` |
+
+- **Inside the new site, live** (`ALLIN_SITE` set, and the builder's own path under `/all-in-trips/`, the way the site tells its
+  paths apart from the preview): `<ALLIN_SITE><new address>`, e.g. `../cambodia-14`.
+- **Inside the private preview** (`ALLIN_SITE` set, the site is one page): `<ALLIN_SITE>#today-<today's address>`, the site's own
+  page for that trip.
+- **Anywhere else** (`main`, and the live copy until launch): `<ALLIN_BASE><today's address>`, today's app.
+- A crew's Where next message leaves the site, so it never links the preview's page: today's app's address until launch, the new
+  one after (`MM.allInUrl(id, true)`).
+
+So the live copy keeps today's addresses through every sync until its config gets `ALLIN_SITE` at launch. `npm run audit` checks
+that every trip has both addresses and that none of the new ones is a page the site already uses.
+
 ## The site's approved prices
 
 Where the site sells a trip at a fixed, approved price, that's the price the guest saw, so the builder uses it instead of its own
@@ -118,7 +145,9 @@ Where the builder starts since 18 Nov 2026 (Ewan picked the "Trip builder try-ou
   shown first, with Leave it off; it goes in `told`, the crew's text and the notes).
 - **The free night.** Every ALL IN trip comes with a free bed the night before it starts, at the Mad Monkey where it starts, subject
   to availability. Whenever a trip has an ALL IN trip in it (first or later on), Hold my beds asks first, on its own: "Your first
-  night is on us", yes or no. The answer goes as `freeNight` (the same field as the ALL IN site's checkout) and the first line of the
+  night is on us", yes or no. That includes a trip the site handed over with **Make it yours**, which arrives as the ALL IN trip's
+  own stops: while those stops are still in it (`MMApp.allinFound`), the bed is at its first stop, the night before the guest gets
+  there, and it's named after the trip in the link (`tn`), or "your ALL IN trip" without one. The answer goes as `freeNight` (the same field as the ALL IN site's checkout) and the first line of the
   crew's notes; mid-trip, the notes say so. The full editor's Hold form asks the same (a required yes or no at the top), and sends
   the finder's words too, with Leave it off. The shared pieces are in ui-review.js (`MMApp.review.freeNight`, `MMApp.review.told`).
 - **Copy my trip** copies a line about the trip and the share link (`#/build/...`, the same link as the editor's Share).
@@ -225,7 +254,8 @@ node scripts/sync-allin.mjs /path/to/mm-squad-trips     # then commit and deploy
 ```
 
 The sync ships ui-site.js and, once that config is in place, marks the page as inside the site (`data-site="allin"`) and keeps the ALL
-IN look on it. The new site's page should carry `data-site-menu="bar"` and `data-site-menu="menu"` on its two navs, as the preview does.
+IN look on it. From then on its "ALL IN details" links open today's trips at their new addresses (`/all-in-trips/vietnam-14` and the
+rest, above); until then they stay on today's app's. The new site's page should carry `data-site-menu="bar"` and `data-site-menu="menu"` on its two navs, as the preview does.
 
 ## The look
 

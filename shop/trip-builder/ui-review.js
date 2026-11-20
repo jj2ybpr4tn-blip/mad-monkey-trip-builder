@@ -105,23 +105,37 @@
      site's checkout asks the same), and the answer goes as freeNight and the first line of the crew's notes. Used here and by the
      front door (ui-start.js). ---------- */
   function fnDay(d, yr) { return d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) + (yr ? ' ' + d.getUTCFullYear() : '') : ''; }
+  function fnHostel(p) { var P = MM.PLACES; return P[p] && !P[p].partner ? 'Mad Monkey ' + P[p].n : (P[p] ? P[p].n : 'where it starts'); }
+  // The ALL IN trip in it, if there is one: one of the builder's ALL IN trips, or the trip the ALL IN site handed over with "Make it
+  // yours" (ui-allin.js), which arrives as that trip's own stops: while those stops are still in it, it's still that ALL IN trip.
+  // When there are both, the one that comes first.
   function freeNightOf(people) {
     var pl; try { pl = MM.plan(A.state); } catch (e) { return null; }
-    var at = -1; pl.segs.some(function (sg, i) { if (sg.kind === 'allin') { at = i; return true; } return false; });
+    var beds = Math.max(1, +people || 1), at = -1;
+    pl.segs.some(function (sg, i) { if (sg.kind === 'allin') { at = i; return true; } return false; });
+    var site = A.allin && A.allin.trip && A.allinFound ? A.allinFound() : null;
+    if (site && (at < 0 || site.i < at)) {
+      var p1 = A.state.items[site.i].p, day = null;
+      pl.days.some(function (d) { if (d.si === site.i && d.kind === 'stay') { day = d; return true; } return false; });   // it starts the day they reach its first stop
+      var d1 = day && day.date ? day.date : null;
+      return { trip: { n: A.allin.name || '', site: A.allin.trip }, lead: site.i === 0, first: p1, hostel: fnHostel(p1), night: d1 ? MM.util.addDays(d1, -1) : null, out: d1, beds: beds };
+    }
     if (at < 0) return null;
-    var sg = pl.segs[at], t = sg.trip, P = MM.PLACES, p0 = t.stops[0].p, d0 = sg.departs || null;      // the engine's own start date for it
-    return { trip: t, lead: at === 0, first: p0, hostel: P[p0] && !P[p0].partner ? 'Mad Monkey ' + P[p0].n : (P[p0] ? P[p0].n : 'where it starts'), night: d0 ? MM.util.addDays(d0, -1) : null, out: d0, beds: Math.max(1, +people || 1) };
+    var sg = pl.segs[at], t = sg.trip, p0 = t.stops[0].p, d0 = sg.departs || null;      // the engine's own start date for it
+    return { trip: t, lead: at === 0, first: p0, hostel: fnHostel(p0), night: d0 ? MM.util.addDays(d0, -1) : null, out: d0, beds: beds };
   }
+  // "ALL IN Cambodia", or "your ALL IN trip" when the site's link had no name we could use
+  function freeNightName(f) { return f.trip && f.trip.n ? 'ALL IN ' + f.trip.n : 'your ALL IN trip'; }
   function freeNightText(f) {
-    var when = f.lead ? 'the night before you start' : 'the night before ALL IN ' + f.trip.n + ' starts';
+    var when = f.lead ? 'the night before you start' : 'the night before ' + freeNightName(f) + ' starts';
     return 'A free bed' + (f.beds > 1 ? ' for each of you' : '') + ' at ' + f.hostel + (f.night ? ' on ' + fnDay(f.night) + ', ' + when : ', ' + when) + ', subject to availability. Want it?';
   }
   function freeNightData(f, pick) { return { optIn: pick === 'yes', answered: !!pick, hostel: f.first, hostelName: f.hostel, night: f.night ? MM.util.isoDate(f.night) : '', checkOut: f.out ? MM.util.isoDate(f.out) : '', beds: f.beds }; }
   function freeNightNote(f, pick) {
     if (pick !== 'yes') return 'FREE NIGHT BEFORE: NO. They said no thanks, so there\u2019s no bed to book.';
     return 'FREE NIGHT BEFORE: YES. Book ' + f.beds + (f.beds === 1 ? ' bed' : ' beds') + ' at ' + f.hostel +
-      (f.night ? ' for the night of ' + fnDay(f.night, true) + ' (in ' + fnDay(f.night) + ', out ' + fnDay(f.out) + ')' : ' for the night before ' + (f.lead ? 'the trip' : 'ALL IN ' + f.trip.n) + ' starts (date to confirm)') + ', on the house.' +
-      (f.lead ? '' : ' It\u2019s the night before ALL IN ' + f.trip.n + ', mid-trip: fit it round their stops.');
+      (f.night ? ' for the night of ' + fnDay(f.night, true) + ' (in ' + fnDay(f.night) + ', out ' + fnDay(f.out) + ')' : ' for the night before ' + (f.lead ? 'the trip' : freeNightName(f)) + ' starts (date to confirm)') + ', on the house.' +
+      (f.lead ? '' : ' It\u2019s the night before ' + freeNightName(f) + ', mid-trip: fit it round their stops.');
   }
   function freeNightHTML(f) {
     return '<fieldset class="field full freebed" id="lf-free"><legend>Your first night of ALL IN is on us</legend><p class="fine" id="lf-freed">' + esc(freeNightText(f)) + '</p>' +
@@ -435,5 +449,5 @@
   };
 
   A.review = { open: open, send: sendTrip, fmtWhen: fmtDT, told: told, toldShort: toldShort, fnDay: fnDay,
-    freeNight: { of: freeNightOf, text: freeNightText, data: freeNightData, note: freeNightNote } };
+    freeNight: { of: freeNightOf, text: freeNightText, data: freeNightData, note: freeNightNote, name: freeNightName } };
 })();

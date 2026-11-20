@@ -5,7 +5,8 @@
    the bar counts days the way the trip page and its day by day do (3 nights in Bangkok: day 4; a sleeper bus counts its night);
    an option's name never sits on the current stop, a drawn name or another option; every colour in the vibe bar has its name;
    Hold my beds sends one request with the ALL IN site's fields (freeNight when the trip starts with ALL IN, who's coming, the dates,
-   what they told the site) and needs a name, an email, a free-night answer and the tick; Copy my trip copies the share link; the full
+   what they told the site) and needs a name, an email, a free-night answer and the tick; a trip from Make it yours is asked about the
+   free night too, and the question's heading clears the sheet's close button; Copy my trip copies the share link; the full
    editor opens with the same trip. Returns { pass, fail, fails: [what failed] }. Leaves the trip saved on this device as it found it. */
 (function () {
   function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -131,6 +132,20 @@
       p = A._lastLead || {};
       ok(p.freeNight && p.freeNight.optIn === true && /^FREE NIGHT BEFORE: YES/.test(p.contact.notes) && p.told && p.told.words, 'the editor\'s form sends freeNight and their words');
       closeAny();
+
+      // a trip the ALL IN site handed over with Make it yours arrives as its own stops: it's asked too, at its first stop, the night before
+      var keepAllin = A.allin;
+      window.__start.set([{ kind: 'stop', p: 'phnom-penh', n: 3, acts: [] }, { kind: 'stop', p: 'siem-reap', n: 4, acts: [] }, { kind: 'stop', p: 'koh-rong', n: 3, acts: [] }], 'trip', 21);
+      await until(function () { return location.hash === '#/start/trip' && $('[data-act="hold"]'); });
+      A.state.start = MM.util.isoDate(d); A.util.persist();
+      A.allin = { trip: 'cambodia', name: 'Cambodia', b: 0, n: 3, away: 0 }; A.allin.mark = MM.allinMark(A.state.items, A.allin);
+      $('[data-act="hold"]').click(); await until(function () { return $('.sheet.on [data-free]'); });
+      ok(/ALL IN Cambodia comes with it/.test($('.sheet.on').textContent) && /Mad Monkey Phnom Penh on /.test($('#h-freed').textContent) && /night before you start/.test($('#h-freed').textContent), 'a trip from Make it yours is asked about the free night too, at its first stop');
+      // and its heading has room beside the close button, whatever the width
+      var X = $('.sheet.on .sh__x').getBoundingClientRect(), hd = $('.sheet.on h2'), rg = document.createRange(); rg.selectNodeContents(hd);
+      ok(!Array.prototype.some.call(rg.getClientRects(), function (b) { return b.width > 0 && hit(b, X); }), '"' + hd.textContent + '" doesn\'t run under the close button');
+      $('.sheet.on [data-close]').click(); await wait(300);
+      A.allin = keepAllin;
 
       // the full editor, one tap away, with the same trip
       location.hash = '#/start/trip'; await until(function () { return $('[data-act="editor"]'); });

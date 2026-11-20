@@ -54,8 +54,9 @@ The guest lands on `#/trip/<ref>` after sending. With `STATUS_ENDPOINT` set, it 
   "itinerary": "MY MAD MONKEY TRIP\nHanoi → …",    // plain-text day-by-day, ready to paste into WhatsApp / a CRM note
   "findCrew": { "on": true, "age": "22-25", … },     // only when they ticked "Find your crew": see FIND-YOUR-CREW.md
   "freeNight": { "optIn": true, "answered": true, "hostel": "phnom-penh", "hostelName": "Mad Monkey Phnom Penh",
-                 "night": "2027-01-06", "checkOut": "2027-01-07", "beds": 1 },   // the front door, when the trip starts with an ALL IN trip:
-                                                   // the free bed the night before, yes or no (the ALL IN site's checkout sends the same)
+                 "night": "2027-01-06", "checkOut": "2027-01-07", "beds": 1 },   // both Hold forms, when the trip has an ALL IN trip in it (one of
+                                                   // the builder's, or one the site handed over with Make it yours): the free bed the night
+                                                   // before, yes or no (the ALL IN site's checkout sends the same)
   "told": { "words": "…", "tiktok": ["https://www.tiktok.com/…"], "from": "Not sure which one?" }   // the front door: what they told the
                                                    // ALL IN site (sessionStorage allin-told), also added to crewText and contact.notes
 }
@@ -104,7 +105,8 @@ crew review page all show the same thing without re-doing the maths:
     "kind": "stop | allin", "name": "Hanoi", "country": "Vietnam", "nights": 4, "from": "2026-11-13", "to": "2026-11-17",
     "bedUsd": 6.76, "bedsUsd": 27, "partner": false,
     "tours": [{ "name": "Ninh Binh · Trang An boats + Mua Cave", "usd": 48, "est": false, "payOnDay": false, "date": "2026-11-14", "day": 2, "fits": true }],
-    "next": { "to": "Hoi An", "mode": "Flight", "hours": "5h35", "usd": 65, "overnight": false, "date": "2026-11-17" }   // travel to the next stop; null on the last
+    "next": { "to": "Hoi An", "mode": "Bus", "hours": "17h", "usd": 22, "overnight": true, "nights": 1, "date": "2026-11-17" }   // travel to the next stop; null on the last.
+                                                   // nights: nights on the way (a night bus, or the slow boat's 2 in guesthouses)
   }],
   "budget": { "beds": 73, "tours": 155, "transport": 123, "allIn": 0, "squadDiscount": 0, "tripCost": 351, "spendPerDay": 20, "spendFund": 220,
               "total": 571, "people": 2, "tripCostAllPeople": 702, "totalAllPeople": 1142, "guestBudget": 1500, "budgetLeft": 929 },   // US dollars, per person unless it says AllPeople

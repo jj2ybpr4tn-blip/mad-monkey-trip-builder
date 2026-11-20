@@ -45,6 +45,7 @@ ids.forEach((id) => {
 const nodeLL = {};
 ids.forEach((id) => { nodeLL[id] = P[id].ll; P[id].ap.forEach((a) => { if (!nodeLL[a[0]]) nodeLL[a[0]] = P[id].ll; }); });
 nodeLL.SIHA = [10.63, 103.5]; nodeLL.CEB = [10.31, 123.89]; nodeLL.DAD = [16.06, 108.2]; nodeLL.VTE = [17.99, 102.56];       // hubs that aren't a hostel
+nodeLL.KRATIE = [12.49, 106.02]; nodeLL.DONDET = [13.97, 105.92]; nodeLL.PAKSE = [15.12, 105.8]; nodeLL.HUAYXAI = [20.28, 100.41]; nodeLL.CORON = [12.0, 120.2];   // towns a journey passes through
 const MODES = { flight: [150, 900], bus: [12, 75], train: [20, 110], boat: [8, 70], van: [14, 75], taxi: [6, 80] };
 const seenEdge = {};
 MM.EDGES.forEach((e, i) => {
@@ -54,7 +55,9 @@ MM.EDGES.forEach((e, i) => {
   if (!MODES[e.m]) err(w + 'unknown mode');
   if (!(e.h > 0)) err(w + 'hours must be positive');
   if (!(e.u >= 0)) err(w + 'price must not be negative');
-  if (e.nights && !e.ovn) err(w + 'nights without overnight');
+  if (e.nights && !e.ovn && !e.stay) err(w + 'nights without overnight or a stay on the way');
+  if (e.ovn && e.stay) err(w + 'overnight and a stay on the way: pick one');
+  if (e.leaves) Object.keys(e.leaves).forEach((k) => { if (k !== e.a && k !== e.b) err(w + 'leaves at a known hour from ' + k + ', which is not either end'); if (!(e.leaves[k] >= 0 && e.leaves[k] < 24)) err(w + 'leaving hour ' + e.leaves[k]); });
   if (e.ovn && e.h < 5) err(w + 'overnight but only ' + e.h + ' hours');
   if (e.dows && !(Array.isArray(e.dows) && e.dows.length && e.dows.every((d) => d >= 0 && d <= 6))) err(w + 'weekdays it runs look wrong: ' + e.dows);
   if (e.at) Object.keys(e.at).forEach((k) => { if (k !== e.a && k !== e.b) err(w + 'leaves at a set time from ' + k + ', which is not either end'); if (!(e.at[k] >= 0 && e.at[k] < 24)) err(w + 'departure hour ' + e.at[k]); });
@@ -125,7 +128,19 @@ MM.ALL_IN.forEach((t) => {
   Object.keys(t.prices || {}).forEach((k) => { if (!/^\d{4}-\d{2}$/.test(k) || !(t.prices[k] > 0 && t.prices[k] < 3000)) err(w + 'price for ' + k + ': ' + t.prices[k]); });
   if (t.nStops && t.nStops < new Set(t.stops.map((s) => s.p)).size) warn(w + 'nStops says ' + t.nStops + ' but ' + new Set(t.stops.map((s) => s.p)).size + ' different places are listed');
   if (!MM.allInUrl(t.id)) err(w + 'no details link');
+  if (!MM.ALLIN_PAGES.site[t.id] || !MM.ALLIN_PAGES.today[t.id]) err(w + 'no page address in ALLIN_PAGE and TODAY_PAGE (data/trips.js)');
 });
+// today's trips' addresses in the new site: one each, and never a path the site already uses (the 2027 trips that share a country's name, the builder)
+(function () {
+  const site = MM.ALLIN_PAGES.site, seen = {}, TAKEN = ['vietnam', 'cambodia', 'indonesia', 'laos', 'thailand', 'trip-builder'];
+  Object.keys(site).forEach((id) => {
+    const a = site[id];
+    if (!/^[a-z0-9-]{1,40}$/.test(a)) err('ALLIN_PAGE ' + id + ': "' + a + '" isn\'t an address');
+    if (TAKEN.includes(a)) err('ALLIN_PAGE ' + id + ': /' + a + ' is already a page in the new ALL IN site');
+    if (seen[a]) err('ALLIN_PAGE ' + id + ' and ' + seen[a] + ' share /' + a); seen[a] = id;
+    if (!MM.ALLIN_PAGES.today[id]) err('TODAY_PAGE has no ' + id);
+  });
+})();
 MM.CLASSICS.forEach((t) => checkTrip(t, 'classic'));
 (MM.SPECIALS || []).forEach((t) => checkTrip(t, 'special'));
 MM.THEMES.forEach((t) => { t.route.forEach((x) => { if (!P[x[0]]) err('theme ' + t.id + ': unknown place ' + x[0]); (x[2] || []).forEach((f) => { if (!MM.themeActs(x[0], [f]).length) err('theme ' + t.id + ': "' + f + '" matches no tour at ' + x[0]); }); }); });

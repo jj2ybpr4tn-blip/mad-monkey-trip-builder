@@ -60,7 +60,9 @@
     return s + '</svg>';
   }
   function modeWord(o) { var m = Film.mode(o.main); return o.ovn ? 'overnight ' + (m === 'plane' ? 'flight' : m) : m === 'plane' ? 'flight' : m === 'car' ? 'transfer' : m; }
-  function rideLine(o) { return hrs(o.h) + ' ' + modeWord(o) + ' · ~' + money(o.u); }
+  // how long a journey takes, in words: "11 hrs overnight bus", or for one that takes two nights or more (the slow boat), "2 nights by boat"
+  function ride(o) { var m = Film.mode(o.main); return o.nights > 1 ? o.nights + ' nights by ' + (m === 'plane' ? 'air' : m === 'car' ? 'road' : m) : hrs(o.h) + ' ' + modeWord(o); }
+  function rideLine(o) { return ride(o) + ' · ~' + money(o.u); }
   function trip(id) { return MM.ALL_IN.filter(function (t) { return t.id === id; })[0]; }
   function priceOf(t) { var d = A.state.start ? MM.util.parseDate(A.state.start) : null; return MM.allInPrice(t, d); }
   function fmtDay(d, yr) { return d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) + (yr ? ' ' + d.getUTCFullYear() : '') : ''; }
@@ -129,16 +131,16 @@
     var nat = P[cur].next || [], start = A.state.start ? MM.util.parseDate(A.state.start) : null;
     var month = start ? new Date(start.getTime() + (pl.totals.days || 0) * 864e5).getUTCMonth() : null;
     return Object.keys(P).filter(function (id) { return !used[id]; }).map(function (id) {
-      var o = MM.legOptions(cur, id)[0]; if (!o || o.h > 18) return null;
+      var o = MM.legOptions(cur, id)[0]; if (!o || !MM.withinReach(o, 18)) return null;      // the Smart pick's way there; a night or two on a sleeper or a boat counts by its nights
       var s = 0, ni = nat.indexOf(id), seas = month != null ? MM.seasonOf(id, month) : 2;
       if (ni > -1) s += 6 - ni;
       s += Math.min(2, P[id].tags.filter(function (t) { return !tagsHave[t]; }).length * 0.6);
       s += { 3: 1.5, 2: 0, 1: -2.5 }[seas] || 0;
-      s -= o.h * 0.25 + o.u * 0.012;
+      s -= MM.awakeH(o) * 0.25 + o.u * 0.012;
       if (P[id].partner) s -= 0.6;
       var badge = ni === 0 ? 'Classic route' : seas === 3 && month != null ? 'Prime time' : P[id].c !== P[cur].c ? 'New country' : '';
       var ks = kindsOf(id);
-      return { id: id, s: s, ride: o, natural: ni > -1, good: ni > -1 || o.h <= 9, kinds: ks, kind: ks[0], badge: badge };
+      return { id: id, s: s, ride: o, natural: ni > -1, good: ni > -1 || MM.awakeH(o) <= 9, kinds: ks, kind: ks[0], badge: badge };
     }).filter(Boolean).sort(function (a, b) { return b.s - a.s; });
   }
   // the natural next stops first (as different as they can be), then easy hops, then the rest
@@ -407,7 +409,7 @@
     return '<button class="card card--allin" data-allin="' + t.id + '"><span class="card__img" style="' + bg(tripPhoto(t)) + '"><span class="card__num">' + (i + 1) + '</span></span>' +
       '<span class="card__b"><span class="kind" style="--k:#FF6A4D">ALL IN · ' + t.days + ' days</span>' +
       '<span class="card__n">' + esc(t.n) + '</span><span class="card__h">' + esc(t.tag) + '</span>' +
-      '<span class="card__m"><span>From ' + money(priceOf(t)) + ' with a crew</span>' + (o ? '<span>' + icon(o.main) + esc(hrs(o.h)) + ' to ' + esc(P[first].n) + '</span>' : '<span>Starts here</span>') + '</span></span></button>';
+      '<span class="card__m"><span>From ' + money(priceOf(t)) + ' with a crew</span>' + (o ? '<span>' + icon(o.main) + esc(o.nights > 1 ? o.nights + ' nights' : hrs(o.h)) + ' to ' + esc(P[first].n) + '</span>' : '<span>Starts here</span>') + '</span></span></button>';
   }
   // Days count the way every Mad Monkey trip does (14 days is 13 nights: you leave on day 14), so the bar says how far the plan
   // reaches: 3 nights in Bangkok takes you to day 4, when you move on. The trip page and its day by day count the same way.
@@ -426,7 +428,7 @@
   function strip(pl, added) {
     var h = '', legs = pl.legs;
     pl.segs.forEach(function (sg, i) {
-      if (i > 0) { var L = legs.filter(function (l) { return l.index === i - 1; })[0]; if (L && L.chosen) h += '<span class="ride" aria-hidden="true">' + icon(L.chosen.main) + esc(hrs(L.chosen.h)) + '</span>'; }
+      if (i > 0) { var L = legs.filter(function (l) { return l.index === i - 1; })[0]; if (L && L.chosen) h += '<span class="ride" aria-hidden="true">' + icon(L.chosen.main) + esc(L.chosen.nights > 1 ? L.chosen.nights + ' nights' : hrs(L.chosen.h)) + '</span>'; }
       var isNew = added && i === pl.segs.length - 1;
       if (sg.kind === 'stop') h += '<button class="stop' + (isNew ? ' stop--new' : '') + '" role="listitem" data-edit="' + i + '"><span class="cdot" style="--cc:' + CC[P[sg.p].c] + '"></span>' + esc(P[sg.p].n) + '<i>' + sg.n + (sg.n === 1 ? ' night' : ' nights') + '</i></button>';
       else h += '<button class="stop stop--allin' + (isNew ? ' stop--new' : '') + '" role="listitem" data-edit="' + i + '"><span class="cdot" style="--cc:#FF6A4D"></span>ALL IN ' + esc(sg.trip.n) + '<i>' + sg.trip.days + ' days</i></button>';
@@ -491,11 +493,11 @@
     opts = opts || {};
     var pl = opts.first ? null : plan(), cur = lastPlace(pl), o = !opts.first && cur ? MM.legOptions(cur, id)[0] : null, p = P[id];
     var nights = p.sug || 3, min = 1, chosen = {}, Acts = topActs(id), showAll = false;
-    var ride = o ? '<div class="sh__ride">' + icon(o.main) + '<span><b>' + esc(hrs(o.h)) + ' ' + esc(modeWord(o)) + '</b> from ' + esc(P[cur].n) + ', about ' + money(o.u) + (o.ovn ? '. It covers a night, so that\'s one less bed to pay for' : '') + '</span></div>' : '';
+    var rideBox = o ? '<div class="sh__ride">' + icon(o.main) + '<span><b>' + esc(ride(o)) + '</b> from ' + esc(P[cur].n) + ', about ' + money(o.u) + (o.nights > 1 ? ', the beds on the way included' : o.ovn ? '. It covers a night, so that\'s one less bed to pay for' : '') + '</span></div>' : '';
     function body() {
       var acts = Acts.list.slice(0, showAll ? 12 : 3);
       return '<div class="sh__photo" style="' + bg(photo2(id)) + '"><button class="sh__x" data-close aria-label="Close">×</button><div><p class="over" style="color:' + CC[p.c] + '">' + esc(cname(p.c)) + '</p><h2>' + esc(p.n) + '</h2><p>' + esc(p.hook) + '</p></div></div>' +
-        '<div class="sh__b">' + (opts.surprise ? '<p class="over" style="color:var(--amber);margin-bottom:8px">Surprise! How about this?</p>' : '') + ride + '<p class="over">How many nights?</p>' +
+        '<div class="sh__b">' + (opts.surprise ? '<p class="over" style="color:var(--amber);margin-bottom:8px">Surprise! How about this?</p>' : '') + rideBox + '<p class="over">How many nights?</p>' +
         '<div class="stepper"><button data-n="-1" aria-label="One night less">−</button><output aria-live="polite">' + nights + '<small>' + (nights === 1 ? 'night' : 'nights') + ' · beds ~' + money(p.bed * nights) + '</small></output><button data-n="1" aria-label="One more night">+</button></div>' +
         '<p class="small">Most people stay ' + p.sug + '. ' + esc(p.note || '') + '</p>' +
         (Acts.list.length ? '<p class="over" style="margin-top:18px">Don\'t miss</p><div class="acts">' + acts.map(function (a, i) { return actRow(a, chosen[a.id], i === 0 && Acts.pitch && a.id === (MM.dontMiss(id) || { act: {} }).act.id ? Acts.pitch : '', i); }).join('') + '</div>' +
@@ -535,7 +537,7 @@
     opts = opts || {};
     var t = trip(id), pl = opts.first ? null : plan(), cur = lastPlace(pl), first = t.stops[0].p, o = cur && first !== cur ? MM.legOptions(cur, first)[0] : null;
     sheet('<div class="sh__photo" style="' + bg(tripPhoto(t)) + '"><button class="sh__x" data-close aria-label="Close">×</button><div><p class="over" style="color:var(--coral)">ALL IN · ' + t.days + ' days</p><h2>' + esc(t.n) + '</h2><p>' + (t.kicker ? '<b>' + esc(t.kicker) + '.</b> ' : '') + esc(t.tag) + '</p></div></div>' +
-      '<div class="sh__b">' + (o ? '<div class="sh__ride">' + icon(o.main) + '<span><b>' + esc(hrs(o.h)) + ' ' + esc(modeWord(o)) + '</b> to ' + esc(P[first].n) + ' to join it, about ' + money(o.u) + '</span></div>' : '') +
+      '<div class="sh__b">' + (o ? '<div class="sh__ride">' + icon(o.main) + '<span><b>' + esc(ride(o)) + '</b> to ' + esc(P[first].n) + ' to join it, about ' + money(o.u) + '</span></div>' : '') +
       '<p style="font-size:15.5px;line-height:1.5;margin-bottom:12px">' + esc(t.pitch) + '</p>' +
       '<p class="over">What\'s in it</p><ul class="incl">' + MM.INCLUDED.slice(0, 6).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + (t.meals ? '<li>Meals: ' + esc(t.meals) + '</li>' : '') + '</ul>' +
       '<div class="tprice"><b style="font-size:38px">' + money(priceOf(t)) + '</b><span>each, for all ' + t.days + ' days</span></div>' +
@@ -634,7 +636,7 @@
         h += '<li class="tl--allin"><span class="tl__d">' + esc(when) + '</span><span class="tl__n">ALL IN ' + esc(sg.trip.n) + '</span><span class="tl__x">' + esc(sg.trip.tag) + '. Planned for you, with a crew.' + (sg.pre ? ' You get there the day before it leaves, and that night is on us.' : '') + '</span>';
       }
       var L = pl.legs.filter(function (l) { return l.index === i; })[0];
-      if (L && L.chosen && i < pl.segs.length - 1) h += '<span class="tl__ride">' + icon(L.chosen.main) + esc(hrs(L.chosen.h)) + ' ' + esc(modeWord(L.chosen)) + ' to ' + esc(P[L.to] ? P[L.to].n : L.to) + ', ~' + money(L.chosen.u) + '</span>';
+      if (L && L.chosen && i < pl.segs.length - 1) h += '<span class="tl__ride">' + icon(L.chosen.main) + esc(ride(L.chosen)) + ' to ' + esc(P[L.to] ? P[L.to].n : L.to) + ', ~' + money(L.chosen.u) + '</span>';
       h += '</li>';
     });
     var end = endDate(pl), fin = lastPlace(pl), day = pl.days.length ? pl.days[pl.days.length - 1].n : tot.days;     // the last day: you check out and move on
@@ -687,7 +689,8 @@
     var X = '<button class="sh__x" data-close aria-label="Close" style="background:var(--canopy-2)">×</button>';
     // step 1, whenever there's an ALL IN trip in it: the free bed the night before, yes or no (it comes with every ALL IN trip)
     function stepFree() {
-      return '<div class="sh__b" style="padding-top:22px">' + X + '<p class="over">ALL IN ' + esc(fn.trip.n) + ' comes with it</p>' +
+      var nm = FN.name ? FN.name(fn) : 'ALL IN ' + fn.trip.n;
+      return '<div class="sh__b" style="padding-top:22px">' + X + '<p class="over">' + esc(nm.charAt(0).toUpperCase() + nm.slice(1)) + ' comes with it</p>' +
         '<h2 style="margin:8px 0 10px">Your first night is on us</h2>' +
         '<p style="font-size:16px;line-height:1.5" id="h-freed">' + esc(FN.text(fn)) + '</p>' +
         '<div class="sh__ft"><button class="btn btn--go btn--block" data-free="yes" data-focus>' + (n > 1 ? 'Yes, book our free beds' : 'Yes, book my free night') + '</button>' +

@@ -50,7 +50,7 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
   /* admin */
   ok('admin needs the token', (await j('/api/admin/leads')).s === 401 && (await j('/api/admin/leads', { headers: { Authorization: 'Bearer nope' } })).s === 401);
   const leads = await j('/api/admin/leads', { headers: adm }); const rec = leads.b.find((x) => x.ref === ref);
-  ok('bed-hold sheet: Hanoi 18→21 Nov, Hoi An 21→24 Nov', rec.sheet && rec.sheet[0].placeId === 'hanoi' && rec.sheet[0].checkIn === '2026-11-18' && rec.sheet[0].checkOut === '2026-11-21' && rec.sheet[1].checkIn === '2026-11-21' && rec.sheet[1].nights === 3, JSON.stringify(rec.sheet));
+  ok('bed-hold sheet: Hanoi 18→21 Nov, the night bus, Hoi An 22→25 Nov', rec.sheet && rec.sheet[0].placeId === 'hanoi' && rec.sheet[0].checkIn === '2026-11-18' && rec.sheet[0].checkOut === '2026-11-21' && rec.sheet[1].checkIn === '2026-11-22' && rec.sheet[1].checkOut === '2026-11-25' && rec.sheet[1].nights === 3, JSON.stringify(rec.sheet));
   const ready = await j('/api/admin/leads/' + ref, { method: 'PATCH', headers: { 'content-type': 'application/json', ...adm }, body: JSON.stringify({ status: 'ready', publicNote: 'Checked!', payLink: 'https://example.com/pay' }) });
   ok('crew can mark it ready with a note + pay link, guest sees them', ready.b.status === 'ready' && (await j('/api/status?ref=' + ref)).b.payLink === 'https://example.com/pay');
   ok('pay link only shown once ready (hidden while checking)', (await j('/api/admin/leads/' + ref, { method: 'PATCH', headers: { 'content-type': 'application/json', ...adm }, body: JSON.stringify({ status: 'checking' }) })).s === 200 && (await j('/api/status?ref=' + ref)).b.payLink === '');
@@ -97,7 +97,7 @@ const done = (code) => { srv.kill(); console.log('\n' + pass + '/' + (pass + fai
   ok('share: same trip gets the same code', (await post('/api/share', { state: 'i=s.hanoi.3~s.hoi-an.4&d=2027-01-10' })).b.code === sh.b.code);
   ok('share: rejects junk trips', (await post('/api/share', { state: '<script>' })).s === 400 && (await post('/api/share', { state: 'i=' })).s === 400);
   const tp = await fetch(B + '/t/' + sh.b.code).then((r) => r.text());
-  ok('share: /t/ page has route title, price and image for previews', /og:title" content="Hanoi → Hoi An · 8 days/.test(tp) && /og:image" content="http[^"]+\/t\/[a-z0-9]{7}\.jpg/.test(tp) && /location\.replace\("\/#\/build\/i=s\.hanoi/.test(tp));
+  ok('share: /t/ page has route title, price and image for previews', /og:title" content="Hanoi → Hoi An · 9 days/.test(tp) && /og:image" content="http[^"]+\/t\/[a-z0-9]{7}\.jpg/.test(tp) && /location\.replace\("\/#\/build\/i=s\.hanoi/.test(tp));
   ok('share: preview image served', (await fetch(B + '/t/' + sh.b.code + '.jpg')).headers.get('content-type') === 'image/jpeg');
   ok('share: code resolves back to the trip', (await j('/api/share/' + sh.b.code)).b.state === 'i=s.hanoi.3~s.hoi-an.4&d=2027-01-10');
   /* launch waitlist, assignment, hostel details */

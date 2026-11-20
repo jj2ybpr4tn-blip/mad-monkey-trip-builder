@@ -10,8 +10,8 @@
 
    STATE
      items   [{kind:'stop', p, n, acts:[ids]} | {kind:'allin', trip}]
-     start   'YYYY-MM-DD' | ''       pref  'balanced' | 'cheap' | 'fast'
-     legPick {legIndex: 'balanced'|'cheap'|'fast'}   fund  $/day food+fun
+     start   'YYYY-MM-DD' | ''       pref  'balanced' | 'cheap' | 'fast'   (balanced, the Smart pick: land and sea first)
+     legPick {legIndex: 'balanced'|'quick'|'cheap'|'fast'}   fund  $/day food+fun
      crew    mates rallied (ALL IN squad-leader perk)
    ============================================================ */
 (function (r) {
@@ -68,9 +68,18 @@
   /* ============================================================
      GRAPH + ROUTING
      ============================================================ */
+  // airports, and the towns a journey passes through that aren't stops of their own (KRATIE, DONDET, PAKSE, HUAYXAI, CORON)
   var AIRPORT_COUNTRY = { BKK: 'TH', CNX: 'TH', HKT: 'TH', HAN: 'VN', DAD: 'VN', SGN: 'VN', PNH: 'KH', REP: 'KH', SIHA: 'KH', LPQ: 'LA', VTE: 'LA',
-    DPS: 'ID', LOP: 'ID', MNL: 'PH', ENI: 'PH', CEB: 'PH', IAO: 'PH', TAG: 'PH', DGT: 'PH' };
-  var TV = { cheap: 1.5, balanced: 6, fast: 25 };            // $ you'd pay to save an hour
+    DPS: 'ID', LOP: 'ID', MNL: 'PH', ENI: 'PH', CEB: 'PH', IAO: 'PH', TAG: 'PH', DGT: 'PH', KRATIE: 'KH', DONDET: 'LA', PAKSE: 'LA', HUAYXAI: 'LA', CORON: 'PH' };
+  var TV = { cheap: 1.5, balanced: 6, fast: 25 };            // $ you'd pay to save an hour (also the travel styles a trip can have)
+  // The Smart pick (balanced) goes by land and sea, the way the crews travel: a flight only when there's no reasonable way round it
+  // (Ewan, 19 Nov 2026: land and ferries first, overnight buses, trains and boats preferred). Reasonable: two nights on the way at
+  // most, 60 hours door to door at most, and one night bus, train or ferry at most (two in a row and you arrive wrecked). That takes
+  // in the two-day slow boat up the Mekong and Phnom Penh to Vang Vieng by Don Det and the Pakse night bus, not Hanoi to Saigon on
+  // two sleepers in a row or four nights of buses from Bangkok to Hanoi. With none, it's the quick way, which weighs time and money
+  // and flies when that saves a good few hours (quick, offered as "Quicker").
+  var LAND_NIGHTS = 2, LAND_H = 60, LAND_OVN = 1;
+  var LEG_KEYS = { balanced: 1, quick: 1, cheap: 1, fast: 1 };   // what a leg can be switched to
   var BED_CREDIT = 6;                                       // an overnight bus saves a bed night
   var HOP = 0.3;                                             // hours lost per change
 
@@ -85,15 +94,26 @@
   }
   function countryOf(node) { return P()[node] ? P()[node].c : AIRPORT_COUNTRY[node] || null; }
   var AIRPORT_NAME = { BKK: 'Bangkok', CNX: 'Chiang Mai', HKT: 'Phuket', HAN: 'Hanoi', DAD: 'Da Nang', SGN: 'Ho Chi Minh City', PNH: 'Phnom Penh', REP: 'Siem Reap', SIHA: 'Sihanoukville',
-    LPQ: 'Luang Prabang', VTE: 'Vientiane', DPS: 'Bali', LOP: 'Lombok', MNL: 'Manila', ENI: 'El Nido', CEB: 'Cebu', IAO: 'Siargao', TAG: 'Bohol', DGT: 'Dumaguete' };
+    LPQ: 'Luang Prabang', VTE: 'Vientiane', DPS: 'Bali', LOP: 'Lombok', MNL: 'Manila', ENI: 'El Nido', CEB: 'Cebu', IAO: 'Siargao', TAG: 'Bohol', DGT: 'Dumaguete',
+    KRATIE: 'Kratie', DONDET: 'Don Det', PAKSE: 'Pakse', HUAYXAI: 'Huay Xai', CORON: 'Coron' };
   function nodeName(node) { return P()[node] ? P()[node].n : AIRPORT_NAME[node] || node; }
-  function weight(e, pref) { return e.u + TV[pref] * (e.h + HOP) - (e.ovn ? BED_CREDIT : 0); }
+  function weight(e, pref) { return e.u + TV[pref === 'quick' ? 'balanced' : pref] * (e.h + HOP) - (e.ovn ? BED_CREDIT : 0); }
+  // By land and sea, the hours you'd sleep anyway on a night bus, train or ferry cost nothing: so the night one beats the same trip by day.
+  var SLEEP_H = 10;
+  function landWeight(e) { return e.u + TV.balanced * (Math.max(0, e.h - (e.ovn ? SLEEP_H : 0)) + HOP) - (e.ovn ? BED_CREDIT : 0); }
 
   var routeCache = {};
   MM.resetRoutes = function () { routeCache = {}; graph = null; };
   function route(a, b, pref) {
+    if (pref !== 'balanced') return search(a, b, pref);
+    if (a === b) return search(a, b, pref);
+    var key = a + '>' + b + '>balanced'; if (key in routeCache) return routeCache[key];
+    var land = landSearch(a, b);                                     // by land and sea, within what's reasonable
+    return (routeCache[key] = land && land.h <= LAND_H ? land : search(a, b, 'quick'));
+  }
+  function search(a, b, pref) {
     if (!graph) graph = buildGraph();
-    if (a === b) return { steps: [], h: 0, u: 0, ovn: false, nights: 0, nodes: [a] };
+    if (a === b) return { steps: [], h: 0, u: 0, ovn: false, nights: 0, ovnSteps: 0, nodes: [a] };
     var key = a + '>' + b + '>' + pref; if (routeCache[key]) return routeCache[key];
     var dist = {}, prev = {}, done = {}; dist[a] = 0;
     var nodes = Object.keys(graph.adj);
@@ -108,19 +128,58 @@
       });
     }
     if (dist[b] === undefined) return (routeCache[key] = null);
-    var steps = [], nodesPath = [b], cur = b;
-    while (cur !== a) { var p = prev[cur]; steps.unshift({ e: p.e, from: p.from, to: cur }); nodesPath.unshift(p.from); cur = p.from; }
-    var res = { steps: steps, nodes: nodesPath, h: 0, u: 0, ovn: false, nights: 0 };
+    var steps = [], cur = b;
+    while (cur !== a) { var p = prev[cur]; steps.unshift({ e: p.e, from: p.from, to: cur }); cur = p.from; }
+    return (routeCache[key] = sumUp(steps, a));
+  }
+  // The best way by land and sea that stays reasonable: no flights; at most LAND_OVN night journeys, LAND_NIGHTS nights on the way and
+  // LAND_H hours; and no stretch between beds longer than a day's travel (STRETCH_DAY) or, with a night journey in it, a night and a
+  // bit (STRETCH_OVN). A night in a guesthouse on the way (stay) is a bed: it can fall before or after that day's travel. Hoi An to
+  // Siem Reap on a sleeper and two buses (32 hrs) isn't reasonable; Phnom Penh to Vang Vieng with a night on Don Det and the Pakse
+  // night bus is. A depth-first search over the land and sea links (few), so a reasonable way is found even when a cheaper-looking one isn't.
+  var STRETCH_DAY = 16, STRETCH_OVN = 28;
+  function landSearch(a, b) {
+    if (!graph) graph = buildGraph();
+    var key = a + '>' + b + '>land'; if (key in routeCache) return routeCache[key];
+    var best = null, bestW = Infinity, path = [], seen = {}; seen[a] = 1;
+    (function dfs(node, w, ov, ni, h, sh, sOvn) {
+      if (w >= bestW) return;
+      if (node === b) { best = path.slice(); bestW = w; return; }
+      if (path.length >= 8) return;
+      (graph.adj[node] || []).forEach(function (x) {
+        var e = x.e; if (e.m === 'flight' || seen[x.to]) return;
+        var hop = path.length ? HOP : 0, ov2 = ov + (e.ovn ? 1 : 0), ni2 = ni + (e.ovn || e.stay ? (e.nights || 1) : 0), h2 = h + e.h + hop, sh2, sOvn2;
+        if (ov2 > LAND_OVN || ni2 > LAND_NIGHTS || h2 > LAND_H) return;
+        if (e.stay) {
+          var per = e.h / (e.nights || 1);
+          if (sh + hop + per <= (sOvn ? STRETCH_OVN : STRETCH_DAY)) { sh2 = 0; sOvn2 = false; }     // travel, then the night
+          else { sh2 = per; sOvn2 = false; }                                                           // the night first, then the travel
+        } else {
+          sh2 = sh + hop + e.h; sOvn2 = sOvn || !!e.ovn;
+          if (sh2 > (sOvn2 ? STRETCH_OVN : STRETCH_DAY)) return;
+        }
+        seen[x.to] = 1; path.push({ e: e, from: node, to: x.to });
+        dfs(x.to, w + Math.max(1, landWeight(e)), ov2, ni2, h2, sh2, sOvn2);
+        path.pop(); delete seen[x.to];
+      });
+    })(a, 0, 0, 0, 0, 0, false);
+    return (routeCache[key] = best ? sumUp(best, a) : null);
+  }
+  function sumUp(steps, a) {
+    var nodesPath = [a].concat(steps.map(function (s) { return s.to; }));
+    var res = { steps: steps, nodes: nodesPath, h: 0, u: 0, ovn: false, nights: 0, ovnSteps: 0 };
     steps.forEach(function (s) {
-      res.h += s.e.h; res.u += s.e.u; if (s.e.ovn) { res.ovn = true; res.nights += (s.e.nights || 1); }
+      res.h += s.e.h; res.u += s.e.u;
+      if (s.e.ovn) { res.ovn = true; res.ovnSteps++; res.nights += (s.e.nights || 1); }
+      else if (s.e.stay) res.nights += (s.e.nights || 1);                 // a night or two on the way in a guesthouse (the slow boat's Pakbeng, Don Det)
     });
     res.h += HOP * Math.max(0, steps.length - 1);
     res.h = round1(res.h); res.u = Math.round(res.u);
     res.sig = steps.map(function (s) { return s.e.id; }).join('.');
-    return (routeCache[key] = res);
+    return res;
   }
 
-  var PREF_LABEL = { balanced: 'Smart pick', cheap: 'Cheapest', fast: 'Fastest' };
+  var PREF_LABEL = { balanced: 'Smart pick', quick: 'Quicker', cheap: 'Cheapest', fast: 'Fastest' };
   function describe(rt, a, b) {
     var modes = []; rt.steps.forEach(function (s) { if (s.e.m !== 'taxi' || rt.steps.length === 1) modes.push(s.e.m); });
     var flightStep = rt.steps.filter(function (s) { return s.e.m === 'flight'; })[0];
@@ -130,25 +189,71 @@
     var mm = null; rt.steps.forEach(function (s) { if (s.e.mm) mm = s.e.mm; });
     return { main: main, label: label, mm: mm };
   }
+  // When a journey leaves and gets in, in hours from midnight on the day it leaves. It leaves when its first real step does: a flight at a
+  // set time (be at the airport an hour and a half before), a bus or boat at a known hour (leaves), a night bus, train or ferry at 19:30,
+  // anything else at 8:30. Then a clock walks it: a later night journey waits for the evening, a later scheduled one for its hour, and
+  // one with nights on the way (stay) travels by day and sleeps in between (sleeping first if it's past noon, else at the end).
+  function tod(t) { return ((t % 24) + 24) % 24; }
+  function nextAt(t, hr) { var d = Math.floor(t / 24) * 24 + hr; return d >= t - 1e-6 ? d : d + 24; }
+  function journeyClock(rt) {
+    var steps = rt.steps, dep = null, before = 0, k, s1;
+    for (k = 0; k < steps.length; k++) { s1 = steps[k]; if (s1.e.at && s1.e.at[s1.from] != null) { dep = Math.max(0, s1.e.at[s1.from] - 1.5 - before); break; } before += s1.e.h + HOP; }
+    if (dep == null) {
+      for (k = 0, before = 0; k < steps.length && steps[k].e.m === 'taxi'; k++) before += steps[k].e.h + HOP;
+      s1 = steps[k];
+      dep = !s1 ? 8.5 : Math.max(0, (s1.e.leaves && s1.e.leaves[s1.from] != null ? s1.e.leaves[s1.from] : s1.e.ovn ? 19.5 : 8.5) - before);
+    }
+    var t = dep;
+    steps.forEach(function (s, i) {
+      var e = s.e;
+      if (i > 0) {
+        t += HOP;
+        if (e.at && e.at[s.from] != null) t = nextAt(t, e.at[s.from] - 1.5);
+        else if (e.leaves && e.leaves[s.from] != null) t = nextAt(t, e.leaves[s.from]);
+        else if (e.ovn && (tod(t) < 17 || tod(t) > 23.5)) t = nextAt(t, 19.5);
+      }
+      if (e.stay) {
+        var n = e.nights || 1, per = e.h / n, slept = false;
+        if (tod(t) > 12) { t = nextAt(t, 8.5); slept = true; }
+        for (var d = 0; d < n; d++) { if (tod(t) < 8.5) t = nextAt(t, 8.5); t += per; if (d < n - 1) t = nextAt(t, 8.5); }
+        if (!slept) t = nextAt(t, 8.5);
+      } else t += e.h;
+    });
+    return { dep: dep, at: t };
+  }
+  // The ways to make a journey, the Smart pick first (by land and sea when there's a reasonable way), then whichever of Quicker,
+  // Cheapest and Fastest go another way.
   function legOptions(a, b) {
     var seen = {}, out = [];
-    ['balanced', 'cheap', 'fast'].forEach(function (pref) {
-      var rt = route(a, b, pref); if (!rt || seen[rt.sig]) return; seen[rt.sig] = 1;
-      var d = describe(rt, a, b), dep = rt.ovn ? 19.5 : 8.5, before = 0, flightU = 0;
-      // A flight that leaves at a set time sets the clock for the whole journey: be at the airport an hour and a half before it.
-      for (var si = 0; si < rt.steps.length; si++) { var st = rt.steps[si]; if (st.e.at && st.e.at[st.from] != null) { dep = Math.max(0, st.e.at[st.from] - 1.5 - before); break; } before += st.e.h + HOP; }
+    ['balanced', 'quick', 'cheap', 'fast'].forEach(function (pref) {
+      var rt = route(a, b, pref); if (!rt) return;
+      if (seen[rt.sig]) { seen[rt.sig].keys.push(pref); return; }          // the same journey: one option, and it answers to both names
+      var d = describe(rt, a, b), clk = journeyClock(rt), dep = clk.dep, flightU = 0;
       rt.steps.forEach(function (s) { if (s.e.m === 'flight') flightU += s.e.u; });
-      var tot = Math.round((dep + rt.h) * 60 / 5) * 5, arrDays = Math.floor(tot / 1440), arrH = (tot % 1440) / 60;   // whole 5-minute steps, so 23:58 rolls over to 00:00 the next day
+      var tot = Math.round(clk.at * 60 / 5) * 5, arrDays = Math.floor(tot / 1440), arrH = (tot % 1440) / 60;   // whole 5-minute steps, so 23:58 rolls over to 00:00 the next day
       var hh = Math.floor(arrH), mm2 = tot % 60;
       var arrive = (hh < 10 ? '0' : '') + hh + ':' + (mm2 < 10 ? '0' : '') + mm2;
-      out.push({ key: pref, label: PREF_LABEL[pref], route: rt, h: rt.h, u: rt.u, flightU: Math.round(flightU), dep: dep, ovn: rt.ovn, nights: rt.nights, main: d.main, modeLabel: d.label, mm: d.mm,
-        arrive: arrive, arriveNext: arrDays > 0, odd: rt.nights < 2 && ((arrH < 5.5) || (!rt.ovn && arrH >= 22.5)) });
+      var opt = { key: pref, keys: [pref], label: PREF_LABEL[pref], route: rt, h: rt.h, u: rt.u, flightU: Math.round(flightU), dep: dep, ovn: rt.ovn, nights: rt.nights, main: d.main, modeLabel: d.label, mm: d.mm,
+        arrive: arrive, arriveAt: tot / 60, arriveNext: arrDays > 0, arriveDays: arrDays, odd: rt.nights < 2 && ((arrH < 5.5) || (!rt.ovn && arrH >= 22.5)) };
+      seen[rt.sig] = opt; out.push(opt);
+    });
+    // each option is named for what it is next to the Smart pick: "Quicker" only if it is (else the next name it answers to, or what's different)
+    var smart = out[0];
+    out.forEach(function (o, i) {
+      if (!i) return;
+      var ks = o.keys.filter(function (k) { return k !== 'quick' || o.h < smart.h - 0.5; });
+      o.label = ks.length ? PREF_LABEL[ks[0]] : smart.ovn && !o.ovn ? 'By day' : !smart.ovn && o.ovn ? 'Overnight' : 'Another way';
     });
     // collapse labels when only one distinct route exists
     if (out.length === 1) out[0].label = 'Best route';
     return out;
   }
-  MM.route = route; MM.legOptions = legOptions; MM.PREF_LABEL = PREF_LABEL; MM.countryOf = countryOf;
+  MM.route = route; MM.legOptions = legOptions; MM.PREF_LABEL = PREF_LABEL; MM.countryOf = countryOf; MM.LAND = { nights: LAND_NIGHTS, h: LAND_H };
+  // How far a hop is, for the lists of next stops: a journey you'd make by day is "near" up to maxH hours; one that takes a night or two
+  // on a sleeper or a boat counts by its nights instead, so the Smart pick's overland journeys aren't ruled out for being long.
+  MM.withinReach = function (leg, maxH) { return !!leg && (leg.nights > 0 ? leg.nights <= LAND_NIGHTS && leg.h <= LAND_H : leg.h <= maxH); };
+  // The hours of a journey you're awake for: a night bus, train or ferry's sleep doesn't count (a route, a leg option or a plan's leg)
+  MM.awakeH = function (x) { var r = x && x.route ? x.route : x && x.chosen ? x.chosen.route : x; return r ? Math.max(0, r.h - SLEEP_H * (r.ovnSteps || 0)) : 0; };
 
   function borderNote(a, b, opt) {
     var ca = countryOf(a), cb = countryOf(b), sorted = [ca, cb].sort().join('-');
@@ -199,7 +304,7 @@
     });
     st.start = realDate(raw.start);
     if (typeof raw.pref === 'string' && has(TV, raw.pref)) st.pref = raw.pref;
-    if (raw.legPick && typeof raw.legPick === 'object') Object.keys(raw.legPick).forEach(function (k) { if (/^(\d{1,2}|o)$/.test(k) && typeof raw.legPick[k] === 'string' && has(TV, raw.legPick[k])) st.legPick[k] = raw.legPick[k]; });
+    if (raw.legPick && typeof raw.legPick === 'object') Object.keys(raw.legPick).forEach(function (k) { if (/^(\d{1,2}|o)$/.test(k) && typeof raw.legPick[k] === 'string' && has(LEG_KEYS, raw.legPick[k])) st.legPick[k] = raw.legPick[k]; });
     if (typeof raw.from === 'string' && has(P(), raw.from)) st.from = raw.from;                         // a later stage of a journey: where they are now...
     if (Array.isArray(raw.been)) { var bn = []; raw.been.forEach(function (id) { if (typeof id === 'string' && has(P(), id) && bn.indexOf(id) < 0 && bn.length < 40) bn.push(id); }); if (bn.length) st.been = bn; }   // ...and where they have already been
     st.fund = clampInt(raw.fund, 0, 100, 18); st.crew = clampInt(raw.crew, 0, 12, 0); st.budget = clampInt(raw.budget, 0, 99999, 0);
@@ -250,10 +355,9 @@
     /* ---- 2. legs between consecutive segments (and, for a later stage, the journey from where they are now to the first stop) ---- */
     function buildLeg(a, b, index, pickKey) {
       var opts = legOptions(a, b); if (!opts.length) { out.warnings.push({ t: 'warn', m: 'No route found between ' + P()[a].n + ' and ' + P()[b].n + '.' }); return null; }
-      var chosen = opts.filter(function (o) { return o.key === pickKey; })[0];
-      if (!chosen) chosen = opts.filter(function (o) { return o.key === (state.pref || 'balanced'); })[0] || opts[0];
-      // `pref` may map to an option that was de-duplicated away; fall back to the closest
-      if (!chosen) chosen = opts[0];
+      // the leg's own pick, else the trip's travel style; an option answers to every name whose journey it is (o.keys)
+      var named = function (k) { return opts.filter(function (o) { return o.keys.indexOf(k) > -1; })[0]; };
+      var chosen = (pickKey && named(pickKey)) || named(state.pref || 'balanced') || opts[0];
       return { index: index, from: a, to: b, options: opts, chosen: chosen, key: chosen.key, pkgs: MM.LEG_PKGS[a + '|' + b] || MM.LEG_PKGS[b + '|' + a] || null,
         tickets: MM.TICKETS[a + '|' + b] || MM.TICKETS[b + '|' + a] || null, border: borderNote(a, b), h: chosen.h, u: chosen.u, ovn: chosen.ovn, nights: chosen.nights };
     }
@@ -419,7 +523,7 @@
     (originLeg ? [originLeg] : []).concat(legBetween).forEach(function (l) {
       if (!l) return; if (l.border) out.warnings.push({ t: 'warn', m: l.border });
       if (l.chosen.odd) out.warnings.push({ t: 'warn', m: P()[l.from].n + ' → ' + P()[l.to].n + ' (' + l.chosen.modeLabel.toLowerCase() + ') lands around ' + l.chosen.arrive + '. Ask the hostel about early or late check-in so you\'re not on a doorstep.' });
-      if (l.chosen.h >= 18 && !l.chosen.ovn) out.warnings.push({ t: 'info', m: P()[l.from].n + ' → ' + P()[l.to].n + ' is a very long journey. Consider the flight option.' });
+      if (l.chosen.h >= 18 && !l.chosen.ovn && !l.chosen.nights) out.warnings.push({ t: 'info', m: P()[l.from].n + ' → ' + P()[l.to].n + ' is a very long journey. Consider the flight option.' });   // one with nights on the way (the slow boat) breaks it up
     });
     out.unscheduled.forEach(function (u) { out.warnings.push({ t: 'warn', p: u.p, m: u.act.n + ' at ' + P()[u.p].n + ' doesn\'t fit: ' + u.why + '.' }); });
     // ALL IN departure day: arriving on it, or the day before (the free night), is right. Otherwise say exactly what to change.
@@ -834,11 +938,11 @@
     var starts = prof.start && ids.indexOf(prof.start) > -1 ? [prof.start] : gates.sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 6);
     var beam = [], done = [];
     if (origin) {                                                    // a later stage: the first stop is wherever is within reach of where they are now
-      starts = ids.filter(function (q) { var r0 = route(origin, q, pref); return r0 && r0.h <= maxLeg; }).sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 8);
+      starts = ids.filter(function (q) { return MM.withinReach(route(origin, q, pref), maxLeg); }).sort(function (a, b) { return ps[b] - ps[a]; }).slice(0, 8);
       if (!starts.length) return [];
     }
     starts.forEach(function (s) {
-      var lg = origin ? route(origin, s, pref) : null, lh = lg ? lg.h : 0, lu = lg ? lg.u : 0, ln = lg ? lg.nights : 0;
+      var lg = origin ? route(origin, s, pref) : null, lh = lg ? MM.awakeH(lg) : 0, lu = lg ? lg.u : 0, ln = lg ? lg.nights : 0;
       var n = nightsFor(s, nightsCap - ln), bed = P()[s].bed * n + n * fund + n * 10 + lu;
       if (n < 1 || nightsCap - ln < 1) return;
       beam.push({ seq: [{ p: s, n: n }], used: n + ln, cost: bed, score: ps[s] * Math.pow(n, 0.85) + 1 - 0.7 * lh, h: lh, sw: 0 });
@@ -851,7 +955,7 @@
         var last = st.seq[st.seq.length - 1].p;
         ids.forEach(function (q) {
           if (st.seq.some(function (x) { return x.p === q; })) return;
-          var leg = route(last, q, pref); if (!leg || leg.h > maxLeg) return;
+          var leg = route(last, q, pref); if (!MM.withinReach(leg, maxLeg)) return;                 // an overnight one counts by its nights
           var rem = left - leg.nights; if (rem < 1) return;
           var n = nightsFor(q, rem), cost = st.cost + leg.u + P()[q].bed * n + (n + leg.nights) * fund + n * 10;
           if (cost > cap * 1.12) return;
@@ -860,7 +964,7 @@
           // Backpackers reach for a flight last: on a short trip each one eats a day and a chunk of the budget, so a route that links its stops by land or boat beats one that hops by plane.
           var flights = leg.steps.filter(function (x) { return x.e.m === 'flight'; }).length, flightPen = flights * (D <= 14 ? 3.2 : D <= 21 ? 2 : 1);
           next.push({ seq: st.seq.concat([{ p: q, n: n }]), used: st.used + leg.nights + n, cost: cost,
-            score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * leg.h - flightPen - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0) + (newC ? 5 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
+            score: st.score + ps[q] * Math.pow(n, 0.85) - 0.7 * MM.awakeH(leg) - flightPen - (same ? 0 : switchPen) - (back ? 12 : 0) + (same ? 0.8 : 0) + (newC ? 5 : 0), h: st.h + leg.h, sw: st.sw + (same ? 0 : 1) });
         });
         done.push(st);                                  // stopping here is always an option
       });
@@ -1210,7 +1314,7 @@
   }
   // Links in messages leave the site, so they're absolute, and tagged so a booking can be traced back to check-in.
   function whereNextUrl(id) {
-    var u = id === 'builder' ? MM.ALLIN_URL + '/trip-builder/' : MM.allInUrl(id);
+    var u = id === 'builder' ? MM.ALLIN_URL + '/trip-builder/' : MM.allInUrl(id, true);
     if (!/^https?:\/\//.test(u)) u = MM.ALLIN_URL.replace(/\/$/, '') + '/' + u.replace(/^(\.\.?\/)+/, '');
     return u + (u.indexOf('?') < 0 ? '?' : '&') + 'utm_source=checkin&utm_medium=where-next';
   }
@@ -1241,7 +1345,8 @@
       var night = o.ovn && !c.ovn ? ' The ' + o.modeLabel.toLowerCase() + ' covers a night, so you\'d skip a bed (~$8) but lose the sleep.' : c.ovn && !o.ovn ? ' It doubles as your bed for the night, so you wake up in ' + P()[leg.to].n + '.' : '';
       lines.push('<b>' + c.modeLabel + '</b> vs <b>' + o.label.toLowerCase() + ' (' + o.modeLabel.toLowerCase() + ')</b>: ' + time + ' and ' + money + '.' + night);
     });
-    var verdict = { cheap: 'Best if every dollar counts.', fast: 'Best if your time matters more than the money.', balanced: 'The best mix of time and money for most people.' }[c.key];
+    var verdict = { cheap: 'Best if every dollar counts.', fast: 'Best if your time matters more than the money.', quick: 'Flies where a flight saves a good few hours.',
+      balanced: c.route.steps.some(function (s) { return s.e.m === 'flight'; }) ? 'There\'s no reasonable way by land or sea, so this flies.' : 'By land and sea, the way the crews travel: cheaper, and an overnight one saves a bed.' }[c.key];
     return { lines: lines, verdict: verdict };
   };
 
@@ -1267,11 +1372,11 @@
     var W = flow(), start = parseDate(state.start), month = start ? start.getUTCMonth() + Math.floor((pl.totals.days || 0) / 30) : (state.month != null ? state.month : null);
     if (month != null) month = month % 12;
     return Object.keys(P()).filter(function (id) { return !used[id] && !P()[id].partner; }).map(function (id) {
-      var leg = route(last, id, state.pref || 'balanced'); if (!leg || leg.h > 16) return null;
+      var leg = route(last, id, state.pref || 'balanced'); if (!MM.withinReach(leg, 16)) return null;
       var sc = 0, best = null, bv = 0; P()[id].tags.forEach(function (t) { var v = (tags[t] || 0) * 0.6; sc += v; if (v > bv) { bv = v; best = t; } });
       var f = W[last + '>' + id]; if (f) sc += f.w * 1.2;
       var seas = month != null ? seasonOf(id, month) : 2; if (month != null) sc += ({ 3: 1.5, 2: 0, 1: -3.5 })[seas];
-      sc -= leg.h * 0.35 + leg.u * 0.01;
+      sc -= MM.awakeH(leg) * 0.35 + leg.u * 0.01;
       var why = []; if (f && Object.keys(f.l).length) why.push('on ' + Object.keys(f.l)[0]); if (best) why.push('more ' + best); if (seas === 3 && month != null) why.push('prime season'); if (!why.length) why.push('fits your route');
       return { id: id, s: sc, leg: leg, why: why };
     }).filter(Boolean).sort(function (a, b) { return b.s - a.s; }).slice(0, 3);
@@ -1353,7 +1458,7 @@
     if (map.c) st.crew = clampInt(map.c, 0, 12, 0);
     if (map.m != null && map.m !== '' && isFinite(+map.m)) st.month = clampInt(map.m, 0, 11, 0);
     if (map.b) st.budget = clampInt(map.b, 0, 99999, 0);
-    if (map.l) map.l.split(',').slice(0, MAX_ITEMS).forEach(function (kv) { var q = kv.split(':'); if (/^(\d{1,2}|o)$/.test(q[0]) && has(TV, q[1])) st.legPick[q[0]] = q[1]; });
+    if (map.l) map.l.split(',').slice(0, MAX_ITEMS).forEach(function (kv) { var q = kv.split(':'); if (/^(\d{1,2}|o)$/.test(q[0]) && has(LEG_KEYS, q[1])) st.legPick[q[0]] = q[1]; });
     if (map.o && has(P(), map.o)) st.from = map.o;
     if (map.v) { var bn = []; map.v.split(',').slice(0, 60).forEach(function (id) { if (has(P(), id) && bn.indexOf(id) < 0 && bn.length < 40) bn.push(id); }); if (bn.length) st.been = bn; }
     return st;
