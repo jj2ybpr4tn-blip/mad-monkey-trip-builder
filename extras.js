@@ -288,7 +288,7 @@
       route: [['pai', 3, ['Pai Canyon', 'Pai pub crawl']], ['chiang-mai', 3, ['Doi Suthep', 'Day Party']], ['luang-prabang', 3, ['Night market food', 'Kuang Si']], ['vang-vieng', 3, ['Tipsy tubing', 'pub crawl']]], vibes: ['culture', 'food'], pref: 'cheap', fund: 14, c: 'green' },
     { id: 'firsttimer', n: 'First Timer Classic', tag: 'The easy way in', blurb: 'Vietnam\'s two big hitters, Hanoi and Hoi An, then Cambodia\'s temples and capital: Siem Reap and Phnom Penh.',
       route: [['hanoi', 3, ['Street food + Train', 'Ninh Binh']], ['hoi-an', 3, ['Cooking class + bamboo', 'Sunset river cruise']], ['siem-reap', 3, ['Sunrise Angkor', 'Pub Street crawl']], ['phnom-penh', 2, ['S21']]], vibes: ['culture', 'food', 'party'], c: 'blue' },
-    { id: 'islandhop', n: 'Island Hopper', tag: 'Boats, sand and hammocks', blurb: 'Phnom Penh, then Koh Sdach and Koh Rong by boat, and Kampot\'s river and Bokor Mountain to finish.',
+    { id: 'islandhop', n: 'Islands + Hammocks', tag: 'Boats, sand and hammocks', blurb: 'Phnom Penh, then Koh Sdach and Koh Rong by boat, and Kampot\'s river and Bokor Mountain to finish.',
       route: [['phnom-penh', 2, ['Sunset river cruise']], ['koh-sdach', 3, ['Island-hopping', 'Snorkelling']], ['koh-rong', 4, ['Kayak hire', 'Beach fire show']], ['kampot', 3, ['River kayak', 'Bokor']]], vibes: ['islands', 'chill'], c: 'cyan' }];
 
   // find the activity at a hostel whose name contains the fragment
