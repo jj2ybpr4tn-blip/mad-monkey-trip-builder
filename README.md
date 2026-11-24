@@ -7,7 +7,7 @@ trip builder repo (`launch-pack`), which comes down once the site is live. Nothi
 To get it: `git clone -b launch-pack --single-branch https://github.com/jj2ybpr4tn-blip/mad-monkey-trip-builder.git all-in-launch`
 
 Built 24 Nov 2026 from concept v22 (the same page as the private preview, without the preview's bar, notes or code
-comments) with the trip builder at main `89242ec`. Today's ALL IN trips have their own pages inside the site and book right
+comments) with the trip builder at main `3e7de8d`. Today's ALL IN trips have their own pages inside the site and book right
 through to Stripe, the way today's pages do (below). `BUILD.txt` says exactly what went in and how to build it again.
 
 **New since 21 Nov** (more under "What's new on 24 Nov" below): the trips' new names (The Big One is the 100-day trip, at the
@@ -75,7 +75,7 @@ Book in a bar at the bottom of every trip page on a laptop too, and the trip bui
 - **The ALL IN business WhatsApp, +66 96 689 4646** (Ewan, 24 Nov). Under every Ask Ewan form ("Rather WhatsApp? Message us
   on +66 96 689 4646", with the trip they're looking at in the first line of the message), in the footer, on today's trip
   pages beside "Want to talk it through?", and offered with their question in it if an Ask Ewan message fails to send. The
-  trip builder's Ask Ewan has it too (main `89242ec`, `WHATSAPP` in its config.js). Ask Ewan still sends to the crew as
+  trip builder's Ask Ewan has it too (main `3e7de8d` or later, `WHATSAPP` in its config.js). Ask Ewan still sends to the crew as
   before. Each tap pushes `{event: 'whatsapp_click', conversion_type: 'all_in', placement}` to the dataLayer, if you want it
   as a conversion in Tag Manager. Please check the number rings the right phone once it's live.
 - **Ask Ewan and Book on every trip page, on a laptop too.** A trip page covers the site's bar, and on a laptop its Ask Ewan

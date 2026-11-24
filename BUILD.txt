@@ -10,7 +10,7 @@ Built      24 Nov 2026, 16:10 (Phnom Penh), by the admin chat on Ewan's ask ("ge
            hotel partner in Cebu), the 2027 prices (approved by Kyle; The Big One $4,999), the map fixes, and no developer
            notes in the source
 Page       concept v22 from drafts/all-in-store/src, the same source as the private preview once it's republished
-Builder    the trip builder's engine at main 89242ec (24 Nov: its Ask Ewan offers the business WhatsApp; 21 Nov: Islands +
+Builder    the trip builder's engine at main 3e7de8d (24 Nov: its Ask Ewan offers the business WhatsApp; 21 Nov: Islands +
            Hammocks; 20 Nov: land and sea first, today's trips' new addresses, the free night for Make it yours), inside the
            page. The live trip builder at /all-in-trips/trip-builder/ gets the same main by Charlie's sync
 Launch     ALLIN_LAUNCH=1: no preview bar, no preview notes, no comments in the page (src/launchclean.py; the scripts
