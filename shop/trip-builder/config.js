@@ -11,9 +11,10 @@ window.MM_CONFIG = {
   // Leave blank and the builder runs in DEMO mode: it shows the lead card but sends nothing.
   LEAD_ENDPOINT: 'https://bilhhkzcmicygufsdfxi.supabase.co/functions/v1/trip-builder-request',
 
-  // Not used any more: nothing sends a guest to a WhatsApp number or an email address. Every "Ask" and every fallback opens the
-  // Ask form (ui-ask.js), which sends to the crew backend (ASK_ENDPOINT below). Kept so an old config still loads; leave blank.
-  WHATSAPP: '',
+  // The ALL IN business WhatsApp (Ewan, 24 Nov 2026), written as people should see it. The Ask form (ui-ask.js) offers it as a link
+  // under the form, "Rather WhatsApp?", for anyone who'd rather message; every Ask and every fallback still opens the form, which
+  // sends to the crew backend (ASK_ENDPOINT below). Blank = no WhatsApp line.
+  WHATSAPP: '+66 96 689 4646',
   CREW_EMAIL: '',
 
   // Where the "Ask ..." form on every screen sends a guest's question (POST, JSON: MM.askPayload in extras.js, the same shape as a

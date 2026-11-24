@@ -3,8 +3,8 @@
    A guest asks a real person anything: their name, ONE way to reply (an email or a WhatsApp number, in one box) and the
    question. With a trip on screen it goes along: the trip they're building, or the reference of a trip they sent.
    It goes to the crew backend the way a trip does (MM_CONFIG.ASK_ENDPOINT, else LEAD_ENDPOINT), so it lands in Admin and the
-   crew is emailed at once. Nothing opens the guest's own email app or WhatsApp, and no personal number or address is in these
-   files. The payload is MM.askPayload (extras.js); the ALL IN site sends the very same thing from its own pages.
+   crew is emailed at once. Nothing opens the guest's own email app, and no personal number or address is in these files. Since
+   24 Nov the ALL IN business WhatsApp (MM_CONFIG.WHATSAPP) is a link under the form for anyone who'd rather message. The payload is MM.askPayload (extras.js); the ALL IN site sends the very same thing from its own pages.
      • who it names is MM_CONFIG.ASK_NAME ("Ask Ewan"), so the button changes in one place when the team grows
      • on a phone it's a button that stays in the corner (above the price bar when there is one); on a laptop it sits in the
        ALL IN site's bar, or in the "real human" line under the builder's own header
@@ -17,6 +17,12 @@
   var u = A.util, esc = u.esc, $ = u.$;
 
   function endpoint() { return String(C.ASK_ENDPOINT || C.LEAD_ENDPOINT || ''); }
+  // the business WhatsApp as a wa.me link, with the trip they're on in the first line when there is one ('' when there's no number)
+  function waHref(ctx, extra) {
+    var n = String(C.WHATSAPP || '').replace(/\D/g, ''); if (n.length < 8) return '';
+    var t = 'Hi ' + who() + ', I\u2019ve got a question about ' + (ctx && ctx.tripName ? ctx.tripName : 'a trip') + '.' + (extra ? ' ' + extra : '');
+    return 'https://wa.me/' + n + '?text=' + encodeURIComponent(t);
+  }
   function label() { return u.askLabel(); }
   function who() { return label().replace(/^Ask /, ''); }
 
@@ -54,6 +60,7 @@
       '<div class="full" style="display:none"><label>Leave empty <input name="website" tabindex="-1" autocomplete="off"></label></div>' +
       '<div id="askerr" class="warn full" role="alert" style="display:none"><i>!</i><span></span></div>' +
       '<div class="askf__go full"><button class="btn btn--pink" type="submit">Send to ' + esc(who()) + '</button><span class="fine">Free. Nothing is booked or charged.</span></div>' +
+      (waHref(ctx) ? '<p class="askf__wa full">Rather WhatsApp? <a href="' + esc(waHref(ctx)) + '" target="_blank" rel="noopener" data-wa="ask">Message us on <span class="nw">' + esc(C.WHATSAPP) + '</span></a></p>' : '') +
       (endpoint() ? '' : '<div class="demo full">DEMO MODE: nothing is sent. Set <code>ASK_ENDPOINT</code> (or <code>LEAD_ENDPOINT</code>) in config.js and this goes straight to the crew.</div>') +
       '</form></div>';
   }
@@ -96,7 +103,7 @@
         var why = x && x.status === 429 ? 'That\'s a few messages from you in the last hour. Give it a little while and try again.'
           : x && x.status >= 400 && x.status < 500 && x.message ? x.message
           : 'It didn\'t reach us (no signal, or our side is busy).';
-        say(why + ' Your question is still here, so nothing is lost: try again in a minute.');
+        say(why + ' Your question is still here, so nothing is lost: try again in a minute' + (waHref(ctx) ? ', or send it on WhatsApp (the link under the form).' : '.'));
       });
   }
 
@@ -106,6 +113,7 @@
       var drop = $('#ak-drop', m);
       if (drop) drop.addEventListener('click', function () { ctx.dropped = true; var t = $('#ak-trip', m); if (t) t.parentNode.removeChild(t); $('#ak-msg', m).focus(); });
       $('#askf', m).addEventListener('submit', function (e) { submit(e, ctx); });
+      var wa = $('a[data-wa]', m); if (wa) wa.addEventListener('click', function () { u.track('whatsapp_click', { where: A.view, placement: 'ask' }); });
       var first = !$('#ak-name', m).value ? $('#ak-name', m) : !$('#ak-reach', m).value ? $('#ak-reach', m) : $('#ak-msg', m);
       setTimeout(function () { try { first.focus(); } catch (e) { /* ignore */ } }, 30);
     });
