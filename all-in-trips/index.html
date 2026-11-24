@@ -2074,6 +2074,15 @@ html.locked .ask-fab{display:none}
 }
 @media (prefers-reduced-motion:reduce){ .tp-bar.td-bar{transition:none} }
 
+ 
+.ask-wa,.td-advwa{margin:14px 0 0;font-size:14.5px;line-height:1.5}
+.ask-wa a,.td-advwa a{display:inline-block;padding:3px 0;font-weight:800;color:inherit;text-decoration:underline;text-underline-offset:3px}
+.ask-wa .nw,.td-advwa .nw,.f-legal .nw{white-space:nowrap}
+ 
+@media (min-width:961px){
+  .tp-bar{display:flex;position:sticky;bottom:0;z-index:5;justify-content:space-between;align-items:center;gap:12px;padding:12px var(--pad);background:rgba(14,43,38,.94);color:var(--mist);font-weight:700;font-size:14px}
+}
+
 </style>
 </head>
 <body>
@@ -2087,7 +2096,7 @@ html.locked .ask-fab{display:none}
     <a href="#trips">Trips</a>
     <a href="#day">A day</a>
     <a href="https://madmonkeyhostels.com/all-in-trips/trip-builder/?via=allin#/build" data-builder-blank>Trip builder</a>
-    <a href="#allasia">ALL ASIA</a>
+    <a href="#allasia">The Big One</a>
     <a href="#festivals">Festivals</a>
     <a href="#reviews">Reviews</a>
     <a href="#faq">Questions</a>
@@ -2107,7 +2116,7 @@ html.locked .ask-fab{display:none}
       <a href="#trips">Trips</a>
       <a href="#day">A day on ALL IN</a>
       <a href="https://madmonkeyhostels.com/all-in-trips/trip-builder/?via=allin#/build" data-builder-blank>Trip builder</a>
-      <a href="#allasia">ALL ASIA</a>
+      <a href="#allasia">The Big One</a>
       <a href="#festivals">Festivals</a>
       <a href="#squad">Squad deal</a>
       <a href="#reviews">Reviews</a>
@@ -2359,6 +2368,7 @@ html.locked .ask-fab{display:none}
       <div class="hp" hidden><label>Leave this empty <input id="askWeb" name="website" tabindex="-1" autocomplete="off"></label></div>
       <div class="enq-err" id="askErr" role="alert" hidden></div>
       <div class="ctas"><button class="btn dark" type="submit" id="askGo">Send to Ewan</button><span class="ask-free">Free. Nothing is booked or charged.</span></div>
+      <p class="ask-wa">Rather WhatsApp? <a id="askWa" href="https://wa.me/66966894646" target="_blank" rel="noopener" data-wa="ask">Message us on <span class="nw">+66 96 689 4646</span></a></p>
     </form>
     <div id="askDone" hidden>
       <p class="ask-kick">Sent</p>
@@ -2383,7 +2393,7 @@ html.locked .ask-fab{display:none}
       <a href="#trips">Trips</a>
       <a href="#day">A day</a>
       <a href="https://madmonkeyhostels.com/all-in-trips/trip-builder/?via=allin#/build" data-builder-blank>Trip builder</a>
-      <a href="#allasia">ALL ASIA</a>
+      <a href="#allasia">The Big One</a>
       <a href="#festivals">Festivals</a>
       <a href="#reviews">Reviews</a>
       <a href="#faq">Questions</a>
@@ -2399,7 +2409,7 @@ html.locked .ask-fab{display:none}
     <h1 class="hero-kick">Come solo. Leave with a crew.</h1>
     <div class="hero-trip" id="heroTrip">
       <p class="hero-tag" id="htTag">ALL IN Cambodia</p>
-      <p class="hero-name display" id="htName">Jungle Temples &amp; Wild Islands</p>
+      <p class="hero-name display" id="htName">Angkor to the Islands</p>
       <p class="hero-line" id="htLine"><b>Cambodia</b> · Scooter convoy up Bokor mountain into the clouds</p>
       <p class="hero-where" id="htWhere"><b>Cambodia</b><span class="dot" aria-hidden="true"> · </span>Siem Reap → Phnom Penh → Kampot → Koh Rong → Koh Sdach</p>
       <p class="hero-peak" id="htPeak"><b>The peak:</b> Scooter convoy up Bokor mountain into the clouds</p>
@@ -2515,9 +2525,9 @@ html.locked .ask-fab{display:none}
         </div>
         <div id="hfPanPick" role="tabpanel" aria-labelledby="hfTabPick" hidden>
         <form class="hsearch" id="heroSearch">
-          <div><label for="sWhere">Where</label><select id="sWhere"><option value="">Anywhere</option><option value="cambodia">Cambodia</option><option value="indonesia">Indonesia</option><option value="laos">Laos</option><option value="philippines">Philippines</option><option value="thailand">Thailand</option><option value="vietnam">Vietnam</option><option value="all">All six: ALL ASIA</option></select></div>
+          <div><label for="sWhere">Where</label><select id="sWhere"><option value="">Anywhere</option><option value="cambodia">Cambodia</option><option value="indonesia">Indonesia</option><option value="laos">Laos</option><option value="philippines">Philippines</option><option value="thailand">Thailand</option><option value="vietnam">Vietnam</option><option value="all">All six: The Big One</option></select></div>
           <div><label for="sWhen">When</label><select id="sWhen"></select></div>
-          <div><label for="sStyle">What kind</label><select id="sStyle"><option value="">Every trip</option><option value="core">Adventure trips</option><option value="fest">Festival trips</option><option value="asia">ALL ASIA, 100 days</option></select></div>
+          <div><label for="sStyle">What kind</label><select id="sStyle"><option value="">Every trip</option><option value="core">Adventure trips</option><option value="fest">Festival trips</option><option value="asia">The Big One, 100 days</option></select></div>
           <button class="btn primary" type="submit">Show dates</button>
         </form>
         </div>
@@ -2542,9 +2552,9 @@ html.locked .ask-fab{display:none}
   <div class="aa-strip" id="aaStrip" aria-hidden="true"></div>
   <div class="wrap">
     <div class="aa-head">
-      <h2 class="display" id="aaTitle">ALL ASIA.</h2>
+      <h2 class="display" id="aaTitle">The Big One.</h2>
       <p class="aa-line">100 days. All 23 Mad Monkeys. Six countries. Leaves every month.</p>
-      <p class="lede">Each departure runs the six countries in the order the weather likes best at that time of year, and picks up the big days on the way. Every chapter rides one of our regular trips, so a new crew joins you in every country, with your ALL ASIA crew the whole way.</p>
+      <p class="lede">Each departure runs the six countries in the order the weather likes best at that time of year, and picks up the big days on the way. Every chapter rides one of our regular trips, so a new crew joins you in every country, with your 100-day crew the whole way.</p>
     </div>
     <div class="aa-pick">
       <p class="aa-k" id="aaDepsL">Pick your departure</p>
@@ -2552,7 +2562,7 @@ html.locked .ask-fab{display:none}
     </div>
     <div class="aa-sel" id="aaSel" aria-live="polite"></div>
     <div class="aa-grid">
-      <div class="aa-mapw"><svg id="aaMap" viewBox="0 0 620 640" role="img" aria-label="The ALL ASIA route through all 23 Mad Monkeys for this departure"></svg></div>
+      <div class="aa-mapw"><svg id="aaMap" viewBox="0 0 620 640" role="img" aria-label="The Big One’s route through all 23 Mad Monkeys for this departure"></svg></div>
       <ol class="aa-chs" id="aaChapters" aria-label="The chapters of this departure"></ol>
     </div>
     <div class="aa-book">
@@ -2562,7 +2572,7 @@ html.locked .ask-fab{display:none}
     </div>
     <div class="aa-pass">
       <h3 class="display">Stamp all 23.</h3>
-      <p>Every Mad Monkey stamps your ALL ASIA passport, in this order. Fill it and every patch on the way is yours, plus the one only ALL ASIA gets.</p>
+      <p>Every Mad Monkey stamps your passport, in this order. Fill it and every patch on the way is yours, plus the gold one you only get on The Big One.</p>
       <ol id="aaPass" aria-label="The 23 Mad Monkeys, in order"></ol>
     </div>
   </div>
@@ -2736,7 +2746,7 @@ html.locked .ask-fab{display:none}
     <div class="blackcard" id="blackcard" role="status">
       <span class="small">Mad Monkey</span>
       <div><b>Black card</b><div class="small">All six peaks. Free nights for life at the hostels that got you there.</div></div>
-      <span class="small">Concept reward, terms to be set</span>
+      
     </div>
 
     <div class="pins-head">
@@ -2800,8 +2810,8 @@ html.locked .ask-fab{display:none}
       <details><summary>What if my plans change?</summary><p>You can swap your dates, gift your spot to someone else, or keep it for later with the Lifetime Deposit Guarantee.</p></details>
       <details><summary>Will I be the only solo traveller?</summary><p>Not at all. Most of our guests arrive knowing nobody, crews are capped at 20, and the average age of our guests is over 23. Tick the box at checkout and we’ll introduce you to others on the same departure before you fly.</p></details>
       <details><summary>Can I add days before or after?</summary><p>Yes. Make it yours adds any of our 23 Mad Monkeys either side of a trip, with the real bus, boat or train between them and the tours you pick. The night before an ALL IN trip starts is on us, subject to availability: say yes when you book and we book your bed.</p></details>
-      <details><summary>When does ALL ASIA leave?</summary><p>Every month. Each departure runs the six countries in the order the weather likes best at that time of year, so a January departure starts on the first Island Hopper of the year and an October one catches the fire boats in Luang Prabang and Yi Peng in Chiang Mai.</p></details>
-      <details><summary>Can I do just part of ALL ASIA?</summary><p>Yes. Every chapter is one of our regular departures, so you can book any of them on its own and travel with that country’s crew.</p></details>
+      <details><summary>When does The Big One leave?</summary><p>Every month. Each departure runs the six countries in the order the weather likes best at that time of year, so a January departure starts on the first Island Hopper of the year and an October one catches the fire boats in Luang Prabang and Yi Peng in Chiang Mai.</p></details>
+      <details><summary>Can I do just part of The Big One?</summary><p>Yes. Every chapter is one of our regular departures, so you can book any of them on its own and travel with that country’s crew.</p></details>
       <details><summary>What do the patches get me?</summary><p>Every trip ends with its own patch, numbered for your crew. Every Mad Monkey on the trip counts toward Mad Loyalty, Mad Monkey’s free rewards programme: five different Mad Monkeys makes you MADDEST, with two free nights in a new country and a free pub crawl every month. On top of that, two patches get you a free Level Up, three get you the ALL IN jacket and all six get you the black card. Every trip also has Trip Bingo: nine squares from its own days, signed off by your trip lead.</p></details>
       <details><summary>Can I just ask a question first?</summary><p>Yes. Tap Enquire, tell us a bit about what you’re after and it opens your email app with a message to Ewan filled in. A real person replies. Or ask Ewan on WhatsApp.</p></details>
       <details><summary>Do I need travel insurance?</summary><p>Yes, it’s required. SafetyWing and World Nomads are good options.</p></details>
@@ -2826,6 +2836,7 @@ html.locked .ask-fab{display:none}
       <a href="https://madmonkeyhostels.com/privacy-policy/" target="_blank" rel="noopener">Privacy</a>
       <a href="https://madmonkeyhostels.com/cancellation-policy/" target="_blank" rel="noopener">Cancellation</a>
       <a href="mailto:hello@madmonkeyhostels.com">hello@madmonkeyhostels.com</a>
+      <a href="https://wa.me/66966894646" target="_blank" rel="noopener" data-wa="footer">WhatsApp <span class="nw">+66 96 689 4646</span></a>
     </nav>
     <p>Photos of hostels, tours, crews and guests are Mad Monkey’s own, from madmonkeyhostels.com and today’s ALL IN pages. The big scenery photos are free to use under the Unsplash License, by <a href="https://unsplash.com/@jjying" rel="noopener" target="_blank">JJ Ying</a>, <a href="https://unsplash.com/@mfrazi" rel="noopener" target="_blank">Fahrul Razi</a>, <a href="https://unsplash.com/@hbsun2013" rel="noopener" target="_blank">Hongbin</a>, <a href="https://unsplash.com/@jaydekeroi" rel="noopener" target="_blank">Jayde Keroi</a>, <a href="https://unsplash.com/@c_j_" rel="noopener" target="_blank">CJ</a>, <a href="https://unsplash.com/@raflors" rel="noopener" target="_blank">Rafael Loreto</a>, <a href="https://unsplash.com/@quanganh175" rel="noopener" target="_blank">Quang Anh Vũ</a>, <a href="https://unsplash.com/@danishprakash" rel="noopener" target="_blank">Danish Prakash</a>, <a href="https://unsplash.com/@bttsg" rel="noopener" target="_blank">Vivu Vietnam</a>, <a href="https://unsplash.com/@evankrause_" rel="noopener" target="_blank">Evan Krause</a>, <a href="https://unsplash.com/@renesansz" rel="noopener" target="_blank">Rene Padillo</a>, <a href="https://unsplash.com/@eduardo_cg" rel="noopener" target="_blank">Eduardo Casajús Gorostiaga</a>, <a href="https://unsplash.com/@nathadej" rel="noopener" target="_blank">Nat Weerawong</a>, <a href="https://unsplash.com/@bobohuang_92" rel="noopener" target="_blank">Mandy H</a>, <a href="https://unsplash.com/@aritraroys" rel="noopener" target="_blank">Aritra Roy</a>, <a href="https://unsplash.com/@magicaleye7" rel="noopener" target="_blank">Hieu Do Quang</a>, <a href="https://unsplash.com/@robbif_" rel="noopener" target="_blank">Robbi</a>, <a href="https://unsplash.com/@onthecrow" rel="noopener" target="_blank">Dmitry Voronov</a>, <a href="https://unsplash.com/@center999" rel="noopener" target="_blank">Nopparuj Lamaikul</a>, <a href="https://unsplash.com/@upmanis" rel="noopener" target="_blank">Kaspars Upmanis</a>, <a href="https://unsplash.com/@annushkasoup" rel="noopener" target="_blank">Anna Korzik</a>, <a href="https://unsplash.com/@nielsbaars" rel="noopener" target="_blank">Niels Baars</a>, <a href="https://unsplash.com/@kevin_charit" rel="noopener" target="_blank">Kevin Charit</a> and <a href="https://unsplash.com/@nihthu" rel="noopener" target="_blank">Ahmed Nishaath</a>. Every caption names the place, and a photo next to a festival or big day shows the place, not the event. Placeholder video from Mixkit under the Mixkit Stock Video Free License plays where it can; replace it with our own footage before anything goes public.</p>
   </div>
@@ -5564,7 +5575,7 @@ html.locked .ask-fab{display:none}
       route: [['pai', 3, ['Pai Canyon', 'Pai pub crawl']], ['chiang-mai', 3, ['Doi Suthep', 'Day Party']], ['luang-prabang', 3, ['Night market food', 'Kuang Si']], ['vang-vieng', 3, ['Tipsy tubing', 'pub crawl']]], vibes: ['culture', 'food'], pref: 'cheap', fund: 14, c: 'green' },
     { id: 'firsttimer', n: 'First Timer Classic', tag: 'The easy way in', blurb: 'Vietnam\'s two big hitters, Hanoi and Hoi An, then Cambodia\'s temples and capital: Siem Reap and Phnom Penh.',
       route: [['hanoi', 3, ['Street food + Train', 'Ninh Binh']], ['hoi-an', 3, ['Cooking class + bamboo', 'Sunset river cruise']], ['siem-reap', 3, ['Sunrise Angkor', 'Pub Street crawl']], ['phnom-penh', 2, ['S21']]], vibes: ['culture', 'food', 'party'], c: 'blue' },
-    { id: 'islandhop', n: 'Island Hopper', tag: 'Boats, sand and hammocks', blurb: 'Phnom Penh, then Koh Sdach and Koh Rong by boat, and Kampot\'s river and Bokor Mountain to finish.',
+    { id: 'islandhop', n: 'Islands + Hammocks', tag: 'Boats, sand and hammocks', blurb: 'Phnom Penh, then Koh Sdach and Koh Rong by boat, and Kampot\'s river and Bokor Mountain to finish.',
       route: [['phnom-penh', 2, ['Sunset river cruise']], ['koh-sdach', 3, ['Island-hopping', 'Snorkelling']], ['koh-rong', 4, ['Kayak hire', 'Beach fire show']], ['kampot', 3, ['River kayak', 'Bokor']]], vibes: ['islands', 'chill'], c: 'cyan' }];
 
   
@@ -6405,7 +6416,7 @@ var SHOPDATA = (function(){
   var D = {};
   D.BSPEC = {
     cambodia:{stops:[['siem-reap',4,['Sunrise Angkor','Kulen','Quad bike','Phare']],['phnom-penh',1,['Sunset river']],['kampot',3,['Bokor','Pepper','River kayak']],['koh-rong',3,['Kayak hire']],['koh-sdach',2,['sunset cruise','beach fishing']]]},
-    vietnam:{stops:[['hanoi',3,['Lan Ha','Ha Giang Loop · 4 days, Easy','Street food + Train']],['hoi-an',5,['Hai Van','Basket','bike tour','Cham Island snorkelling','Sunset river','Cooking class']]]},
+    vietnam:{stops:[['hanoi',3,['Lan Ha','Ha Giang Loop · 4 days, Easy','Street food + Train']],['hoi-an',5,['Hai Van','Basket','bike tour','Cham Island snorkelling','Sunset river','Cooking class']]], legs:{0:'fast'}},    
     indonesia:{stops:[['uluwatu',3,['Surf lesson']],['nusa-lembongan',2,['Nusa Penida','Snorkelling (three','Mangrove']],['gili-trawangan',2,['Snorkelling adventure','Discover scuba']],['kuta-lombok',5,['Rinjani','Waterfall tour']]]},
     thailand:{stops:[['bangkok',1,['Old Town']],['chiang-mai',3,['Elephant','Doi Suthep']],['pai',3,['Lod Cave','Sunset at Pai']],['phuket',5,['Phi Phi']]]},
     laos:{stops:[['luang-prabang',3,['Nong Khiaw','Kuang Si','Night market']],['vang-vieng',4,['balloon','Blue Lagoons','Zipline']]]},
@@ -6420,10 +6431,10 @@ var SHOPDATA = (function(){
   };
    
   D.ASIA_CH = [
-    {k:'c1', n:'Volcanoes and waves', where:'Bali and Lombok', from:0, days:12, stops:[['uluwatu',3,['Surf lesson']],['nusa-lembongan',2,['Nusa Penida','Snorkelling (three']],['gili-trawangan',2,['Snorkelling adventure']],['kuta-lombok',3,['Rinjani','Waterfall tour']]]},
-    {k:'c2', n:'Lanterns of the North', where:'Thailand', from:12, days:12, rides:'yipeng', stops:[['bangkok',2,['Old Town']],['chiang-mai',2,['Doi Suthep']],['pai',2,['Lod Cave','Sunset at Pai']],['chiang-mai',6,['Elephant']]]},
+    {k:'c1', n:'Volcanoes and beaches', where:'Bali and Lombok', from:0, days:12, stops:[['uluwatu',3,['Surf lesson']],['nusa-lembongan',2,['Nusa Penida','Snorkelling (three']],['gili-trawangan',2,['Snorkelling adventure']],['kuta-lombok',3,['Rinjani','Waterfall tour']]]},
+    {k:'c2', n:'Yi Peng lanterns', where:'Thailand', from:12, days:12, rides:'yipeng', stops:[['bangkok',2,['Old Town']],['chiang-mai',2,['Doi Suthep']],['pai',2,['Lod Cave','Sunset at Pai']],['chiang-mai',6,['Elephant']]]},
     {k:'c3', n:'Down the Mekong', where:'Laos', from:24, days:13, rides:'laos', rideFrom:3, legIn:'cheap', stops:[['luang-prabang',3,['Nong Khiaw','Kuang Si','Night market']],['vang-vieng',5,['balloon','Blue Lagoons','Zipline']]]},
-    {k:'c4', n:'Mountain passes and lantern towns', where:'Vietnam', from:37, days:14, rides:'vietnam', stops:[['hanoi',3,['Lan Ha','Ha Giang Loop · 4 days, Easy','Street food + Train']],['hoi-an',6,['Hai Van','Basket','bike tour','Cham Island snorkelling','Sunset river','Cooking class']]]},
+    {k:'c4', n:'North to Hoi An', where:'Vietnam', from:37, days:14, rides:'vietnam', stops:[['hanoi',3,['Lan Ha','Ha Giang Loop · 4 days, Easy','Street food + Train']],['hoi-an',6,['Hai Van','Basket','bike tour','Cham Island snorkelling','Sunset river','Cooking class']]]},
     {k:'c5', n:'Temples, islands and Christmas', where:'Cambodia', from:51, days:15, rides:'cambodia', rideFrom:1, stops:[['siem-reap',5,['Sunrise Angkor','Kulen','Quad bike','Phare']],['phnom-penh',1,['Sunset river']],['kampot',3,['Bokor','Pepper','River kayak']],['koh-rong',3,['Kayak hire']],['koh-sdach',2,['sunset cruise','beach fishing']],['phnom-penh',1,[]]]},
     {k:'c6', n:'New Year on the Andaman', where:'Phuket', from:66, days:5, stops:[['phuket',5,['Phi Phi']]]},
     {k:'c7', n:'Palawan, Sinulog and the Island Hopper', where:'Philippines', from:71, days:29, rides:'sinulog', rideFrom:11, fixedPart:'philippines', stops:[['manila',2,['Intramuros']],['nacpan-beach',8,['Nacpan ultimate','Sunset cruise']],['dumaguete',3,['Valencia','Mad Golf','Cocktail']],['siquijor',3,['countryside','Sunset cruise']],['panglao',3,['Dolphins','Chocolate Hills','Mojito','Sunset cruise']],['siargao',4,['Tri Island Party','Surf lesson','Land Madness']]], fixedFrom:2, away:5, awayNote:'four nights in a Cebu partner hotel for Sinulog and the ship night to Surigao'}
@@ -6757,7 +6768,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
 
    
   const TRIPS = [
-    {id:'cambodia', country:'Cambodia', name:'Jungle Temples & Wild Islands', color:'#FF6A4D', video:'falls', pilot:true, islands:true,
+    {id:'cambodia', country:'Cambodia', name:'Angkor to the Islands', color:'#FF6A4D', video:'falls', pilot:true, islands:true,
      route:['siem-reap','phnom-penh','kampot','koh-rong','koh-sdach'],
      peak:'Scooter convoy up Bokor mountain into the clouds', finale:'Community BBQ of the morning catch on Koh Sdach',
      culture:'A monk’s water blessing at a village pagoda, and lunch in a family kitchen',
@@ -6776,7 +6787,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['To Koh Sdach','Boat across the archipelago','Sunset cruise',2,'r'],
       ['Koh Sdach','Sunrise fishing with island families, then the community BBQ, awards and trip film','Last sunset on the water',4,'c'],
       ['To Phnom Penh','Farewell','',1,'r']]},
-    {id:'vietnam', country:'Vietnam', name:'Mountain Passes & Lantern Towns', color:'#FFB238', video:'moto',
+    {id:'vietnam', country:'Vietnam', name:'North to Hoi An', color:'#FFB238', video:'moto',
      route:['hanoi','lan-ha','ha-giang','hoi-an'],
      peak:'Ma Pi Leng Pass and a boat through the Nho Que gorge', finale:'Lantern boat in your tailored outfit, Hoi An',
      culture:'A morning in a Hmong village, and a silk lantern you make yourself',
@@ -6795,7 +6806,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['Hoi An','Cham Islands snorkel or a surf lesson, by season','Sunset bar on the river',3,'a'],
       ['Hoi An','Lantern boat in your tailored outfit, final dinner, awards and film','Lanterns on the water',4,'c'],
       ['Hoi An','Farewell','',1,'r']]},
-    {id:'indonesia', country:'Indonesia', name:'Volcanoes & Waves', color:'#1BC4AF', video:'sunrise', islands:true,
+    {id:'indonesia', country:'Indonesia', name:'Volcanoes & Beaches', color:'#1BC4AF', video:'sunrise', islands:true,
      route:['uluwatu','nusa-lembongan','gili-trawangan','rinjani','kuta-lombok'],
      peak:'A night on Mount Rinjani’s crater rim, above the clouds', finale:'Beach BBQ in Kuta Lombok',
      culture:'Offerings with a Balinese family, and Sasak weavers in Lombok',
@@ -6814,7 +6825,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['Kuta Lombok','Sasak weavers at Sukarara and the old houses of Sade','Hilltop sunset at Merese',3,'c'],
       ['Kuta Lombok','Surf lesson, then the beach BBQ, awards and trip film','Last sunset on the sand',4,'a'],
       ['Kuta Lombok','Farewell','',1,'r']]},
-    {id:'thailand', country:'Thailand', name:'Jungle North & Andaman Islands', color:'#C5E86C', video:'island', islands:true,
+    {id:'thailand', country:'Thailand', name:'Mountains & Lagoons', color:'#C5E86C', video:'island', islands:true,
      route:['bangkok','chiang-mai','pai','phuket'],
      peak:'Sea-kayaking into the hidden lagoons of Phang Nga Bay', finale:'Longtail to an island beach BBQ',
      culture:'Monk chat in Chiang Mai, and lunch in a Shan family’s kitchen in Pai',
@@ -6833,7 +6844,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['Phuket','Old Town shophouses and a market breakfast, then the beach','Big Buddha sunset',2,'c'],
       ['Phuket','Longtail to an island beach, BBQ, awards and film','Last sunset on the sand',4,'r'],
       ['Phuket','Farewell','',1,'r']]},
-    {id:'laos', country:'Laos', name:'Rivers & Skies', color:'#B9A6FF', video:'balloon',
+    {id:'laos', country:'Laos', name:'Rivers & Balloons', color:'#B9A6FF', video:'balloon',
      route:['luang-prabang','nong-khiaw','vang-vieng'],
      peak:'Sunrise hot-air balloon over the karsts of Vang Vieng', finale:'A Lao baci blessing with local hosts',
      culture:'The dawn alms round, a farm lunch and a baci blessing',
@@ -6898,7 +6909,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['Siargao','First waves: a surf lesson on a beginner break','Sunset session',4,'a'],
       ['Siargao','Land Madness: the coconut palms, Maasin River, Magpupungko rock pools and Sugba Lagoon; farewell dinner','One last night out',4,'a'],
       ['Siargao','Home time: a transfer to the airport or the port','',1,'r']]},
-    {id:'tet', kind:'fest', short:'Tết', festival:'Tết', country:'Vietnam', countries:['vietnam'], name:'New Year in the North', color:'#FF4D4D', video:'dragon', cap:'New Year in the streets',
+    {id:'tet', kind:'fest', short:'Tết', festival:'Tết', country:'Vietnam', countries:['vietnam'], name:'Tết in the North', color:'#FF4D4D', video:'dragon', cap:'New Year in the streets',
      start:'2027-02-01', nights:[4], nightLabels:['New Year’s Eve'], finale:8, conf:'fixed', dateShort:'6 Feb', place:'Hanoi',
      when:'New Year’s Eve on Friday 5 February, Tết on Saturday 6 February 2027',
      night:'Giao Thừa, the turn of the lunar year. Hanoi spends a week buying peach blossom and kumquat trees; at midnight the fireworks go up over Hoan Kiem Lake, and the next morning you’re a guest at a family’s first meal of the year.',
@@ -6918,7 +6929,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['Ha Giang Loop','Ma Pi Leng Pass and the Nho Que gorge; awards and trip film at the homestay','Homestay karaoke night',4,'a'],
       ['Ha Giang Loop','Dong Van old quarter and a Hmong village, then the ride back','Overnight to Hanoi',3,'c'],
       ['Hanoi','Farewell','',1,'r']]},
-    {id:'nyepi', kind:'fest', short:'Nyepi', festival:'Nyepi', country:'Indonesia', countries:['indonesia'], name:'The Silent Island', color:'#9AA8FF', video:'fire', cap:'Torchlight on ogoh-ogoh night',
+    {id:'nyepi', kind:'fest', short:'Nyepi', festival:'Nyepi', country:'Indonesia', countries:['indonesia'], name:'Ogoh-ogoh & Nyepi', color:'#9AA8FF', video:'fire', cap:'Torchlight on ogoh-ogoh night',
      start:'2027-03-02', nights:[5,6], nightLabels:['Ogoh-ogoh','Nyepi'], finale:10, conf:'fixed', dateShort:'7 and 8 Mar', place:'Bali', islands:true,
      when:'Ogoh-ogoh parade on Sunday 7 March, Nyepi on Monday 8 March 2027',
      night:'On the eve of the Balinese new year, every village parades its ogoh-ogoh, giant demon effigies built for weeks, through the streets to gamelan and torchlight, then burns them. The next day, Nyepi, the whole island stops: no lights, no traffic, no flights, no going out. The darkest sky you’ll ever see.',
@@ -6939,7 +6950,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['To Gili T','Fast boat to the island','Sea swings at sunset',2,'r'],
       ['Gili T','Turtles, then a try-dive; final dinner, awards and trip film','Last sunset on the sand',4,'a'],
       ['Gili T','Farewell','',1,'r']]},
-    {id:'newyear', kind:'fest', short:'Songkran & Pi Mai', festival:'Songkran and Pi\u00a0Mai', country:'Thailand and Laos', countries:['thailand','laos'], name:'The New Year Double', color:'#4FD1FF', video:'splash', cap:'Water fight season',
+    {id:'newyear', kind:'fest', short:'Songkran & Pi Mai', festival:'Songkran and Pi\u00a0Mai', country:'Thailand and Laos', countries:['thailand','laos'], name:'Songkran to Pi Mai', color:'#4FD1FF', video:'splash', cap:'Water fight season',
      start:'2027-04-09', nights:[4,8], nightLabels:['Songkran','Pi Mai'], finale:12, conf:'expected', dateShort:'13 to 17 Apr', place:'Chiang Mai, Luang Prabang',
      when:'Songkran on 13 April in Chiang Mai, Pi Mai on 17 April in Luang Prabang',
      night:'Two new years, one trip. Songkran turns Chiang Mai’s old city into the world’s biggest water fight, right after a quiet blessing from the elders. Then the slow boat carries you down the Mekong to Luang Prabang, where Pi Mai is gentler: sand stupas on the riverbank, the procession of the Prabang Buddha, and water poured for luck.',
@@ -6962,7 +6973,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['To Vang Vieng','Train south through the mountains','Nam Song sunset',2,'r'],
       ['Vang Vieng','Sunrise balloon, cave tubing, Blue Lagoon jump; awards and trip film','Last sunset on the river',4,'a'],
       ['Vang Vieng','Farewell','',1,'r']]},
-    {id:'lightboats', kind:'fest', short:'Lai Heua Fai', festival:'Lai Heua Fai', country:'Laos', countries:['laos'], name:'River of Light', color:'#FF9F43', video:'sunsea', cap:'The Mekong at dusk',
+    {id:'lightboats', kind:'fest', short:'Lai Heua Fai', festival:'Lai Heua Fai', country:'Laos', countries:['laos'], name:'Fire Boats on the Mekong', color:'#FF9F43', video:'sunsea', cap:'The Mekong at dusk',
      start:'2027-10-10', nights:[5], nightLabels:['Fire boats'], finale:8, conf:'expected', dateShort:'15 to 16 Oct', place:'Luang Prabang',
      when:'Boun Ok Phansa on 15 October, the fire boats on 15 and 16 October 2027',
      night:'The end of Buddhist Lent. Luang Prabang lights every temple with candles and lanterns, and each neighbourhood carries the fire boat it has built from bamboo and paper through town to the Mekong. Then thousands of small banana-leaf boats go out on the river, one of them yours.',
@@ -6981,7 +6992,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['Vang Vieng','Sunrise balloon, cave tubing, Blue Lagoon jump','Hilltop viewpoint hike',4,'a'],
       ['Vang Vieng','Kayak or climb, then a baci blessing; awards and trip film','Last sunset on the Nam Song',4,'c'],
       ['Vang Vieng','Farewell','',1,'r']]},
-    {id:'yipeng', kind:'fest', short:'Yi Peng', festival:'Yi Peng & Loy Krathong', country:'Thailand', countries:['thailand'], name:'Lanterns of the North', color:'#FFD166', video:'lanterns', cap:'Lantern night',
+    {id:'yipeng', kind:'fest', short:'Yi Peng', festival:'Yi Peng & Loy Krathong', country:'Thailand', countries:['thailand'], name:'Yi Peng Lanterns', color:'#FFD166', video:'lanterns', cap:'Lantern night',
      start:'2027-11-06', nights:[8], nightLabels:['Lantern night'], finale:10, conf:'expected', dateShort:'13 to 14 Nov', place:'Chiang Mai', flagship:true,
      when:'Yi Peng and Loy Krathong on 13 and 14 November 2027',
      night:'Yi Peng means the full moon of the second month in the old Lanna calendar. Chiang Mai hangs lanterns from every temple and doorway, Wat Phan Tao glows with candlelight, and on the night itself the Ping River fills with krathongs, candles floating the bad luck of the year away. You float one you made yourself.',
@@ -7002,7 +7013,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       ['Chiang Mai','White-water rafting and a jungle zipline in the Mae Taeng valley','Free evening',4,'a'],
       ['Chiang Mai','Ethical elephant sanctuary, no riding; final dinner, awards and trip film','The last lanterns',3,'c'],
       ['Chiang Mai','Farewell','',1,'r']]},
-    {id:'raceday', kind:'fest', short:'Bon Om Touk', festival:'Bon Om Touk', country:'Cambodia', countries:['cambodia'], name:'Race Day', color:'#7EE081', video:'paradise', cap:'After the races, the islands', islands:true,
+    {id:'raceday', kind:'fest', short:'Bon Om Touk', festival:'Bon Om Touk', country:'Cambodia', countries:['cambodia'], name:'The Water Festival', color:'#7EE081', video:'paradise', cap:'After the races, the islands', islands:true,
      start:'2027-11-08', nights:[5], nightLabels:['Race day'], finale:10, conf:'expected', dateShort:'12 to 14 Nov', place:'Phnom Penh',
      when:'Bon Om Touk from 12 to 14 November 2027',
      night:'Cambodia’s water festival marks the end of the rains, when the Tonle Sap river turns and flows the other way. Long boats with dozens of paddlers race the river, lit floats drift past after dark, and at midnight families salute the moon and eat ambok, flattened rice.',
@@ -7251,7 +7262,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       DEPS.push({iso:isoOf(b.dn0), dn0:b.dn0, order:b.order, px:b.px, total:b.c.total + pad, pad, end:isoOf(b.c.end + pad), segs:b.c.segs, hits:b.sc.hits.map(h=>({id:h.id, iso:isoOf(h.dn), dn:h.dn, p:h.p})), avg:b.sc.avg, crew:b.c.crew, rinjaniShut:b.sc.rinjaniShut, ih28:b.c.segs.some(s=>s.ih && s.start >= IH28)});
     }
      
-    const NAMES = {cambodia:'Jungle Temples & Wild Islands', vietnam:'Mountain Passes & Lantern Towns', indonesia:'Volcanoes & Waves', thailand:'Jungle North & Andaman Islands', laos:'Rivers & Skies', philippines:'Island Hopper', palawan:'Manila and Nacpan Beach'};
+    const NAMES = {cambodia:'Angkor to the Islands', vietnam:'North to Hoi An', indonesia:'Volcanoes & Beaches', thailand:'Mountains & Lagoons', laos:'Rivers & Balloons', philippines:'Island Hopper', palawan:'Manila and Nacpan Beach'};
     const FREE = ['A free day: sleep in, then the pool. The hostel’s events are on tonight, so you won’t be on your own','A free day for laundry, a massage and a long lunch','A free day to explore on your own, or with whoever’s around the hostel','A free day. Ask the front desk what’s on: there’s always something'];
     const NACPAN = [['Nacpan Beach','Island hopping: lagoons, hidden beaches and snorkel stops','Sunset cruise',4,'a'],['Nacpan Beach','The breather: nothing planned at all','Beach sunset',1,'r'],['Nacpan Beach','Kayak into the lagoons and cliff-jump','Free evening',4,'a'],['Nacpan Beach','A morning with a fishing family, then the lunch they cook','Hammock time',2,'c'],['Nacpan Beach','Free day: a try-dive, yoga or a scooter to the waterfall','Beach sunset',2,'r'],['Nacpan Beach','Island hopping in the other direction','Sunset cruise',4,'a']];
     const placeName = p => (MM.PLACES[p] && MM.PLACES[p].n) || ({cebu:'Cebu'})[p] || p;
@@ -7269,14 +7280,15 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
         const last = k === dep.segs.length - 1;
         if(g.id === 'palawan'){
           const c = {id:'palawan', n:NAMES.palawan, where:'Philippines', from:D.length, i0:items.length};
-          add(g.start, 'manila', ['To Manila','Fly Siargao to Manila on your own ticket. Your Island Hopper crew heads home; your ALL ASIA crew carries on','Manila Bay sunset',1,'r']);
+          add(g.start, 'manila', ['To Manila','Fly Siargao to Manila on your own ticket. Your Island Hopper crew heads home; your 100-day crew carries on','Manila Bay sunset',1,'r']);
           add(g.start + 1, 'manila', ['Manila','Intramuros and a food walk through Binondo, the oldest Chinatown in the world','Rooftop night',3,'c']);
           add(g.start + 2, 'nacpan-beach', ['To Palawan','Fly to El Nido on your own ticket, then on to Mad Monkey Nacpan Beach','Four kilometres of sand at sunset',2,'r']);
           for(let i = 1; i < g.N; i++) add(g.start + 2 + i, 'nacpan-beach', NACPAN[(i-1) % NACPAN.length].slice());
           items.push({p:'manila', n:2, fr:['Intramuros']}, {p:'nacpan-beach', n:g.N, fr:['Nacpan ultimate','Sunset cruise']});
+          legs[c.i0] = 'fast';    
           route.push('manila','nacpan-beach');
           c.days = D.length - c.from; c.i1 = items.length; c.places = ['manila','nacpan-beach']; c.start = g.start; c.N = g.N; ch.push(c);
-          if(last){ const endDn = g.start + 2 + g.N; for(let i = 0; i < dep.pad; i++) add(endDn + i, 'nacpan-beach', ['Nacpan Beach','The last days are yours: the beach, a massage and a proper goodbye','Last sunset',1,'r']); items[items.length-1].n += dep.pad; add(endDn + dep.pad, 'home', ['Nacpan Beach','Home time: the van to El Nido airport. 100 days, 23 Mad Monkeys, and the ALL ASIA film premieres in the group chat','',1,'r']); }
+          if(last){ const endDn = g.start + 2 + g.N; for(let i = 0; i < dep.pad; i++) add(endDn + i, 'nacpan-beach', ['Nacpan Beach','The last days are yours: the beach, a massage and a proper goodbye','Last sunset',1,'r']); items[items.length-1].n += dep.pad; add(endDn + dep.pad, 'home', ['Nacpan Beach','Home time: the van to El Nido airport. 100 days, 23 Mad Monkeys, and the film of the whole trip premieres in the group chat','',1,'r']); }
           return;
         }
         const T = trip(g.id), C = CH[g.id], dp = DP[g.id];
@@ -7304,7 +7316,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
         const i0 = (k > 0 && g.wait === 0) ? 1 : 0, iEnd = C.n - 1;
         for(let i = i0; i < iEnd; i++){
           let row = T.d[i].slice();
-          if(i === 0) row[1] = k === 0 ? 'Arrive and meet two crews: your ALL ASIA crew for the next 100 days, and the ' + T.country + ' crew for the first chapter' : C.join;
+          if(i === 0) row[1] = k === 0 ? 'Arrive and meet two crews: your crew for all 100 days, and the ' + T.country + ' crew for the first chapter' : C.join;
           add(g.start + i, dp[i], row);
         }
          
@@ -7317,7 +7329,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
           const endDn = g.start + C.n - 1, lp = dp[C.n - 2];
           for(let i = 0; i < dep.pad; i++) add(endDn + i, lp, [placeName(lp), 'The last days are yours: the beach, a massage and a proper goodbye', 'Last sunset', 1, 'r']);
           items[items.length-1].n += dep.pad;
-          add(endDn + dep.pad, 'home', [T.d[C.n-1][0], 'Home time. 100 days, 23 Mad Monkeys, and the ALL ASIA film premieres in the group chat', '', 1, 'r']);
+          add(endDn + dep.pad, 'home', [T.d[C.n-1][0], 'Home time. 100 days, 23 Mad Monkeys, and the film of the whole trip premieres in the group chat', '', 1, 'r']);
         }
         c.days = D.length - c.from; c.i1 = items.length; c.places = B.stops.map(s=>s[0]); ch.push(c);
       });
@@ -7343,8 +7355,8 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
    
   const AGEN = asiaGen(window.MM, TRIPS, FEST, FESTNIGHTS.concat(BIGDAYS));
   const EVW = {}; FESTNIGHTS.concat(BIGDAYS).forEach(e=>{ EVW[e.id] = e; });
-  const ASIA = {id:'allasia', kind:'asia', short:'ALL ASIA', country:'Six countries', countries:['indonesia','thailand','laos','vietnam','cambodia','philippines'],
-    name:'ALL ASIA', color:'#F6E7C1', video:'island', conf:'expected', place:'Bali to Siargao',
+  const ASIA = {id:'allasia', kind:'asia', short:'The Big One', country:'Six countries', countries:['indonesia','thailand','laos','vietnam','cambodia','philippines'],
+    name:'The Big One', color:'#F6E7C1', video:'island', conf:'expected', place:'Bali to Siargao',
     peak:'Rinjani’s crater rim, the Ha Giang Loop, Phang Nga’s lagoons, the balloon over Vang Vieng and your first wave on Siargao',
     culture:'A family’s table in every country, from a Balinese offering to a boodle fight on Daku'};
   const hitW = dep => dep.hits.reduce((a,h)=>a + ((EVW[h.id] && EVW[h.id].w) || 0), 0);
@@ -7360,7 +7372,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
   }
   const ASIA_FEATURED = AGEN.DEPS.slice().sort((a,b)=>hitW(b) - hitW(a))[0].iso;
   setAsiaDep(ASIA_FEATURED);
-  if(ASIA.d.length !== 100) console.warn('ALL ASIA should be 100 days, it is', ASIA.d.length);
+  if(ASIA.d.length !== 100) console.warn('The Big One should be 100 days, it is', ASIA.d.length);
 
   const ALL = TRIPS.concat(FEST, [ASIA]);
   const byId = id => ALL.find(t=>t.id===id);
@@ -7729,7 +7741,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     mk('text',{x:px(lo)+o[0],y:py(la)+4+o[1],'text-anchor':o[2]||(o[0]<0?'end':'start'),'class':'hname'},g).textContent = n;
   });
   const legend = document.getElementById('legend');
-  [['Core trips',TRIPS,t=>t.country],['Festival trips',FEST,f=>f.short],['The big one',[ASIA],t=>'ALL ASIA']].forEach(([lab,arr,nm])=>{
+  [['Core trips',TRIPS,t=>t.country],['Festival trips',FEST,f=>f.short],['The 100-day trip',[ASIA],t=>'The Big One']].forEach(([lab,arr,nm])=>{
     const g = document.createElement('div'); g.className='lg'; g.innerHTML = '<span class="lg-l">'+lab+'</span>';
     arr.forEach(t=>{
       const b = document.createElement('button'); b.type='button'; b.setAttribute('aria-pressed','false');
@@ -7869,10 +7881,10 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
   const isAsia = t => t && t.kind === 'asia';
   const tripEnd = t => dOf(t, t.d.length-1);
   function rideText(c){
-    if(c.id === 'palawan') return 'Just you and your ALL ASIA crew: '+plural(c.N,'night')+' on Nacpan Beach to breathe out';
+    if(c.id === 'palawan') return 'Just you and your 100-day crew: '+plural(c.N,'night')+' on Nacpan Beach to breathe out';
     const r = byId(c.rides); if(!r) return ''; const d = noon5(c.iso);
     if(c.id === 'philippines'){
-      if(c.crew) return 'The Island Hopper runs January to May, so on this departure your ALL ASIA crew runs the same route themselves';
+      if(c.crew) return 'The Island Hopper runs January to May, so on this departure your 100-day crew runs the same route themselves';
       return 'Joins the Island Hopper leaving '+fmtD(d)+(c.sinulog ? ', straight after Sinulog in Cebu' : '')+': a new crew joins you here';
     }
     return 'Joins our '+r.country+' departure on '+fmtD(d)+': a new crew joins you here';
@@ -7880,6 +7892,10 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
   
 
   const ASK_NAME = 'Ewan', ASK = 'Ask ' + ASK_NAME;
+  
+
+  const WA_NUM = '66966894646', WA_SHOW = '+66 96 689 4646';
+  const waLink = text => 'https://wa.me/' + WA_NUM + (text ? '?text=' + encodeURIComponent(text) : '');
   const askBtn = (tripId, cls, text, msg) => '<button class="'+(cls || 'linkbtn')+'" type="button" data-ask="'+esc(tripId || '')+'"'+(msg ? ' data-ask-msg="'+esc(msg)+'"' : '')+'>'+esc(text || ASK)+'</button>';
    
   function routeNames(t){ const out = []; (t.route || []).forEach(id=>{ const n = nameOf(id); if(n && out[out.length-1] !== n) out.push(n); }); return out; }
@@ -8079,14 +8095,14 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     const fest = isFest(t), asia = isAsia(t), n = t.d.length, x = EXTRA[t.id] || {lvl:[],good:[]};
     document.getElementById('tpHero').style.setProperty('--tpBg', GRAD[t.video] || t.color);
     bgv(tpVid, TRIPPH[t.id]); tpVid.removeAttribute('src'); if(!reduce && V[t.video]){ tpVid.src = V[t.video].src; }   
-    const tag = asia ? '<span class="tag">The big one</span>' : fest ? '<span class="conf '+t.conf+'">'+confLabel[t.conf]+'</span>' : (t.pilot ? '<span class="tag">Pilot trip</span>' : (t.isNew ? '<span class="tag">New for 2027</span>' : ''));
+    const tag = asia ? '<span class="tag">100 days, every Mad Monkey</span>' : fest ? '<span class="conf '+t.conf+'">'+confLabel[t.conf]+'</span>' : (t.pilot ? '<span class="tag">Pilot trip</span>' : (t.isNew ? '<span class="tag">New for 2027</span>' : ''));
     document.getElementById('tpMeta').innerHTML = (asia ? '<span>Leaves every month</span>' : fest ? '<span>Festival trip</span>' : '')+tag;
     document.getElementById('tpName').textContent = t.name;
     document.getElementById('tpRoute').innerHTML = whereHTML(t);
     document.getElementById('tpSub').innerHTML = '<b>'+n+' days</b>'+(asia ? ', '+fmtDY(dOf(t,0))+' to '+fmtDY(tripEnd(t))+'. In the order the weather likes best for this departure.' : fest ? ', '+fmtD(dOf(t,0))+' to '+fmtD(dOf(t,n-1))+' '+dOf(t,0).getFullYear()+'. Built around '+esc(t.festival)+'.' : '. '+esc(depText(t))+'.')+' <span class="tp-price">'+esc(priceShort(t))+' <small>per person</small></span>';
     const hostels = new Set(t.route.filter(id=>H[id])).size;
     const facts = asia
-      ? [['The big days', asiaBig() || 'Whatever the season brings: every departure picks up the big days on its way'],['The order', asiaOrder()],['Weather', asiaWeather20() || weatherWord(ASIA.dep.avg)],['Price', priceLine(t)],['Flights','Yours to book: about '+fmtUsd(asiaFlights())+' at typical fares, and we suggest every one'],['Crews', 'One ALL ASIA crew the whole way, and a new crew of up to 20 in every country']]
+      ? [['The big days', asiaBig() || 'Whatever the season brings: every departure picks up the big days on its way'],['The order', asiaOrder()],['Weather', asiaWeather20() || weatherWord(ASIA.dep.avg)],['Price', priceLine(t)],['Flights','Yours to book: about '+fmtUsd(asiaFlights())+' at typical fares, and we suggest every one'],['Crews', 'One crew for all 100 days, and a new crew of up to 20 in every country']]
       : fest
       ? [['The night', t.when], ['Culture you’ll be part of', t.culture[0]], ['Route', routeText(t)], ['Price', priceLine(t)], ['The mix', mixText(t)], ['Date status', confLabel[t.conf]]]
       : [['The peak', t.peak], ['The finale', t.finale], ['The culture', t.culture], ['Departures', depText(t)], ['Price', priceLine(t)], ['The mix', mixText(t)+', '+hostels+' Mad Monkeys']];
@@ -8112,7 +8128,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     const tod = todayTrip(t), todEl = document.getElementById('tpToday');
     todEl.hidden = !tod;
     if(tod) todEl.innerHTML = '<h3>Going before 2027?</h3><p>Today’s ALL IN '+tod.tr.n+' leaves every '+DAYN[tod.tr.dep]+', '+tod.tr.days+' days from '+fmtUsd(tod.price)+'. The next one is '+fmtDY(tod.next)+'.</p>'+todayLink(tod.tr.id, 'See today’s trip', 'btn ghost sm')+'<small>Its page has the live prices and dates, and books it.</small>';   
-    document.getElementById('tpInc').innerHTML = (asia ? ['Every bed: 23 Mad Monkeys, plus a boat, homestays and a crater camp','One ALL ASIA trip lead for all 100 days, plus each chapter’s crew','Every transfer between stops by road, rail or boat','Every hero moment, and the big days on the way','Every patch, the ALL ASIA patch, and a film of each chapter'] : INCLUDED).map(i=>'<li>'+(fest && i.indexOf('patch')>=0 ? 'Your festival pin, handed out on the night, and a 60-second film of your trip' : i)+'</li>').join('') + (fest ? '<li>A spot right in the festival night, plus the things you make for it</li>' : '');
+    document.getElementById('tpInc').innerHTML = (asia ? ['Every bed: 23 Mad Monkeys, plus a boat, homestays and a crater camp','One trip lead for all 100 days, plus each chapter’s crew','Every transfer between stops by road, rail or boat','Every hero moment, and the big days on the way','Every patch, the gold Big One patch, and a film of each chapter'] : INCLUDED).map(i=>'<li>'+(fest && i.indexOf('patch')>=0 ? 'Your festival pin, handed out on the night, and a 60-second film of your trip' : i)+'</li>').join('') + (fest ? '<li>A spot right in the festival night, plus the things you make for it</li>' : '');
     document.getElementById('tpNot').innerHTML = (asia ? ['Flights between countries: you book these, and we’ll suggest the right one for every hop','Travel insurance, which you’ll need for the whole trip','Visas: you’ll need some, and we’ll tell you which and when'] : NOT_INCLUDED).map(i=>'<li>'+i+'</li>').join('');
     const good = x.good.slice(); if(asia) asiaNotes().forEach(n=>good.push(n));
     document.getElementById('tpGood').innerHTML = good.map(i=>'<li>'+i+'</li>').join('') + (fest ? '<li>'+t.respect+'</li>' + (t.backup ? '<li>'+t.backup+'</li>' : '') : '');
@@ -8384,7 +8400,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     ASIA.places.forEach(p=>{ const q = ({'lan-ha':'hanoi','ha-giang':'hanoi','nong-khiaw':'luang-prabang','rinjani':'kuta-lombok','cebu':'panglao'})[p] || p; const c = MMB.PLACES[q] ? MMB.PLACES[q].c : run.c; if(c === run.c) run.n++; else run = {n:1, c}; if(run.n > best.n) best = Object.assign({}, run); });
     if(best.c) out.push('Your longest stay in one country on this departure is '+best.n+' days, in '+MMB.COUNTRIES[best.c].n.replace('Philippines','the Philippines')+'. Visa-free stays and visas on arrival cover most passports; Make it yours checks yours.'+(best.n > 30 ? ' Over 30 days, so plan a visa extension.' : ''));
     if(pal) out.push('A breather after the Philippines: '+plural(pal.N,'night')+' on Nacpan Beach, because 100 days is a long way.');
-    if(ph && ph.crew) out.push('The Island Hopper runs from January to May. On this departure the Philippines chapter follows the same route with your ALL ASIA crew, and the crew prices it.');
+    if(ph && ph.crew) out.push('The Island Hopper runs from January to May. On this departure the Philippines chapter follows the same route with your 100-day crew, and the crew prices it.');
     if(ph && ph.ih && ASIA.dep.ih28) out.push('The Island Hopper’s 2028 dates aren’t set yet. This departure assumes the same fortnightly Wednesdays as 2027.');
     if(ASIA.dep.rinjaniShut) out.push('Rinjani is closed from January to March, so the Indonesia chapter climbs Mount Batur on its Bali days instead, and Lombok swaps the climb for waterfalls and Sasak villages.');
     const w = ch.reduce((a,c)=>a + (c.wait||0), 0); if(w) out.push(plural(w,'free day')+' between chapters, at the next Mad Monkey, while the next crew gathers. The hostels’ nightly events mean you’re never on your own.');
@@ -8525,7 +8541,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
   function chapterAction(c, ci){
     const r = c.rides && byId(c.rides), d = c.iso;
     if(r && !c.crew && departures(r).some(x=>x.d === d)) return '<button class="linkbtn" type="button" data-book-ch="'+r.id+'" data-d="'+d+'">Book the '+(r.id === 'philippines' ? 'Island Hopper' : r.country)+' departure</button>';
-    return askBtn('allasia', 'linkbtn', ASK + ' to join it', 'I’d like to join chapter '+(ci+1)+' of the '+fmtDM(noon5(ASIA.start))+' ALL ASIA ('+c.n+').');
+    return askBtn('allasia', 'linkbtn', ASK + ' to join it', 'I’d like to join chapter '+(ci+1)+' of The Big One leaving '+fmtDM(noon5(ASIA.start))+' ('+c.n+').');
   }
    
   const CHPH = {cambodia:'angkor', vietnam:'hagiang2', indonesia:'rinjanilake', thailand:'phiphi', laos:'kuangsi', philippines:'guyam', palawan:'nacpan'};
@@ -8624,7 +8640,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       const asia = isAsia(t), fest = isFest(t);
       const status = LIVED[t.id] ? 'Book now' : t.id === 'philippines' ? 'Approved price' : fest ? confLabel[t.conf] : asia ? 'Leaves every month' : 'Proposed dates';
       const max = 4, chips = deps.slice(0, max).map(x=>'<button type="button" class="dchip" data-book="'+t.id+'" data-d="'+x.d+'">'+fmtD(noon5(x.d))+'</button>').join('') + (deps.length > max ? '<span class="dmore">+'+(deps.length-max)+' more</span>' : '');
-      return '<li class="d-card'+(fest ? ' is-fest' : '')+(asia ? ' big' : '')+'" style="--c:'+t.color+'"><figure class="d-ph"><img alt="" loading="lazy" src="'+PH[TRIPPH[t.id]]+'"><span class="d-tag">'+(asia ? 'ALL ASIA' : fest ? 'Festival trip' : t.country)+'</span><span class="d-len">'+t.d.length+' days</span></figure>'+
+      return '<li class="d-card'+(fest ? ' is-fest' : '')+(asia ? ' big' : '')+'" style="--c:'+t.color+'"><figure class="d-ph"><img alt="" loading="lazy" src="'+PH[TRIPPH[t.id]]+'"><span class="d-tag">'+(asia ? 'Six countries' : fest ? 'Festival trip' : t.country)+'</span><span class="d-len">'+t.d.length+' days</span></figure>'+
         '<div class="d-body"><b class="d-name">'+esc(t.name)+'</b><p class="d-where">'+whereHTML(t)+'</p><p class="d-line">'+esc(cardLine(t))+'</p><div class="d-dates">'+chips+'</div>'+
         '<div class="d-foot"><span class="d-price"><b>'+priceShort(t)+'</b><span>'+status+'</span></span><button class="btn sm d-go" type="button" data-open="'+t.id+'">Book</button></div></div></li>';
     }).join('');
@@ -8795,7 +8811,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       if(fest) how += '<button type="button" class="bd-go" data-fest-open="'+fest.id+'"><b>'+fest.name+'</b><span>Our festival trip, '+(function(a, b){ return (a.getMonth() === b.getMonth() ? a.getDate() : fmtDM(a)) + ' to ' + fmtDM(b) + ' ' + b.getFullYear(); })(dOf(fest,0), dOf(fest,fest.d.length-1))+'</span></button>';
       if(c) how += '<button type="button" class="bd-go" data-book="'+c.t.id+'" data-d="'+c.d+'"><b>'+c.t.country+', leaving '+fmtD(noon5(c.d))+'</b><span>You’re '+inPlace(AGEN.DP[e.core][c.day])+(cr !== r ? ' for it, on '+fmtDM(noon5(cr.s)) : ' on the day')+'</span></button>';
       if(!fest && !c) how += '<button type="button" class="bd-go" data-ask="" data-ask-msg="'+esc('Could you build '+e.short+' into a trip for me?')+'"><b>'+esc(ASK)+' to build it in</b><span>We’ll add the days to a trip for you</span></button>';
-      if(asia.length) how += '<p class="bd-asia">On ALL ASIA: the '+andList(asia)+' departure'+(asia.length > 1 ? 's' : '')+'</p>';
+      if(asia.length) how += '<p class="bd-asia">On The Big One: the '+andList(asia)+' departure'+(asia.length > 1 ? 's' : '')+'</p>';
       const media = e.photo ? '<figure class="bd-ph">'+phImg(e.photo)+'<figcaption>'+e.pcap+'</figcaption></figure>' : '<div class="bd-art" style="--c:'+e.color+'"><svg viewBox="0 0 100 100" aria-hidden="true">'+ART[e.art]+'</svg></div>';
       return '<article class="bd-card" style="--c:'+e.color+'">'+media+'<div class="bd-body"><p class="bd-when"><i class="cd '+r.conf+'" aria-hidden="true"></i><b>'+when+'</b><span>'+cd+'</span></p><h4>'+e.title+'</h4><p class="bd-where">'+e.where+'</p><p class="bd-blurb">'+e.blurb+'</p>'+(r.note ? '<p class="bd-note">'+r.note+'</p>' : e.note ? '<p class="bd-note">'+e.note+'</p>' : '')+'<div class="bd-how">'+how+'</div></div></article>';
     }).join('');
@@ -8901,7 +8917,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       patchGrid.appendChild(b);
     });
     const bc = document.getElementById('blackcard');
-    bc.insertAdjacentHTML('afterend', '<div class="aa-patch"><div class="aa-patch-art">'+asiaPatchSvg()+'</div><div><b>The ALL ASIA patch.</b><p>Six countries, 23 Mad Monkeys, 100 days. ALL ASIA gets all six trip patches on the way, then this one at the very end, sewn in gold thread. There’s no other way to get it.</p><button class="btn ghost sm" type="button" data-open="allasia">See ALL ASIA</button></div></div>');
+    bc.insertAdjacentHTML('afterend', '<div class="aa-patch"><div class="aa-patch-art">'+asiaPatchSvg()+'</div><div><b>The Big One patch.</b><p>Six countries, 23 Mad Monkeys, 100 days. On The Big One you get all six trip patches on the way, then this one at the very end, sewn in gold thread. There’s no other way to get it.</p><button class="btn ghost sm" type="button" data-open="allasia">See The Big One</button></div></div>');
   })();
 
    
@@ -9123,12 +9139,12 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
   const rw = {picks:new Set(['cambodia']), asia:false};
   const rwChips = document.getElementById('rwChips');
   rwChips.innerHTML = TRIPS.map(t=>'<button type="button" class="rw-chip" data-rw="'+t.id+'" aria-pressed="false"><span class="rw-cp" aria-hidden="true">'+miniPatch(t.id, 'c')+'</span><span><b>'+esc(t.country)+'</b><small>'+MM_OF[t.id].length+' Mad Monkeys</small></span></button>').join('') +
-    '<button type="button" class="rw-chip rw-aa" data-rw="allasia" aria-pressed="false"><span class="rw-cp" aria-hidden="true">'+asiaPatchSvg()+'</span><span><b>ALL ASIA</b><small>All '+MM_ALL.length+', 100 days</small></span></button>';
+    '<button type="button" class="rw-chip rw-aa" data-rw="allasia" aria-pressed="false"><span class="rw-cp" aria-hidden="true">'+asiaPatchSvg()+'</span><span><b>The Big One</b><small>All '+MM_ALL.length+', 100 days</small></span></button>';
   const ORDER_C = ['KH','VN','LA','TH','ID','PH'];
   document.getElementById('rwDots').innerHTML = ORDER_C.map(c=>'<span class="rw-dg"><span class="rw-dl">'+esc(MMB.COUNTRIES[c].n)+'</span><span class="rw-dd">'+
     MM_ALL.filter(p=>MMB.PLACES[p].c === c).map(p=>'<i data-p="'+p+'" title="'+esc(MMB.PLACES[p].n)+'"></i>').join('')+'</span></span>').join('');
   document.getElementById('rwTiers').innerHTML = MLT.map(t=>'<li data-t="'+t.n+'"><b>'+t.n+'</b><span>'+(t.at ? t.at + (t.at === 1 ? ' Mad Monkey' : ' Mad Monkeys') : 'Free to join')+'</span></li>').join('');
-  document.getElementById('rwMinis').innerHTML = TRIPS.map(t=>'<span class="rw-mini" data-m="'+t.id+'" title="'+esc(t.country)+'">'+miniPatch(t.id, 'm')+'</span>').join('') + '<span class="rw-mini rw-mini-aa" data-m="allasia" title="ALL ASIA">'+asiaPatchSvg()+'</span>';
+  document.getElementById('rwMinis').innerHTML = TRIPS.map(t=>'<span class="rw-mini" data-m="'+t.id+'" title="'+esc(t.country)+'">'+miniPatch(t.id, 'm')+'</span>').join('') + '<span class="rw-mini rw-mini-aa" data-m="allasia" title="The Big One">'+asiaPatchSvg()+'</span>';
   document.getElementById('rwRew').innerHTML = PREW.map(r=>'<li data-at="'+r.at+'"><span class="rw-at">'+r.at+'</span><span><b>'+r.n+'</b><small>'+r.d+'</small></span></li>').join('');
 
   function rwRender(){
@@ -9152,8 +9168,8 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     document.querySelectorAll('#rwRew li').forEach(li=>li.classList.toggle('got', np >= +li.dataset.at));
     const nr = PREW.find(r=>r.at > np);
     let html = '';
-    if(rw.asia) html = '<p><b>ALL ASIA gets the lot.</b> All six patches on the way, the gold one at the very end and every Mad Monkey we have.</p>';
-    else if(!nr) html = '<p><b>All six. The black card is yours.</b> ALL ASIA gets all six in one go, plus the gold patch.</p><button class="btn ghost sm" type="button" data-open="allasia">See ALL ASIA</button>';
+    if(rw.asia) html = '<p><b>The Big One gets the lot.</b> All six patches on the way, the gold one at the very end and every Mad Monkey we have.</p>';
+    else if(!nr) html = '<p><b>All six. The black card is yours.</b> The Big One gets all six in one go, plus the gold patch.</p><button class="btn ghost sm" type="button" data-open="allasia">See The Big One</button>';
     else {
       const need = nr.at - np, sug = TRIPS.filter(t=>!rw.picks.has(t.id)).sort((a,b)=>MM_OF[b.id].length - MM_OF[a.id].length)[0];
       html = '<p><b>'+need+' more '+(need === 1 ? 'trip' : 'trips')+'</b> for '+nr.n.replace(/^The /,'the ').replace(/^A /,'a ')+'.'+(sug ? ' '+esc(sug.country)+' adds '+MM_OF[sug.id].length+' more Mad Monkeys.' : '')+'</p>'+
@@ -9227,15 +9243,16 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
   document.querySelectorAll('[data-ask]').forEach(b=>{ if(/^Ask \w+$/.test(b.textContent.trim())) b.textContent = ASK; });
   document.getElementById('askTitle').textContent = ASK + '.'; askGo.textContent = 'Send to ' + ASK_NAME;
   document.getElementById('askLead').textContent = 'Anything at all: a trip, dates, visas, money, whether it’s right for you. ' + ASK_NAME + ' reads every message and replies, usually within a day.';
-  const SECT = {top:'the top of the page', solo:'Your crew', trips:'Trips', build:'Build your own trip', allasia:'ALL ASIA', festivals:'Festivals', dates:'Dates and prices', explore:'Every day, planned', culture:'Meet the country', patches:'Patches', reviews:'Reviews', faq:'Questions', go:'Are you all in?'};
+  const SECT = {top:'the top of the page', solo:'Your crew', trips:'Trips', build:'Build your own trip', allasia:'The Big One', festivals:'Festivals', dates:'Dates and prices', explore:'Every day, planned', culture:'Meet the country', patches:'Patches', reviews:'Reviews', faq:'Questions', go:'Are you all in?'};
   function askWhere(){
     if(holdDlg.open && coQ) return 'ALL IN site: checkout for ' + coQ.t.name;
-    if(tripDlg.open && tpCur) return 'ALL IN site: the ' + tpCur.name + ' page';
+    if(tripDlg.open && tpCur) return 'ALL IN site: the page for ' + tpCur.name;
     if(tellDlg.open) return 'ALL IN site: the trip finder';
     let best = 'top', bt = -1e9;
     Object.keys(SECT).forEach(id=>{ const el = document.getElementById(id); if(!el || !el.getClientRects().length) return; const r = el.getBoundingClientRect(); if(r.top <= innerHeight * .4 && r.top > bt){ bt = r.top; best = id; } });
     return 'ALL IN site: ' + SECT[best];
   }
+  function askWaText(t){ return 'Hi ' + ASK_NAME + ', I’ve got a question about ' + (t ? t.name + ' (ALL IN)' : 'ALL IN trips') + '.'; }
   function askRemembered(){ try{ return JSON.parse(localStorage.getItem('mm-lead')) || {}; }catch(e){ return {}; } }   
   function askShow(which){ askForm.hidden = which !== 'form'; askDone.hidden = which !== 'done'; }
   function askError(html){ const b = document.getElementById('askErr'); b.hidden = !html; b.innerHTML = html || ''; }
@@ -9252,6 +9269,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     if(msg) askMsg.value = msg;
     const box = document.getElementById('askTrip');
     box.hidden = !askCtx.t; if(askCtx.t) document.getElementById('askTripName').textContent = askCtx.t.name + ' · ' + whereText(askCtx.t);
+    document.getElementById('askWa').href = waLink(askWaText(askCtx.t));
     document.querySelectorAll('dialog[open]').forEach(d=>{ if(d !== askDlg && d.id === 'menuDlg') d.close(); });
     if(!askDlg.open){ askDlg.showModal(); lockScroll(); }
     (!askNameIn.value ? askNameIn : !askReach.value ? askReach : askMsg).focus();
@@ -9304,9 +9322,13 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     }).catch(err=>{
       askDlg.removeAttribute('aria-busy'); askGo.disabled = false; askGo.textContent = label;
       const why = err && err.code === 429 ? 'That’s a few messages from you in the last hour. Give it a little while and try again.' : sendFail(err);
-      askError('<b>That didn’t send.</b> ' + esc(why) + ' Your question is still here, so nothing is lost: try again in a minute.');
+      askError('<b>That didn’t send.</b> ' + esc(why) + ' Your question is still here, so nothing is lost: try again in a minute, or <a href="' + esc(waLink(askWaText(t) + ' ' + msg)) + '" target="_blank" rel="noopener" data-wa="ask-failed">send it on WhatsApp</a>.');
       askGo.focus();
     });
+  });
+  document.addEventListener('click', e=>{    
+    const w = e.target.closest('a[data-wa]'); if(!w) return;
+    try{ (window.dataLayer = window.dataLayer || []).push({event:'whatsapp_click', conversion_type:'all_in', placement:w.dataset.wa}); }catch(err){}
   });
   document.addEventListener('click', e=>{
     const b = e.target.closest('[data-ask]'); if(!b) return;
@@ -9335,7 +9357,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     more.addEventListener('click', ()=>{ all = true; limit(); const f = rows.children[SHOW], t = f && f.querySelector('button, a'); if(t) t.focus(); });
     limit();
   }
-  { const TOP = ['Will I be the only solo traveller?', 'How much does a trip cost?', 'Are flights included?', 'Can I add days before or after?', 'When does ALL ASIA leave?', 'Can I just ask a question first?'];
+  { const TOP = ['Will I be the only solo traveller?', 'How much does a trip cost?', 'Are flights included?', 'Can I add days before or after?', 'When does The Big One leave?', 'Can I just ask a question first?'];
     const qs = [...document.querySelectorAll('.faq details')];
     if(qs.length > TOP.length){
       const list = qs[0].parentNode, q = d => d.querySelector('summary').textContent.trim();
@@ -9441,7 +9463,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
   function once(event, key){ const k = 'dl_once:' + event + ':' + key; try{ if(sessionStorage.getItem(k)) return false; sessionStorage.setItem(k, '1'); }catch(e){} return true; }
   function ecom(event, o){ dlPush({ecommerce:null}); dlPush(Object.assign({event, conversion_type:'all_in'}, o)); }
   function ecomItem(t, price, qty, i){ return {item_id:tripSlug(t), item_name:'ALL IN ' + t.name, price:Math.round(price || 0), quantity:qty || 1, index:i || 0,
-    item_category:'All In', item_category2:isAsia(t) ? 'ALL ASIA' : isFest(t) ? 'Festival' : t.country, item_list_id:'all-in-trips', item_list_name:'All In Trips'}; }
+    item_category:'All In', item_category2:isAsia(t) ? 'The Big One' : isFest(t) ? 'Festival' : t.country, item_list_id:'all-in-trips', item_list_name:'All In Trips'}; }
   function tripSeen(t, opener){
     const price = basePrice(t).usd;
     if(opener && opener.closest && opener.closest('#trips, #dates, #festivals, #allasia') && once('select_item', tripSlug(t))) ecom('select_item', {ecommerce:{item_list_id:'all-in-trips', item_list_name:'All In Trips', items:[ecomItem(t, price)]}});
@@ -9985,9 +10007,9 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
     const sec = document.getElementById('allasia'), t = byId('allasia'); if(!sec || !t) return;
     sec.classList.add('aa18');
     sec.insertAdjacentHTML('afterbegin', '<div class="aa18-box"><div class="aa18-ph" aria-hidden="true"></div><div class="wrap aa18-in">' +
-      '<p class="aa18-kick">The big one</p><h2 class="display" id="aa18Title">ALL ASIA.</h2><p class="aa18-line">100 days. All 23 Mad Monkeys. Six countries. Leaves every month.</p>' +
+      '<p class="aa18-kick">100 days, every Mad Monkey</p><h2 class="display" id="aa18Title">The Big One.</h2><p class="aa18-line">All 23 of them, in six countries. Leaves every month.</p>' +
       '<p class="aa18-price"><b>' + esc(priceShort(t)) + '</b> per person. Flights aren’t included; we suggest the right one for every hop.</p>' +
-      '<div class="ctas"><button class="btn primary" type="button" data-aa18>See ALL ASIA</button>' + askBtn('allasia', 'btn ghost', ASK) + '</div></div></div>');
+      '<div class="ctas"><button class="btn primary" type="button" data-aa18>See The Big One</button>' + askBtn('allasia', 'btn ghost', ASK) + '</div></div></div>');
     sec.setAttribute('aria-labelledby', 'aa18Title');
     const ph = sec.querySelector('.aa18-ph'); if(PH[TRIPPH.allasia]) ph.style.backgroundImage = 'url("' + PH[TRIPPH.allasia] + '")';
     sec.querySelector('[data-aa18]').addEventListener('click', e=>openTrip('allasia', e.currentTarget));
@@ -10257,7 +10279,7 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       const q = quote(t, BK), when = q.tripStart ? fmtDM(q.tripStart) : '', price = (q.bp.kind === 'approved' && !q.extraPP ? '' : '~') + fmtUsd(q.total);
       el.setAttribute('aria-label', 'Your trip: ' + t.name + (when ? ', ' + when : '') + ', ' + plural(q.ppl, 'traveller') + ', ' + price + '. Open it');
       if(!phone20.matches) return;
-      el.innerHTML = '<b>' + esc(isAsia(t) ? 'ALL ASIA' : (t.short || t.country || t.name)) + '</b><span>' + (when ? when + ', ' : '') + price + (q.ppl > 1 ? ' for ' + q.ppl : '') + '</span>';
+      el.innerHTML = '<b>' + esc(isAsia(t) ? 'The Big One' : (t.short || t.country || t.name)) + '</b><span>' + (when ? when + ', ' : '') + price + (q.ppl > 1 ? ' for ' + q.ppl : '') + '</span>';
     }; }
   if(phone20.addEventListener) phone20.addEventListener('change', ()=>updateBasket());
    
@@ -11343,7 +11365,8 @@ var TODAYDATA = {"source":"Today’s ALL IN app, github.com/CFSiteDesign/mm-squa
       + '<form class="td-advform" id="tdAdvForm" novalidate><div class="td-advvia" role="radiogroup" aria-label="How should we reach you?">'
       + ['whatsapp', 'email'].map(v=>'<label><input type="radio" name="tdAdvVia" value="' + v + '"' + (ADV.via === v ? ' checked' : '') + '> <span>' + (v === 'email' ? 'Email' : 'WhatsApp') + '</span></label>').join('') + '</div>'
       + '<div class="fld"><label for="tdAdvIn" class="sr">' + (ADV.via === 'email' ? 'Your email' : 'Your WhatsApp number') + '</label><input id="tdAdvIn" type="' + (ADV.via === 'email' ? 'email' : 'tel') + '" autocomplete="' + (ADV.via === 'email' ? 'email' : 'tel') + '" placeholder="' + (ADV.via === 'email' ? 'you@email.com' : '+44 7700 900000') + '" value="' + esc(ADV.val) + '"></div>'
-      + '<button class="btn dark sm" type="submit" id="tdAdvGo"' + (ADV.busy ? ' disabled' : '') + '>' + (ADV.busy ? 'Sending…' : 'Talk to an advisor') + '</button><p class="err" id="tdAdvErr" role="alert" hidden></p></form></div>';
+      + '<button class="btn dark sm" type="submit" id="tdAdvGo"' + (ADV.busy ? ' disabled' : '') + '>' + (ADV.busy ? 'Sending…' : 'Talk to an advisor') + '</button><p class="err" id="tdAdvErr" role="alert" hidden></p></form>'
+      + '<p class="td-advwa">Or message us now: <a href="' + esc(waLink('Hi, I’ve got a question about ' + ((S.trip && S.trip.name) || S.t.appName) + ' (ALL IN).')) + '" target="_blank" rel="noopener" data-wa="today">WhatsApp <span class="nw">' + WA_SHOW + '</span></a></p></div>';
   }
   function advSend(){
     const v = ($('tdAdvIn') || {}).value || ''; ADV.val = v; const s = v.trim(), err = $('tdAdvErr');

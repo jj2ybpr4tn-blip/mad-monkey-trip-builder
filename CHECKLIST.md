@@ -18,11 +18,13 @@ Who does what is in brackets. Nothing goes live until Ewan says go.
       (Charlie or Dhany).
 - [ ] A line in the privacy notice about talking instead of typing (whoever looks after it; wording in README).
 - [x] The test requests MM-B2UDR5 and MM-WRHXG5 are cleared in Admin (Ewan, 18 Nov).
+- [x] The trips' new names are in (Ewan, 21 Nov), with the same addresses and prices; The Big One is at `/all-asia`.
+- [x] The ALL IN business WhatsApp, +66 96 689 4646, is on the page and in the trip builder's Ask Ewan (Ewan, 24 Nov).
 
 ## On the day
 
 - [ ] Ewan says go.
-- [ ] Upload `all-in-trips/`: `index.html` at `/all-in-trips`, the 14 trip addresses and today's 7, `v/` at `/all-in-trips/v/`
+- [ ] Upload `all-in-trips/`: `index.html` at `/all-in-trips`, the 13 trip addresses and today's 7, `v/` at `/all-in-trips/v/`
       (Charlie).
 - [ ] The site's public key in the page's `<head>` (`window.ALLIN_LIVE`, README "Hosting it") (Charlie).
 - [ ] Cookiebot and Google Tag Manager pasted where the page's comments say (Charlie).
@@ -44,10 +46,13 @@ Who does what is in brackets. Nothing goes live until Ewan says go.
 - [ ] Tell the finder something with a TikTok link in it, then send one test trip. In Admin, the notes show the link and the
       words, and the crew's text has them in full. Clear it.
 - [ ] Send one Ask Ewan test question; check it in Admin and in Ewan's email; clear it.
+- [ ] On a trip page, on a phone and a laptop: Ask Ewan and Book are in the bar at the bottom. Under the Ask Ewan form, "Rather
+      WhatsApp?" opens WhatsApp to +66 96 689 4646 with the trip in the message; the footer's WhatsApp link opens the same chat.
+      Send one test message and check it reaches the ALL IN WhatsApp.
 - [ ] With Tag Manager's preview on: `view_item` when a trip opens, `generate_lead` when a trip is sent; the Cookiebot banner shows.
 
 ## After
 
 - [ ] Watch Admin for the first real trips and questions (Ewan).
 - [ ] Old links to `/all-in-trips/vietnam`, `/cambodia`, `/indonesia`, `/laos`, `/thailand` and `/all-asia` land on the new
-      trip pages.
+      trip pages (`/all-asia` is The Big One).

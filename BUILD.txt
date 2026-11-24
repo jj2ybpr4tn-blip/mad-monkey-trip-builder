@@ -1,13 +1,18 @@
 ALL IN launch pack: what's in it and how to build it again
 
-Built      21 Nov 2026, 01:05 (Phnom Penh), by the admin chat: the same page with the trip builder's latest main (land and
-           sea first, the overland legs, Koh Sdach on its island). 19 Nov, 22:40: concept v22, today's trips inside the site (their own
-           pages, booked through to Stripe as today's pages book), at the addresses Ewan settled on 19 Nov.
-           Before that, 18 Nov: photos on the Big days cards, the Sinulog edition off (it needed a new hotel partner in
-           Cebu), the 2027 prices (approved by Kyle; ALL ASIA $4,999), the map fixes, and no developer notes in the source
+Built      24 Nov 2026, 16:10 (Phnom Penh), by the admin chat on Ewan's ask ("get this touched up and completed"): the trips'
+           new names (21 Nov: The Big One at /all-asia), the ALL IN business WhatsApp (+66 96 689 4646) beside Ask Ewan, in
+           the footer and on today's trip pages, Ask Ewan and Book in a bar on every trip page on a laptop too, Make it yours
+           flying the two legs the trips fly, and no "concept" note left in the source.
+           Before that, 21 Nov: the trip builder's latest main (land and sea first, Koh Sdach on its island). 19 Nov: concept
+           v22, today's trips inside the site (their own pages, booked through to Stripe as today's pages book), at the
+           addresses Ewan settled on 19 Nov. 18 Nov: photos on the Big days cards, the Sinulog edition off (it needed a new
+           hotel partner in Cebu), the 2027 prices (approved by Kyle; The Big One $4,999), the map fixes, and no developer
+           notes in the source
 Page       concept v22 from drafts/all-in-store/src, the same source as the private preview once it's republished
-Builder    the trip builder's engine at main fcaf458 (20 Nov: land and sea first, today's trips' new addresses, the free
-           night for Make it yours, Koh Sdach on its island), inside the page
+Builder    the trip builder's engine at main 89242ec (24 Nov: its Ask Ewan offers the business WhatsApp; 21 Nov: Islands +
+           Hammocks; 20 Nov: land and sea first, today's trips' new addresses, the free night for Make it yours), inside the
+           page. The live trip builder at /all-in-trips/trip-builder/ gets the same main by Charlie's sync
 Launch     ALLIN_LAUNCH=1: no preview bar, no preview notes, no comments in the page (src/launchclean.py; the scripts
            are checked the same as before with tools/launchclean_check.mjs) except the two where the site's tags go,
            and our films loaded from /all-in-trips/v/ (ALLIN_FILMS to change that)
@@ -15,7 +20,7 @@ Booking    today's trips book once the site's public key is in the page (README,
            requests to the crew (none in LIVE.slugs yet: set ALLIN_LIVE_JSON once they're in the booking system, src/v14.js)
 
 Checksums (md5)
-cb4078931b0aad81a8b5f399723fe5de  all-in-trips/index.html
+2f0e0f6b19c9c29f8824dfe1c9b9136e  all-in-trips/index.html
 85cdbff57c0ae4867ed6b888bcce8a9c  all-in-trips/v/dragon-1080.mp4    Tết's lion dance (stock, Mixkit)
 4e4334b8e85514e3d6ad20cc97f8226b  all-in-trips/v/falls-1080.mp4     Cambodia's waterfall (stock, Mixkit)
 e508ab316ec8921ccb5198431bde60cb  all-in-trips/v/hgloop-1080.mp4    Ewan's Ha Giang Loop clip, laptops
@@ -29,4 +34,5 @@ To build it again, from the trip builder repo on the Mac (pull first):
   npm run -s publish-preview -- --dry-run        (builds the builder into .site/, publishes nothing)
   ALLIN_LAUNCH=1 python3 drafts/all-in-store/src/build.py drafts/all-in-concept/ALL-IN-concept-v4.html \
       .site/mad-monkey-trip-builder/shop/trip-builder drafts/launch-pack/all-in-trips/index.html
-Then copy any new films into all-in-trips/v/, update the checksums above, and check it with tools/launch21.py.
+Then copy any new films into all-in-trips/v/, update the checksums above, and check it with tools/launch21.py and
+tools/wa24test.py (tools/build24.sh builds every copy the checks open).

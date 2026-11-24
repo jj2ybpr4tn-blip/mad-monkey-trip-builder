@@ -6,15 +6,19 @@ trip builder repo (`launch-pack`), which comes down once the site is live. Nothi
 
 To get it: `git clone -b launch-pack --single-branch https://github.com/jj2ybpr4tn-blip/mad-monkey-trip-builder.git all-in-launch`
 
-Built 19 Nov 2026 from concept v22 (the same page as the private preview, without the preview's bar, notes or code
-comments) with the trip builder at main `fcaf458` (rebuilt 21 Nov with the builder's latest). New in v22: today's ALL IN trips have their own pages inside the site and
-book right through to Stripe, the way today's pages do (below). `BUILD.txt` says exactly what went in and how to build it again.
+Built 24 Nov 2026 from concept v22 (the same page as the private preview, without the preview's bar, notes or code
+comments) with the trip builder at main `89242ec`. Today's ALL IN trips have their own pages inside the site and book right
+through to Stripe, the way today's pages do (below). `BUILD.txt` says exactly what went in and how to build it again.
+
+**New since 21 Nov** (more under "What's new on 24 Nov" below): the trips' new names (The Big One is the 100-day trip, at the
+same `/all-asia` address), the ALL IN business WhatsApp (+66 96 689 4646) beside Ask Ewan and in the footer, Ask Ewan and
+Book in a bar at the bottom of every trip page on a laptop too, and the trip builder at its latest main.
 
 ## What's in it
 
 | Path | What it is |
 |---|---|
-| `all-in-trips/index.html` | The whole site in one file (about 1 MB): every trip, ALL ASIA, the festival trips, checkout, Ask Ewan. No preview bar, no lock. |
+| `all-in-trips/index.html` | The whole site in one file (about 1 MB): every trip, The Big One, the festival trips, checkout, Ask Ewan and the business WhatsApp. No preview bar, no lock. |
 | `all-in-trips/v/` | Our own films, which the page loads from `/all-in-trips/v/`: Ewan's Ha Giang Loop clip (1080p for laptops, 720p for phones) and 1080p copies of the four stock films still in use. |
 | `CHECKLIST.md` | Go-live, step by step, with the checks on a phone and a laptop. |
 | `BUILD.txt` | What it was built from, the file checksums, and how to rebuild it. |
@@ -25,7 +29,7 @@ book right through to Stripe, the way today's pages do (below). `BUILD.txt` says
    below. It's the same file every time: the page reads the address and opens that trip. These replace today's ALL IN
    pages, and the first six are today's addresses, so links already in ads, bios and creator posts keep working.
 
-   `/all-in-trips/vietnam` `/cambodia` `/indonesia` `/laos` `/thailand` `/all-asia`, and the new ones:
+   `/all-in-trips/vietnam` `/cambodia` `/indonesia` `/laos` `/thailand` `/all-asia` (The Big One, the 100-day trip), and the new ones:
    `/philippines` `/tet` `/nyepi` `/newyear` `/lightboats` `/yipeng` `/raceday`
 
    And today's trips, which keep selling until the 2027 trips replace them (new in v22, decided by Ewan on 19 Nov). The 2027
@@ -59,6 +63,26 @@ book right through to Stripe, the way today's pages do (below). `BUILD.txt` says
    open today's trip (the address changes to the new one, the rest of the link kept), not the 2027 one. A plain `/vietnam`
    is the 2027 page. Worth pointing both at the new addresses in today's backend anyway.
 7. **Cache.** After each upload, clear Cloudflare for `/all-in-trips*`.
+
+## What's new on 24 Nov
+
+- **The trips' new names** (decided by Ewan on 21 Nov): Angkor to the Islands (Cambodia), North to Hoi An (Vietnam), Volcanoes &
+  Beaches (Indonesia), Mountains & Lagoons (Thailand), Rivers & Balloons (Laos), the Island Hopper (the Philippines, unchanged),
+  Tết in the North, Ogoh-ogoh & Nyepi, Songkran to Pi Mai, Fire Boats on the Mekong, Yi Peng Lanterns, The Water Festival, and
+  The Big One (the 100-day trip that was ALL ASIA). Only the names changed: every address, price and date is as it was, so
+  `/all-in-trips/all-asia` is The Big One's page. The titles, share cards and structured data carry the new names. The trip
+  builder's own Cambodia route is now Islands + Hammocks, so the site has one Island Hopper.
+- **The ALL IN business WhatsApp, +66 96 689 4646** (Ewan, 24 Nov). Under every Ask Ewan form ("Rather WhatsApp? Message us
+  on +66 96 689 4646", with the trip they're looking at in the first line of the message), in the footer, on today's trip
+  pages beside "Want to talk it through?", and offered with their question in it if an Ask Ewan message fails to send. The
+  trip builder's Ask Ewan has it too (main `89242ec`, `WHATSAPP` in its config.js). Ask Ewan still sends to the crew as
+  before. Each tap pushes `{event: 'whatsapp_click', conversion_type: 'all_in', placement}` to the dataLayer, if you want it
+  as a conversion in Tag Manager. Please check the number rings the right phone once it's live.
+- **Ask Ewan and Book on every trip page, on a laptop too.** A trip page covers the site's bar, and on a laptop its Ask Ewan
+  was only far down the page. It now has the same bar along the bottom as on a phone: the trip, its price, Ask Ewan and Book
+  (it steps aside while the trip's own booking panel is on screen).
+- **Make it yours matches the trips.** North to Hoi An's Hanoi to Hoi An and The Big One's Manila to El Nido fly in the trip
+  builder, as their days say, now that the builder goes by land and sea first. The day counts stay at 14 and 100.
 
 ## The trip builder switch
 
@@ -106,7 +130,7 @@ kept in their browser for that visit, and they reach Mad Monkey only if the gues
 
 - **Prices.** Every trip has its set price per person, flights not included (Ewan, 18 Nov 2026): Cambodia $749, Vietnam
   $849, Indonesia $849, Thailand $899, Laos $499, the Island Hopper $800, Tết $699,
-  Nyepi $649, Songkran & Pi Mai $749, Lai Heua Fai $499, Yi Peng $599, Bon Om Touk $649 and ALL ASIA $4,999. Today's
+  Nyepi $649, Songkran & Pi Mai $749, Lai Heua Fai $499, Yi Peng $599, Bon Om Touk $649 and The Big One $4,999. Today's
   trips keep their live prices. Instant booking stays off until each trip is loaded into the booking system; then this
   pack is rebuilt with it on.
 - **Footage.** Four stock films are still in use (Cambodia's waterfall, the Philippines' surf, Tết's lion dance, the sunset in
@@ -118,12 +142,12 @@ kept in their browser for that visit, and they reach Mad Monkey only if the gues
 - Photos: Mad Monkey's own through `wsrv.nl` (resizing), and a few place photos from Unsplash.
 - The four stock films on phones, and as a fallback, from Mixkit (`assets.mixkit.co`).
 - The backend at `bilhhkzcmicygufsdfxi.supabase.co`.
-- Links out: WhatsApp share, and the six governments' visa sites.
+- Links out: WhatsApp share, the ALL IN business WhatsApp (`wa.me/66966894646`), and the six governments' visa sites.
 
 ## Checked, and not
 
 Checked in a test browser with madmonkeyhostels.com answered from this pack (nothing reached the real site), on a phone and a
-laptop: the site opens at `/all-in-trips/` with no preview bar or notes; each of the 14 trip addresses opens its trip with its
+laptop: the site opens at `/all-in-trips/` with no preview bar or notes; each of the 13 trip addresses opens its trip with its
 own canonical address; Ewan's clip and the stock films come from `/all-in-trips/v/` (1080p on a laptop, 720p on a phone), and
 nothing comes from the GitHub preview; the builder links go to `/all-in-trips/trip-builder/`; the mic works; no page errors.
 19 Nov, the same way: today's seven trip addresses open today's trips, the old Stripe and Admin links on `/cambodia` and
