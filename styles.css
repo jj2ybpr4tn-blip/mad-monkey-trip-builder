@@ -1138,6 +1138,7 @@ fieldset.freebed .chk{font-size:14px;font-weight:600;min-height:40px;align-items
 .askf__trip{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:10px 14px;background:var(--bone);border:2px solid var(--black)}
 .askf__trip b{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
 .askf__go{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);margin-top:var(--s-2)}
+.askf__wa{margin:var(--s-2) 0 0;font-weight:500;font-size:14px} .askf__wa a{display:inline-block;padding:3px 0;font-weight:800;color:inherit;text-decoration:underline;text-underline-offset:3px} .askf__wa .nw{white-space:nowrap}
 .askf__sum{padding:12px 14px;background:var(--bone);border:2px solid var(--black);max-height:240px;overflow:auto;margin:var(--s-3) 0}
 .askf__sum p{margin:2px 0 10px;white-space:pre-wrap;overflow-wrap:anywhere;font-weight:500}
 .askf__ref{font-weight:500;margin:0} .askf__ref b{font-weight:900;font-size:1.25em;white-space:nowrap;margin-left:6px}
